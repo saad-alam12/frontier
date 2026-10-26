@@ -76,7 +76,7 @@ export function appendSessionEvent(db: Database, sessionId: string, kind: string
 }
 
 export function listSessionEvents(db: Database, sessionId: string): SessionEvent[] {
-  return (db.prepare('SELECT * FROM session_events WHERE session_id = ? ORDER BY at, id').all(sessionId) as unknown as EventRow[]).map((r) => ({
+  return (db.prepare('SELECT * FROM session_events WHERE session_id = ? ORDER BY rowid').all(sessionId) as unknown as EventRow[]).map((r) => ({
     id: r.id,
     sessionId: r.session_id,
     at: r.at,

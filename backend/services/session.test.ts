@@ -1,0 +1,184 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { FakeProvider } from '../llm/FakeProvider';
+import type { CompleteRequest } from '../llm/provider';
+import { FakeEmbedder } from '../ingest/embedder';
+import { openDatabase } from '../store/db';
+import { createGoal, saveCompile } from '../store/goals';
+import { seedExampleGraph } from '../store/seed/exampleGraph';
+import { getState, listEvidenceForSession } from '../store/evidence';
+import { listBugsForNode } from '../store/bugs';
+import { activeSession, listSessionEvents, listSessions } from '../store/sessions';
+import { listSources } from '../store/sources';
+import { IngestionService } from './ingestion';
+import { refreshGoalFields } from './knowledge';
+import { recordEvidence } from './evidence';
+import { abandonSession, currentSession, respond, startSession } from './session';
+import type { SessionState } from './session';
+
+/** A tutor that answers any stage with a plausible card and grades from a queue of scores. */
+function fakeTutor(scores: number[]) {
+  const queue = [...scores];
+  return (req: CompleteRequest<unknown>) => {
+    const text = req.messages[0]?.content ?? '';
+    if (req.submit.name === 'submit_recall') {
+      const ids = [...text.matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1]);
+      const closing = /add the closing summary/.test(text);
+      return { recalled: ids.map((id) => ({ nodeId: id, score: 0.8, note: '' })), canDo: closing ? 'You can now find equilibria.' : null, previewQuestion: closing ? 'What changes if payoffs double?' : null };
+    }
+    const grading = /Grade the response/.test(text);
+    const stage = /Produce the \*\*(\w+)\*\* card|produce the \*\*(\w+)\*\* card/.exec(text);
+    const next = stage?.[1] ?? stage?.[2] ?? null;
+    const score = grading ? (queue.shift() ?? 0.8) : null;
+    const grade = grading ? { score, feedback: `Scored ${score}.`, misconception: score !== null && score < 0.3 ? 'Thinks equilibrium means best for all.' : null, confidentlyWrong: false } : null;
+    const cards: Record<string, unknown> = {
+      predict: { stage: 'predict', prompt: 'What would make a profile stable?' },
+      explain: { stage: 'explain', markdown: '## The idea\n\nNo one gains by moving alone, so $u_i(s) \\ge u_i(s_i\', s_{-i})$.' },
+      check: { stage: 'check', question: 'Is (A,B) stable here?', answerKey: 'Yes', rubric: ['says yes', 'checks deviations'] },
+      derive: { stage: 'derive', prompt: 'Rebuild it from best responses.', answerKey: 'mutual BR', rubric: ['uses BR'] },
+      connect: { stage: 'connect', prompt: 'State one link.' },
+      compress: { stage: 'compress', prompt: 'Your own words, two sentences.' },
+      use: { stage: 'use', task: 'Find the equilibrium of this game; and say why this other one has none in pure strategies.', answerKey: '(A,B)', rubric: ['finds it', 'explains the no case'] },
+      index: { stage: 'index', gist: 'A profile is a list of strategies.', placement: 'It sits under Nash.', question: 'What is a profile?', answerKey: 'one strategy per player' },
+      support: { stage: 'support', markdown: 'Worked example: ...' },
+    };
+    return { grade, card: next ? cards[next] : null };
+  };
+}
+
+async function setup(scores: number[] = []) {
+  const db = openDatabase(':memory:');
+  const ids = seedExampleGraph(db);
+  const own = (key: string) => recordEvidence(db, { nodeId: ids.get(key) as string, kind: 'explain', score: 0.95, reasoning: 't' });
+  for (const key of ['strategy', 'payoff']) own(key);
+  const goal = createGoal(db, 'Pass the game theory exam');
+  saveCompile(db, goal.id, [
+    { statement: 'Can find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('profile') as string, depth: 1 }, { nodeId: ids.get('bestResponse') as string, depth: 2 }] },
+    { statement: 'Can explain dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 2 }, { nodeId: ids.get('dominantNash') as string, depth: 3 }] },
+  ]);
+  refreshGoalFields(db);
+  const provider = new FakeProvider({ tutor: fakeTutor(scores) });
+  provider.script('planner', (req: CompleteRequest<unknown>) => {
+    const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+    const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
+    const preferred = all.filter((c) => ['Strategy profile', 'Best response', 'Nash equilibrium'].includes(c.name));
+    const picks = (preferred.length ? preferred : all.slice(0, 3)).map((c) => c.id);
+    return { title: 'Profiles and best responses', orientation: 'Today builds Nash equilibrium from the two ideas it is made of.', steps: picks.map((nodeId) => ({ nodeId, why: 'needed for the exam' })) };
+  });
+  provider.script('extractor', { nodes: [], chains: [], conflicts: [] });
+  provider.script('matcher', { decisions: [] });
+  const ingestion = new IngestionService({ db, provider, embedder: new FakeEmbedder(), sourcesDir: join(mkdtempSync(join(tmpdir(), 'frontier-sess-')), 'sources') });
+  return { db, ids, goal, provider, deps: { db, provider, ingestion } };
+}
+
+const answer = (text: string, confidence = 0.6) => ({ answer: text, confidence, thinkAloud: '' });
+
+describe('teaching session', () => {
+  it('runs a node through the step loop, writing evidence, own words and bugs', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.9, 0.2, 0.7, 0.7, 0.8, 0.85]);
+    let snap = await startSession(deps, goal.id);
+    expect(snap.phase).toBe('orient'); // no previous session: no reconstruct
+    expect(snap.plan.steps.map((s) => s.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
+    expect(snap.plan.steps.map((s) => s.mode)).toEqual(['index', 'index', 'derive']);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.phase).toBe('teach');
+    expect(snap.current?.stage).toBe('index');
+    const brId = ids.get('nash') as string;
+
+    // index passes for the two terms, then the full loop on Nash
+    const walk = async (text: string) => (snap = await respond(deps, snap.id, answer(text)));
+    while (snap.phase === 'teach' && snap.current?.nodeId !== brId) await walk('one strategy per player');
+    expect(getState(db, ids.get('profile') as string)?.depth).toBe(1);
+    expect(snap.current?.stage).toBe('predict');
+    expect(JSON.stringify(snap.card)).not.toContain('answerKey');
+    await walk('the move that pays best given the others');
+    expect(snap.current?.stage).toBe('explain');
+    expect(snap.lastGrade?.score).toBe(0.9);
+    snap = await respond(deps, snap.id, { answer: '', effort: 2 });
+    expect(snap.current?.stage).toBe('check');
+    await walk('no idea'); // 0.2 → misconception recorded
+    expect(snap.current?.stage).toBe('derive');
+    expect(listBugsForNode(db, brId)).toHaveLength(1);
+    await walk('mutual best responses'); // 0.7
+    expect(snap.current?.stage).toBe('connect');
+    await walk('this requires payoffs'); // 0.7 → link kept for the transcript
+    expect(snap.current?.stage).toBe('compress');
+    snap = await respond(deps, snap.id, { answer: 'The reply that pays most given what the others do.', handle: 'best reply' });
+    expect(snap.current?.stage).toBe('use');
+    expect(getState(db, brId)?.ownStatement).toBe('The reply that pays most given what the others do.');
+    expect(getState(db, brId)?.handle).toBe('best reply');
+    await walk('(A,B); the other game has a cycle'); // 0.85 → node done
+    const evidence = listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === brId);
+    expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'derive', 'explain', 'predict', 'use'].sort());
+    expect(evidence.find((e) => e.kind === 'check')?.effort).toBe(2);
+    expect(getState(db, brId)?.depth).toBe(4);
+  });
+
+  it('resumes at the same card after a restart and closes with recall, preview and transcript ingestion', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const before = currentSession(db);
+    expect(before?.id).toBe(snap.id);
+    expect(before?.card).toEqual(snap.card);
+    expect(before?.current?.stage).toBe(snap.current?.stage);
+
+    let guard = 0;
+    while (snap.phase === 'teach' && guard++ < 40) snap = await respond(deps, snap.id, answer('an answer', 0.7));
+    expect(snap.phase).toBe('close');
+    expect(snap.plan.steps.every((s) => s.status === 'done')).toBe(true);
+    snap = await respond(deps, snap.id, answer('profiles list a strategy per player; best responses maximize payoff'));
+    expect(snap.phase).toBe('preview');
+    expect(snap.closing?.previewQuestion).toBe('What changes if payoffs double?');
+    expect(snap.closing?.recall.length).toBe(3);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.phase).toBe('done');
+    expect(snap.status).toBe('done');
+    expect(activeSession(db)).toBeUndefined();
+    const recall = listEvidenceForSession(db, snap.id).filter((e) => e.kind === 'recall');
+    expect(recall).toHaveLength(3);
+    const transcripts = listSources(db).filter((s) => s.kind === 'session');
+    expect(transcripts).toHaveLength(1);
+    expect(transcripts[0]?.title).toMatch(/^Session \d{4}-\d{2}-\d{2}: Profiles and best responses$/);
+    const kinds = listSessionEvents(db, snap.id).map((e) => e.kind);
+    expect(kinds[0]).toBe('start');
+    expect(kinds).toContain('card');
+    expect(kinds).toContain('node-done');
+    expect(kinds[kinds.length - 1]).toBe('transcript');
+
+    // a second session on the same goal opens with reconstruction of what was taught
+    const again = await startSession(deps, goal.id);
+    expect(again.phase).toBe('reconstruct');
+    expect(again.previousNodes.map((n) => n.name).sort()).toEqual(['Best response', 'Nash equilibrium', 'Strategy profile']);
+    const after = await respond(deps, again.id, answer('a profile is one strategy per player'));
+    expect(after.phase).toBe('orient');
+    expect(listEvidenceForSession(db, again.id).filter((e) => e.kind === 'recall')).toHaveLength(3);
+    abandonSession(db, again.id);
+    expect(listSessions<SessionState>(db).find((s) => s.id === again.id)?.status).toBe('abandoned');
+  });
+
+  it('drops to a worked example after three failures and skips ahead after easy successes', async () => {
+    const { ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.95, 0.95, 0.9]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const nashId = ids.get('nash') as string;
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('x'));
+    // the index passes consumed two scores; Nash: predict 0.1, check 0.1, derive 0.1 → support
+    snap = await respond(deps, snap.id, answer('wrong'));
+    expect(snap.current?.stage).toBe('explain');
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('check');
+    snap = await respond(deps, snap.id, answer('wrong again'));
+    expect(snap.current?.stage).toBe('derive');
+    snap = await respond(deps, snap.id, answer('still wrong'));
+    expect(snap.current?.stage).toBe('support');
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('connect'); // resumes after the stage that triggered support
+    snap = await respond(deps, snap.id, answer('this requires payoffs')); // 0.95
+    expect(snap.current?.stage).toBe('compress');
+    snap = await respond(deps, snap.id, answer('own words')); // 0.95 → skip ahead; compress is the last before use, so use follows
+    expect(snap.current?.stage).toBe('use');
+  });
+});

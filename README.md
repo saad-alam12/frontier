@@ -15,6 +15,7 @@ npm run dev        # open the app in development
 npm test           # unit and integration tests, no network
 npm run typecheck && npm run lint
 npm run build      # unsigned desktop build in release/
+npm run live:connection   # real-model checks, run deliberately: also live:ingest, live:session
 ```
 
 ## Getting started with Claude Code

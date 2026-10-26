@@ -9,8 +9,12 @@ import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
 import type { LessonPlan } from '../services/planner';
+import type { PublicCard, SessionSnapshot } from '../services/session';
+import type { Grade, LearnerResponse } from '../agents/tutor';
 
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
+export type { PublicCard, SessionSnapshot, Grade, LearnerResponse };
+export type { Stage } from '../core/session';
 export type { Role } from '../llm/provider';
 export type { DeltaClass } from '../core/delta';
 export type { Goal, Depth } from '../core/types';
@@ -42,6 +46,11 @@ export interface ApiMethods {
   'probe.create': { input: { goalId: string }; output: ProbeView };
   'probe.submit': { input: { probeId: string; answers: ProbeAnswerInput[] }; output: ProbeOutcome[] };
   'plan.preview': { input: { goalId: string }; output: LessonPlan };
+  'session.current': { input: undefined; output: SessionSnapshot | null };
+  /** Plans and opens a session for the goal, or returns the active one. */
+  'session.start': { input: { goalId: string }; output: SessionSnapshot };
+  'session.respond': { input: { sessionId: string; response: LearnerResponse }; output: SessionSnapshot };
+  'session.abandon': { input: { sessionId: string }; output: undefined };
 }
 
 export type ApiName = keyof ApiMethods;

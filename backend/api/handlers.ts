@@ -9,6 +9,7 @@ import { deltaForSource, listSourceSummaries } from '../services/library';
 import { compileGoal, goalDetail, listGoalDetails } from '../services/goals';
 import { createProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
+import { abandonSession, currentSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
 import { createGoal, deleteGoal, updateGoal } from '../store/goals';
 import { deleteSource } from '../store/sources';
@@ -82,6 +83,13 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
     'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
+    'session.current': () => currentSession(ctx.db()),
+    'session.start': ({ goalId }) => startSession({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, goalId),
+    'session.respond': ({ sessionId, response }) => respond({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, sessionId, response),
+    'session.abandon': ({ sessionId }) => {
+      abandonSession(ctx.db(), sessionId);
+      return undefined;
+    },
   };
 }
 
