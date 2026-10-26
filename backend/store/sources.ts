@@ -1,0 +1,135 @@
+import type { Database } from './db';
+import { nowIso, parseJson } from './db';
+import { newId } from './ids';
+import type { Source, SourceKind } from '../core/types';
+
+interface SourceRow {
+  id: string;
+  kind: SourceKind;
+  title: string;
+  path: string | null;
+  hash: string;
+  added_at: string;
+  status: Source['status'];
+  chunk_count: number;
+  chunks_done: number;
+  error: string | null;
+}
+
+export interface SourceChunk {
+  id: string;
+  sourceId: string;
+  idx: number;
+  text: string;
+  locator: string;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  attempts: number;
+  error: string | null;
+  nodeIds: string[];
+}
+
+interface ChunkRow {
+  id: string;
+  source_id: string;
+  idx: number;
+  text: string;
+  locator: string;
+  status: SourceChunk['status'];
+  attempts: number;
+  error: string | null;
+  node_ids: string;
+}
+
+const toSource = (r: SourceRow): Source => ({
+  id: r.id,
+  kind: r.kind,
+  title: r.title,
+  path: r.path,
+  hash: r.hash,
+  addedAt: r.added_at,
+  status: r.status,
+  chunkCount: r.chunk_count,
+  chunksDone: r.chunks_done,
+  error: r.error,
+});
+
+const toChunk = (r: ChunkRow): SourceChunk => ({
+  id: r.id,
+  sourceId: r.source_id,
+  idx: r.idx,
+  text: r.text,
+  locator: r.locator,
+  status: r.status,
+  attempts: r.attempts,
+  error: r.error,
+  nodeIds: parseJson<string[]>(r.node_ids, []),
+});
+
+export function findSourceByHash(db: Database, hash: string): Source | undefined {
+  const row = db.prepare('SELECT * FROM sources WHERE hash = ?').get(hash) as SourceRow | undefined;
+  return row ? toSource(row) : undefined;
+}
+
+export function getSource(db: Database, id: string): Source | undefined {
+  const row = db.prepare('SELECT * FROM sources WHERE id = ?').get(id) as SourceRow | undefined;
+  return row ? toSource(row) : undefined;
+}
+
+export function listSources(db: Database): Source[] {
+  return (db.prepare('SELECT * FROM sources ORDER BY added_at DESC').all() as unknown as SourceRow[]).map(toSource);
+}
+
+export function createSource(db: Database, input: { kind: SourceKind; title: string; path: string | null; hash: string }, chunks: { text: string; locator: string }[]): Source {
+  const id = newId('src');
+  const addedAt = nowIso();
+  db.prepare('INSERT INTO sources (id, kind, title, path, hash, added_at, status, chunk_count, chunks_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)').run(
+    id,
+    input.kind,
+    input.title,
+    input.path,
+    input.hash,
+    addedAt,
+    'pending',
+    chunks.length,
+  );
+  const insert = db.prepare("INSERT INTO source_chunks (id, source_id, idx, text, locator, status) VALUES (?, ?, ?, ?, ?, 'pending')");
+  chunks.forEach((c, i) => insert.run(newId('chunk'), id, i, c.text, c.locator));
+  return getSource(db, id) as Source;
+}
+
+export function deleteSource(db: Database, id: string): void {
+  db.prepare('DELETE FROM sources WHERE id = ?').run(id);
+}
+
+export function listChunks(db: Database, sourceId: string): SourceChunk[] {
+  return (db.prepare('SELECT * FROM source_chunks WHERE source_id = ? ORDER BY idx').all(sourceId) as unknown as ChunkRow[]).map(toChunk);
+}
+
+export function updateChunk(db: Database, chunkId: string, patch: Partial<Pick<SourceChunk, 'status' | 'attempts' | 'error' | 'nodeIds'>>): void {
+  const row = db.prepare('SELECT * FROM source_chunks WHERE id = ?').get(chunkId) as ChunkRow | undefined;
+  if (!row) return;
+  const next = { ...toChunk(row), ...patch };
+  db.prepare('UPDATE source_chunks SET status = ?, attempts = ?, error = ?, node_ids = ? WHERE id = ?').run(
+    next.status,
+    next.attempts,
+    next.error,
+    JSON.stringify(next.nodeIds),
+    chunkId,
+  );
+}
+
+export function updateSourceStatus(db: Database, id: string, patch: Partial<Pick<Source, 'status' | 'chunksDone' | 'error'>>): void {
+  const current = getSource(db, id);
+  if (!current) return;
+  const next = { ...current, ...patch };
+  db.prepare('UPDATE sources SET status = ?, chunks_done = ?, error = ? WHERE id = ?').run(next.status, next.chunksDone, next.error, id);
+}
+
+export function addCoverage(db: Database, sourceId: string, nodeIds: Iterable<string>): void {
+  const stmt = db.prepare('INSERT OR IGNORE INTO source_coverage (source_id, node_id) VALUES (?, ?)');
+  for (const n of nodeIds) stmt.run(sourceId, n);
+}
+
+export function coveredNodeIds(db: Database, sourceId: string): string[] {
+  return (db.prepare('SELECT node_id FROM source_coverage WHERE source_id = ?').all(sourceId) as { node_id: string }[]).map((r) => r.node_id);
+}

@@ -4,6 +4,7 @@ import { AppContext } from './context';
 import { registerIpc } from './api/handlers';
 
 let mainWindow: BrowserWindow | null = null;
+let context: AppContext | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -40,6 +41,8 @@ void app.whenReady().then(() => {
     join(app.getPath('userData'), 'settings.json'),
     join(app.getPath('home'), 'Frontier'),
   );
+  context = ctx;
+  ctx.db();
   registerIpc(ctx);
   createWindow();
   app.on('activate', () => {
@@ -50,3 +53,5 @@ void app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('will-quit', () => context?.close());

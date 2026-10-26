@@ -2,11 +2,14 @@ import { mkdirSync } from 'node:fs';
 import { createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import { SettingsStore, dataPaths } from './settings/store';
+import { openDatabase } from './store/db';
+import type { Database } from './store/db';
 
-/** Everything the IPC handlers need. Built once in main.ts; rebuilt pieces when settings change. */
+/** Everything the IPC handlers need. Built once in main.ts; pieces are rebuilt when settings change. */
 export class AppContext {
   readonly settings: SettingsStore;
   private cachedProvider: LlmProvider | null = null;
+  private cachedDb: Database | null = null;
 
   constructor(
     readonly version: string,
@@ -26,9 +29,23 @@ export class AppContext {
     return this.cachedProvider;
   }
 
+  db(): Database {
+    if (!this.cachedDb) this.cachedDb = openDatabase(this.paths().db);
+    return this.cachedDb;
+  }
+
   onSettingsChanged(): void {
     this.cachedProvider = null;
+    if (this.cachedDb) {
+      this.cachedDb.close();
+      this.cachedDb = null;
+    }
     this.ensureFolders();
+  }
+
+  close(): void {
+    this.cachedDb?.close();
+    this.cachedDb = null;
   }
 
   private ensureFolders(): void {

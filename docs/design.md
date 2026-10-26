@@ -265,6 +265,8 @@ backend/
   agents/    one module per role; prompts in prompts/*.md
   core/      pure domain logic: fringe, leverage, scheduler, FSRS wrapper,
              implicit credit, chain simplification, merger, delta classification
+  services/  orchestration that combines core and store: evidence service (the one
+             evidence writer), knowledge view, ingestion pipeline, session runner
   store/     SQLite access; the only code that touches the database
   llm/       provider interface + AgentSdkProvider + AnthropicApiProvider + FakeProvider
   ingest/    file readers (pdf, md, html, transcript) and chunking
