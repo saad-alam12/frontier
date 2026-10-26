@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+release/
+.vite/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+# local learning data never goes into the repo
+data/
+*.db
+*.db-journal
+models-cache/
