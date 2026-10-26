@@ -7,6 +7,16 @@ A local desktop app for learning anything, toward goals you set, at the edge of 
 - Progress: `docs/progress.md`
 - Instructions for Claude Code: `CLAUDE.md`
 
+## Running it
+
+```
+npm install
+npm run dev        # open the app in development
+npm test           # unit and integration tests, no network
+npm run typecheck && npm run lint
+npm run build      # unsigned desktop build in release/
+```
+
 ## Getting started with Claude Code
 
 1. Make sure Claude Code is installed and you are logged in with your Claude account (`claude` in a terminal).

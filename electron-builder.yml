@@ -1,0 +1,21 @@
+appId: app.frontier.desktop
+productName: Frontier
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - prompts/**
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk*/**
+  - node_modules/@huggingface/transformers/**
+  - node_modules/onnxruntime-node/**
+mac:
+  target: dir
+  category: public.app-category.education
+  identity: null
+win:
+  target: dir
+linux:
+  target: dir

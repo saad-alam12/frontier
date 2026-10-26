@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+@import 'katex/dist/katex.min.css';
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-stone-50 text-stone-900 antialiased;
+}
+
+.prose-frontier p {
+  @apply my-2 leading-relaxed;
+}
+.prose-frontier ul {
+  @apply my-2 list-disc pl-5;
+}
+.prose-frontier ol {
+  @apply my-2 list-decimal pl-5;
+}
+.prose-frontier code {
+  @apply rounded bg-stone-100 px-1 text-[0.9em];
+}
+.prose-frontier pre {
+  @apply my-2 overflow-x-auto rounded bg-stone-100 p-3 text-sm;
+}
+.prose-frontier h1,
+.prose-frontier h2,
+.prose-frontier h3 {
+  @apply mt-4 mb-2 font-semibold;
+}
+.prose-frontier blockquote {
+  @apply my-2 border-l-4 border-stone-300 pl-3 text-stone-600;
+}
+.prose-frontier table {
+  @apply my-2 text-sm;
+}
+.prose-frontier td,
+.prose-frontier th {
+  @apply border border-stone-200 px-2 py-1;
+}

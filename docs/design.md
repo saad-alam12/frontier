@@ -241,8 +241,8 @@ The interface uses cards and controls, not a raw chat log, wherever the step loo
 | UI | React + TypeScript, built with Vite | MIT |
 | Styling | Tailwind CSS | MIT |
 | Local backend | Node (in Electron main process or a child process), TypeScript | — |
-| Database | SQLite via better-sqlite3 | MIT |
-| Vector search | sqlite-vec | MIT / Apache-2.0 |
+| Database | SQLite via Node's built-in `node:sqlite` (better-sqlite3 as fallback) | Node: MIT |
+| Vector search | cosine similarity over embeddings stored in SQLite; sqlite-vec (MIT / Apache-2.0) if the graph outgrows that | — |
 | Local embeddings | transformers.js with a small model (e.g. bge-small-en-v1.5) | Apache-2.0 (check model license) |
 | Spaced-repetition math | ts-fsrs | MIT |
 | Graph view | Cytoscape.js (or sigma.js + graphology) | MIT |
