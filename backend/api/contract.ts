@@ -4,9 +4,12 @@
  */
 import type { Settings, SettingsPatch } from '../settings/schema';
 import type { ConnectionTestResult } from '../agents/connectionTest';
+import type { DeltaSummary, SourceSummary } from '../services/library';
+import type { IngestProgress } from '../services/ingestion';
 
-export type { Settings, SettingsPatch, ConnectionTestResult };
+export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress };
 export type { Role } from '../llm/provider';
+export type { DeltaClass } from '../core/delta';
 
 export interface AppInfo {
   version: string;
@@ -20,6 +23,12 @@ export interface ApiMethods {
   'settings.update': { input: SettingsPatch; output: Settings };
   'settings.testConnection': { input: undefined; output: ConnectionTestResult };
   'settings.chooseFolder': { input: undefined; output: string | null };
+  'library.list': { input: undefined; output: SourceSummary[] };
+  /** Opens a file picker, adds the chosen files and starts ingesting them. */
+  'library.addFiles': { input: undefined; output: { added: SourceSummary[]; skipped: string[] } };
+  'library.run': { input: { sourceId: string }; output: undefined };
+  'library.remove': { input: { sourceId: string }; output: undefined };
+  'library.delta': { input: { sourceId: string }; output: DeltaSummary };
 }
 
 export type ApiName = keyof ApiMethods;
@@ -29,6 +38,7 @@ export type ApiOutput<N extends ApiName> = ApiMethods[N]['output'];
 /** Events pushed from the backend to the renderer. */
 export interface ApiEvents {
   'app.toast': { kind: 'info' | 'error'; message: string };
+  'library.progress': IngestProgress;
 }
 export type EventName = keyof ApiEvents;
 

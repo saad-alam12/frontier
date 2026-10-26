@@ -58,6 +58,7 @@ const MIGRATIONS: { version: number; sql: string }[] = [
         attempts INTEGER NOT NULL DEFAULT 0,
         error TEXT,
         node_ids TEXT NOT NULL DEFAULT '[]',
+        conflicts TEXT NOT NULL DEFAULT '[]',
         UNIQUE (source_id, idx)
       );
 

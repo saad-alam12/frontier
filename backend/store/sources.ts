@@ -26,6 +26,7 @@ export interface SourceChunk {
   attempts: number;
   error: string | null;
   nodeIds: string[];
+  conflicts: { nodeId: string; description: string }[];
 }
 
 interface ChunkRow {
@@ -38,6 +39,7 @@ interface ChunkRow {
   attempts: number;
   error: string | null;
   node_ids: string;
+  conflicts: string;
 }
 
 const toSource = (r: SourceRow): Source => ({
@@ -63,6 +65,7 @@ const toChunk = (r: ChunkRow): SourceChunk => ({
   attempts: r.attempts,
   error: r.error,
   nodeIds: parseJson<string[]>(r.node_ids, []),
+  conflicts: parseJson<{ nodeId: string; description: string }[]>(r.conflicts, []),
 });
 
 export function findSourceByHash(db: Database, hash: string): Source | undefined {
@@ -105,15 +108,16 @@ export function listChunks(db: Database, sourceId: string): SourceChunk[] {
   return (db.prepare('SELECT * FROM source_chunks WHERE source_id = ? ORDER BY idx').all(sourceId) as unknown as ChunkRow[]).map(toChunk);
 }
 
-export function updateChunk(db: Database, chunkId: string, patch: Partial<Pick<SourceChunk, 'status' | 'attempts' | 'error' | 'nodeIds'>>): void {
+export function updateChunk(db: Database, chunkId: string, patch: Partial<Pick<SourceChunk, 'status' | 'attempts' | 'error' | 'nodeIds' | 'conflicts'>>): void {
   const row = db.prepare('SELECT * FROM source_chunks WHERE id = ?').get(chunkId) as ChunkRow | undefined;
   if (!row) return;
   const next = { ...toChunk(row), ...patch };
-  db.prepare('UPDATE source_chunks SET status = ?, attempts = ?, error = ?, node_ids = ? WHERE id = ?').run(
+  db.prepare('UPDATE source_chunks SET status = ?, attempts = ?, error = ?, node_ids = ?, conflicts = ? WHERE id = ?').run(
     next.status,
     next.attempts,
     next.error,
     JSON.stringify(next.nodeIds),
+    JSON.stringify(next.conflicts),
     chunkId,
   );
 }

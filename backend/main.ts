@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import { AppContext } from './context';
-import { registerIpc } from './api/handlers';
+import { eventSink, registerIpc } from './api/handlers';
 
 let mainWindow: BrowserWindow | null = null;
 let context: AppContext | null = null;
@@ -43,6 +43,7 @@ void app.whenReady().then(() => {
   );
   context = ctx;
   ctx.db();
+  ctx.emit = eventSink(() => mainWindow);
   registerIpc(ctx);
   createWindow();
   app.on('activate', () => {

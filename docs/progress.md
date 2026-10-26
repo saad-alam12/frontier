@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | M0 Skeleton and model provider | Done | Live connection test passed through the Agent SDK in the cloud session |
 | M1 Knowledge store and core logic | Done | 56 tests; seed graph of 36 nodes |
-| M2 Ingestion and Library | Not started | Owner checkpoint after |
+| M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Not started | |
 | M4 Teaching session | Not started | Owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | |
@@ -14,7 +14,7 @@
 
 ## Next step
 
-Start M2.
+Start M3.
 
 ## Commands
 
@@ -23,11 +23,22 @@ Start M2.
 - `npm run typecheck`, `npm run lint`.
 - `npm run build` builds the desktop app into `release/`.
 - `npm run seed [path]` loads the 36-node example graph into a database (default `~/Frontier/frontier.db`).
+- `npm run live:ingest -- path/to/lecture.pdf [db path]` ingests one real file with the real model and the local embedding model (downloads bge-small-en-v1.5, about 130 MB, on first use), then prints the delta sentence.
 - `npm run live:connection` runs the connection test against the real model (uses the Claude login on this machine; set `FRONTIER_PROVIDER=anthropicApi` and `ANTHROPIC_API_KEY` for the API provider).
 
 ## Owner checkpoints to review
 
 Collected here because the owner was asleep while the build continued.
+
+### After M2 (this is the M2 checkpoint; the owner was asleep, so the build went on)
+
+- In the app, open Library and press "Add files". Pick a real 20–40 page lecture PDF. Watch the chunk list fill in; the first run also downloads the embedding model (about 130 MB, a minute or two) before the first chunk starts.
+- When it is done, check the list of ideas: are the statements self-contained, are the page citations right (hover is not there yet; the chunk locators show the page ranges), do chains look like real derivations? Spot-check 20 nodes.
+- Add the same PDF again: it should say "already in the library" and change nothing.
+- Add a second overlapping source (another lecture on the same topic, or notes): duplicates should merge rather than reappear. The matcher leans toward merging paraphrases; tell me if it merges things that are not the same idea, or keeps obvious duplicates apart.
+- The delta sentence will say everything is "new, needs a prerequisite first" until goals and sessions exist (M3, M4): that is expected.
+- If a chunk fails, "Run again" retries only the failed chunks.
+- Terminal alternative: `npm run live:ingest -- path/to/lecture.pdf` prints the same information without the app.
 
 ### After M1
 
@@ -41,6 +52,13 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-26 — pdfjs: the modern build (`pdfjs-dist/build/pdf.mjs`) is used inside Electron because the legacy build crashes Electron's Node runtime on import (SIGTRAP, reproduced in Electron 45); the legacy build is used under plain Node (tests, scripts) because the modern build expects Node 24 builtins. Same API; the switch is one line in `backend/ingest/readers/pdf.ts`.
+- 2026-10-26 — Chunk budget 1500 tokens, estimated as characters/4, packed at block (page/heading) boundaries; a block larger than the budget is split at paragraphs, then sentences. Tiny trailing chunks fold into the previous one.
+- 2026-10-26 — Embeddings: `Xenova/bge-small-en-v1.5` (384 dims, cls pooling, normalized) through transformers.js, cached in the data folder's `models-cache`. Candidate search is brute-force cosine (top 5 at ≥ 0.55) plus token-overlap name matching (≥ 0.5). Tests use a deterministic hashing embedder.
+- 2026-10-26 — The matcher is only called for extracted nodes that have at least one candidate; nodes with none are new without a model call. Decisions are validated against the candidate list the model was shown.
+- 2026-10-26 — HTML goes through Readability (Apache-2.0) over linkedom (ISC) with a plain-text fallback; headings become locators.
+- 2026-10-26 — Extractor conflicts are stored on the chunk (`source_chunks.conflicts`) and surface in the delta view as `conflict`; investigations are post-MVP.
 
 - 2026-10-26 — Depth is the highest level certified by any passing (score ≥ 0.7) evidence: lookup/predict → 1, recall/check/explain → 2, derive → 3, use → 4, practice → 2/4/5 by rung (<2 / 2–3 / 4). Failures never lower depth; they lower FSRS stability, which is what removes ownership. Implicit credit never certifies depth.
 - 2026-10-26 — Score → FSRS rating: < 0.4 Again, < 0.6 Hard, < 0.85 Good, else Easy. Partial credit (implicit, weight w) moves stability and difficulty a fraction w of the way toward a full review. A lookup counts as a review with weight 0.2.
@@ -58,5 +76,7 @@ Record choices the design did not settle, newest first: date, decision, reason.
 - 2026-10-26 — The IPC transport is one `invoke` channel carrying a method name plus input, typed by `backend/api/contract.ts`; the UI imports only types from the backend. Events flow back over one event channel.
 
 ## Open questions for the owner
+
+- The embedding model download (Hugging Face hub) was blocked from the cloud container, so the live embedder is untested here; it follows the documented transformers.js API. If the first ingest fails on the model download, tell me the error.
 
 - The Agent SDK documentation says: "Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products, including agents built on the Claude Agent SDK." For personal use on your own machine this is your login and your product; if you later distribute or sell Frontier, the subscription-login path may need Anthropic's approval, and the API-key provider is the clean alternative. Worth reading Anthropic's commercial terms before deciding on distribution.
