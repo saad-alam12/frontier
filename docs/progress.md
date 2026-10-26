@@ -7,14 +7,14 @@
 | M0 Skeleton and model provider | Done | Live connection test passed through the Agent SDK in the cloud session |
 | M1 Knowledge store and core logic | Done | 56 tests; seed graph of 36 nodes |
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
-| M3 Goals, probe and plan | Not started | |
+| M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Not started | Owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
 ## Next step
 
-Start M3.
+Start M4.
 
 ## Commands
 
@@ -29,6 +29,12 @@ Start M3.
 ## Owner checkpoints to review
 
 Collected here because the owner was asleep while the build continued.
+
+### After M3
+
+- In Goals, add a goal over the lecture you ingested (for example "Pass the exam on this lecture with a top grade") and press Compile. Judge the capabilities: are they testable can-do statements, do the targets and depths make sense, are the "unverified" nodes really missing from the lecture?
+- Press "Probe what I know": at most 8 questions, highest-information ideas first. Answer a few honestly and a few wrongly with high confidence; the results should score the wrong ones low and may note a misconception. A good derivation should credit the premises ("Also credits: ...").
+- Press "Preview next session": the plan should start from ideas whose prerequisites you own (or root terms, if you own nothing yet) and never contain something you already own.
 
 ### After M2 (this is the M2 checkpoint; the owner was asleep, so the build went on)
 
@@ -52,6 +58,11 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-26 — "A goal needs a node" includes everything the targets are built on (transitive premises), so root terms on the way to a target are on the fringe. Without this, a goal over an ungrounded topic had no starting point.
+- 2026-10-26 — Probe: code ranks targets by decayed count of dependent targets and hands the top candidates to the prober; at most 8 questions, one per node, keys and rubrics stored (in `problems`) before the questions are shown. A passing `derive` or `use` answer (≥ 0.7) writes `check` evidence on the node's direct premises at 0.9 × the score. Misconceptions become bugs.
+- 2026-10-26 — Planner: code computes the candidate set (walk from the fringe toward the targets through chains whose premises are owned or already candidates), the agent picks at most 6 and gives the why, code re-orders by dependencies and sets the mode: `index` for index-tier nodes, `derive` when the target depth is 3 or more, else `teach`.
+- 2026-10-26 — Goal compile hands the whole graph (id, name, kind, short statement) to the compiler up to 400 nodes; beyond that, the 400 nearest to the goal text by embedding.
 
 - 2026-10-26 — pdfjs: the modern build (`pdfjs-dist/build/pdf.mjs`) is used inside Electron because the legacy build crashes Electron's Node runtime on import (SIGTRAP, reproduced in Electron 45); the legacy build is used under plain Node (tests, scripts) because the modern build expects Node 24 builtins. Same API; the switch is one line in `backend/ingest/readers/pdf.ts`.
 - 2026-10-26 — Chunk budget 1500 tokens, estimated as characters/4, packed at block (page/heading) boundaries; a block larger than the budget is split at paragraphs, then sentences. Tiny trailing chunks fold into the previous one.

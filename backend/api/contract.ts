@@ -6,10 +6,14 @@ import type { Settings, SettingsPatch } from '../settings/schema';
 import type { ConnectionTestResult } from '../agents/connectionTest';
 import type { DeltaSummary, SourceSummary } from '../services/library';
 import type { IngestProgress } from '../services/ingestion';
+import type { GoalDetail } from '../services/goals';
+import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
+import type { LessonPlan } from '../services/planner';
 
-export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress };
+export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { Role } from '../llm/provider';
 export type { DeltaClass } from '../core/delta';
+export type { Goal, Depth } from '../core/types';
 
 export interface AppInfo {
   version: string;
@@ -29,6 +33,15 @@ export interface ApiMethods {
   'library.run': { input: { sourceId: string }; output: undefined };
   'library.remove': { input: { sourceId: string }; output: undefined };
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
+  'goals.list': { input: undefined; output: GoalDetail[] };
+  'goals.add': { input: { text: string; priority: number }; output: GoalDetail };
+  'goals.update': { input: { goalId: string; text?: string; priority?: number; status?: 'active' | 'paused' | 'done' }; output: GoalDetail };
+  'goals.remove': { input: { goalId: string }; output: undefined };
+  /** Runs the Goal Compiler; replaces the goal's capabilities and targets. */
+  'goals.compile': { input: { goalId: string }; output: GoalDetail };
+  'probe.create': { input: { goalId: string }; output: ProbeView };
+  'probe.submit': { input: { probeId: string; answers: ProbeAnswerInput[] }; output: ProbeOutcome[] };
+  'plan.preview': { input: { goalId: string }; output: LessonPlan };
 }
 
 export type ApiName = keyof ApiMethods;

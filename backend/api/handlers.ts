@@ -6,6 +6,11 @@ import { SettingsPatchSchema } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
+import { compileGoal, goalDetail, listGoalDetails } from '../services/goals';
+import { createProbe, submitProbe } from '../services/probe';
+import { planSession } from '../services/planner';
+import { refreshGoalFields } from '../services/knowledge';
+import { createGoal, deleteGoal, updateGoal } from '../store/goals';
 import { deleteSource } from '../store/sources';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
@@ -56,6 +61,27 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
+    'goals.list': () => listGoalDetails(ctx.db()),
+    'goals.add': ({ text, priority }) => {
+      const goal = createGoal(ctx.db(), text.trim(), priority);
+      return goalDetail(ctx.db(), goal.id) as NonNullable<ReturnType<typeof goalDetail>>;
+    },
+    'goals.update': ({ goalId, ...patch }) => {
+      updateGoal(ctx.db(), goalId, patch);
+      refreshGoalFields(ctx.db());
+      const detail = goalDetail(ctx.db(), goalId);
+      if (!detail) throw new Error('unknown goal');
+      return detail;
+    },
+    'goals.remove': ({ goalId }) => {
+      deleteGoal(ctx.db(), goalId);
+      refreshGoalFields(ctx.db());
+      return undefined;
+    },
+    'goals.compile': ({ goalId }) => compileGoal({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder() }, goalId),
+    'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
+    'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
+    'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
   };
 }
 

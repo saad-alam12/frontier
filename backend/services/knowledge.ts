@@ -2,7 +2,7 @@
  * Read-side view of the two layers together: the graph, the learner's states, who owns what and
  * what is on the fringe. Used by delta classification, planning and scheduling.
  */
-import { indexChains } from '../core/graph';
+import { ancestors, indexChains } from '../core/graph';
 import type { GraphIndex } from '../core/graph';
 import { assignTiers, leverageOf, targetDepthFor } from '../core/leverage';
 import type { GoalContext, LeverageScore } from '../core/leverage';
@@ -37,7 +37,12 @@ export function loadKnowledge(db: Database, now = new Date()): KnowledgeView {
     targets: listTargets(db),
   };
   const owned = ownedSet(states.values(), now);
-  const goalNeeded = new Set(goals.targets.map((t) => t.nodeId));
+  // A goal needs its targets and everything they are built on, so root terms along the way count too.
+  const goalNeeded = new Set<string>();
+  for (const t of goals.targets) {
+    goalNeeded.add(t.nodeId);
+    for (const a of ancestors(t.nodeId, index)) goalNeeded.add(a);
+  }
   const fringe = computeFringe({ nodes: nodes.values(), index, owned, goalNeeded });
   return { nodes, chains, index, states, owned, fringe, goals, now };
 }

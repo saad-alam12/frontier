@@ -166,6 +166,7 @@ const MIGRATIONS: { version: number; sql: string }[] = [
         id TEXT PRIMARY KEY,
         created_at TEXT NOT NULL,
         kind TEXT NOT NULL,
+        goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
         node_ids TEXT NOT NULL DEFAULT '[]',
         status TEXT NOT NULL DEFAULT 'open'
       );
