@@ -84,14 +84,49 @@ When a node gets `use` or `practice` evidence, its premises get partial review c
 
 The learner never picks topics; they state goals.
 
-1. **Goal to capabilities.** The Goal Compiler turns a goal ("pass the Game Theory exam with a 1.3", "build a retrieval system for my notes") into 3–15 can-do statements, each testable by a task.
-2. **Capabilities to target nodes.** Each capability maps to the nodes it needs and the depth each needs. Nodes missing from the world layer are created as `unverified` candidates and get grounded later (from a source the learner adds, or a fetched reference).
-3. **Gap analysis.** Target nodes are diffed against the you layer.
-4. **Diagnostic probe.** A short probe tests the highest-information nodes (most dependents). A correct derivation of a node implies its premises at lower depth, so a few questions place the learner across a whole topic. Questions come one at a time; the learner answers in the one answer field (section 4.4), so any reasoning they give is there to diagnose.
-5. **Task ladder.** Each capability gets a ladder of authentic tasks from easy to hard (practice rungs, section 5).
-6. **Mastery** of a capability = an unaided fresh task at the required rung and cue distance, scored at least 8/10.
+### 3.1 The goal
+
+A goal has the learner's sentence, a short `title` (set by the compiler), and:
+
+- `kind`: `course` (lectures arriving over a term, plus scripts, exercise sheets, past exams) or `personal` (own resources, or none at all).
+- `assessment`: `written_exam` | `oral_exam` | `presentation_or_project` | `outcome` | `none`.
+- `targetGrade` (free text, e.g. "1.0"), `date` (exam or deadline) and `hoursPerWeek`, all optional.
+- `materials`: sources linked to the goal, each with a **role**:
+
+| Role | Examples | Used for |
+| --- | --- | --- |
+| `teaching` | lecture PDFs, scripts, book chapters | read into ideas and taught |
+| `practice` | homework and exercise sheets | problem style; problems reused in practice (M5) |
+| `assessment` | past exams, mock exams, grading criteria | the exam profile: format, duration, aids, question types, difficulty; never taught as content |
+| `scope` | syllabus, module description | in or out of scope; the upcoming lectures on the goal page |
+| `reference` | own notes, cheat sheets | read into ideas, linked for lookup and anchoring |
+
+Only `teaching` and `reference` material is read into ideas; the rest is kept as text. When a file is added to a goal its role is guessed from its content (a cheap model call) and the learner can change it.
+
+### 3.2 From goal to plan
+
+1. **Goal to capabilities.** The Goal Compiler turns the goal into can-do statements, each testable by a task, shaped by the assessment (below).
+2. **Capabilities to target nodes.** Each capability maps to the nodes it needs and the depth each needs. Most targets are depth 1–2 (roughly 50% at 1–2, 35% at 3, 15% at 4–5 for an exam goal); code logs a warning when more than half are at 3 or more. The compiler sees only the goal's own material (plus the premises its ideas are built on), never the whole library.
+3. **Unverified ideas.** Ideas the goal needs but no material covers are created as `unverified` and shown as **expected** ("not in your material yet"). They are not taught unless the goal has no material at all (a goal from scratch) or the learner starts one explicitly. When a later source covers one (the matcher links them), it becomes verified.
+4. **Incremental compile.** Adding material or editing the goal recompiles incrementally: existing capabilities keep their ids and mastery; the compiler adds capabilities and targets for what is new, extends existing ones, and retires one only when a new one clearly supersedes it. Reading new material, summarizing assessment and scope material, and recompiling run in the background as material arrives.
+5. **Exam profile.** Assessment material is summarized once into an exam profile stored on the goal and given to the compiler, prober, planner and (M5) problem generator. Scope material yields the upcoming lectures.
+6. **Gap analysis.** Target nodes are diffed against the you layer.
+7. **Diagnostic probe.** A short probe tests the highest-information nodes (most dependents). A correct derivation of a node implies its premises at lower depth, so a few questions place the learner across a whole topic. Questions come one at a time; the learner answers in the one answer field (section 4.4), so any reasoning they give is there to diagnose. After submitting, each question shows its score, a one-line rationale and any misconception noted.
+8. **Task ladder.** Each capability gets a ladder of authentic tasks from easy to hard (practice rungs, section 5).
+9. **Mastery** of a capability = an unaided fresh task at the required rung and cue distance, scored at least 8/10. A capability shows as Ready (mastered, or every target at its depth), Learning or Not started.
 
 Goals have priority weights and can change anytime; recompiling reuses everything already learned.
+
+### 3.3 How the assessment changes behaviour
+
+- **Written exam:** capabilities are what the exam asks on paper; practice is shaped by the exam profile; readiness per lecture; mock exams in the last four weeks (M5).
+- **Oral exam:** practice is explaining aloud; the tutor can act as an examiner with follow-up "why" and "what if" questions; explanation depth is weighted up.
+- **Presentation or project:** practice is producing the thing (outline, argument, Q&A rehearsal).
+- **Outcome:** capabilities are the tasks themselves.
+- **None (open-ended):** no endpoint; the planner keeps proposing the next frontier; milestones are checkpoints; it periodically asks where to go next.
+- **Date:** the scheduler (M5) plans backwards from it so recall peaks on the date; without a date it paces by `hoursPerWeek`.
+
+In R1 the assessment shapes the compiler (capabilities, depth distribution), the prober and planner (exam style); the rest arrives with M5.
 
 ---
 
@@ -230,7 +265,7 @@ A desktop app (macOS first, then Windows/Linux) with seven screens:
 | Today | Start session, goal progress, what's fading, tonight's preview question |
 | Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel |
 | Map | The knowledge graph view |
-| Goals | Add and edit goals, see capabilities and progress |
+| Goals | New goal as a short guided flow (sentence, kind, assessment, date, grade, pace, material with roles) with a live summary; a goal page with the lecture timeline, the skills the assessment asks for, expected ideas, the probe, this week's plan, the exam style and the material by role; Edit goal reopens the flow |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions, replay |
 | Library | Add sources, see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
@@ -293,7 +328,9 @@ Rules:
 
 | Role | Input | Output (submit tool) |
 | --- | --- | --- |
-| Goal Compiler | goal text, current world layer summary | capabilities, target nodes with depths |
+| Goal Compiler | goal, kind, assessment, exam profile, the goal material's ideas, existing capabilities | title, new capabilities, extensions, retirements, target nodes with depths |
+| Material classifier | a file's title and opening text | its role for the goal |
+| Course profiler | assessment and scope material | exam profile, upcoming lectures |
 | Prober | target subgraph, you-layer state | probe questions; then assessment updates |
 | Planner | owned nodes, targets, fringe | lesson map (DAG of nodes for this session) |
 | Tutor | lesson map, node, learner's neighbourhood, bugs, sources | the next step card (predict / explain / check / connect / compress / use) |

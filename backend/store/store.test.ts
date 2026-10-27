@@ -3,7 +3,7 @@ import { openDatabase, transaction } from './db';
 import { SCHEMA_VERSION } from './migrations';
 import { seedExampleGraph, SEED_CHAINS, SEED_NODES } from './seed/exampleGraph';
 import { chainsAround, countNodes, getNode, listChains, searchNodesByName } from './world';
-import { createGoal, listGoals, listTargets, saveCompile } from './goals';
+import { createGoal, listGoals, listTargets, addCapabilities } from './goals';
 import { getState, listEvidenceForNode } from './evidence';
 import { recordEvidence, setOwnStatement } from '../services/evidence';
 import { loadKnowledge, refreshGoalFields } from '../services/knowledge';
@@ -112,11 +112,11 @@ describe('goals and tiers', () => {
     const db = openDatabase(':memory:');
     const ids = seedExampleGraph(db);
     const goal = createGoal(db, 'Pass the game theory exam', 2);
-    saveCompile(db, goal.id, [
+    addCapabilities(db, goal.id, [
       { statement: 'Find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 4 }, { nodeId: ids.get('findPureNash') as string, depth: 4 }] },
       { statement: 'Know what SPE is', targets: [{ nodeId: ids.get('spe') as string, depth: 2 }] },
     ]);
-    expect(listGoals(db)[0]?.compiledAt).not.toBeNull();
+    expect(listGoals(db)[0]?.kind).toBe('personal');
     expect(listTargets(db, goal.id)).toHaveLength(3);
     refreshGoalFields(db);
     expect(getState(db, ids.get('nash') as string)?.targetDepth).toBe(4);

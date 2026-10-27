@@ -105,14 +105,64 @@ export interface Bug {
   resolvedAt: string | null;
 }
 
+export type GoalKind = 'course' | 'personal';
+export type Assessment = 'written_exam' | 'oral_exam' | 'presentation_or_project' | 'outcome' | 'none';
+/** What a goal's material is for (design §3.1). */
+export type MaterialRole = 'teaching' | 'practice' | 'assessment' | 'scope' | 'reference';
+export const MATERIAL_ROLES: readonly MaterialRole[] = ['teaching', 'practice', 'assessment', 'scope', 'reference'];
+/** Roles whose sources are read into ideas; the others are kept as text for style, scope and practice. */
+export const EXTRACTED_ROLES: readonly MaterialRole[] = ['teaching', 'reference'];
+
+/** Summary of past exams: what the assessment looks like. */
+export interface ExamProfile {
+  /** One or two sentences, addressed to the learner. */
+  summary: string;
+  format: string;
+  durationMinutes: number | null;
+  aids: string;
+  questionTypes: string[];
+  difficulty: string;
+}
+
+/** A lecture or unit the scope document says is still to come. */
+export interface UpcomingUnit {
+  title: string;
+  /** Free text from the scope document ("3 November", "week 7"), or null. */
+  expected: string | null;
+}
+
 export interface Goal {
   id: string;
+  /** The learner's sentence. */
   text: string;
+  /** A short name ("Deep Learning in Physics"), set by the compiler; null until then. */
+  title: string | null;
+  kind: GoalKind;
+  assessment: Assessment;
+  /** Free text, e.g. "1.0" on the German scale. */
+  targetGrade: string | null;
+  /** Exam or deadline, ISO date (YYYY-MM-DD). */
+  date: string | null;
+  hoursPerWeek: number | null;
   /** Higher means more important; 1 is the default. */
   priority: number;
   status: 'active' | 'paused' | 'done';
   createdAt: string;
   compiledAt: string | null;
+  /** Teaching and reference sources the last compile covered (incremental compile adds the rest). */
+  compiledSources: string[];
+  examProfile: ExamProfile | null;
+  coursePlan: UpcomingUnit[];
+  /** Assessment and scope sources the profile was built from. */
+  profileSources: string[];
+  /** Unverified nodes the learner chose to learn anyway. */
+  startedUnverified: string[];
+}
+
+export interface GoalMaterial {
+  sourceId: string;
+  role: MaterialRole;
+  addedAt: string;
 }
 
 export interface Capability {

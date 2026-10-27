@@ -43,6 +43,8 @@ export interface IngestionOptions {
   sourcesDir: string;
   concurrency?: number;
   onProgress?: (p: IngestProgress) => void;
+  /** Called after every run of a source, so goals using it can move on. */
+  onSourceDone?: (sourceId: string) => void;
 }
 
 const CANDIDATES = 5;
@@ -130,6 +132,7 @@ export class IngestionService {
     });
     if (done > 0) refreshGoalFields(this.db);
     this.emit(sourceId);
+    this.options.onSourceDone?.(sourceId);
     return getSource(this.db, sourceId) as Source;
   }
 

@@ -36,7 +36,7 @@ export function buildProbeSchema(candidateIds: Set<string>, maxQuestions: number
     });
 }
 
-export async function generateProbeQuestions(provider: LlmProvider, goalText: string, candidates: ProbeCandidate[], maxQuestions: number): Promise<ProbeQuestion[]> {
+export async function generateProbeQuestions(provider: LlmProvider, goalText: string, candidates: ProbeCandidate[], maxQuestions: number, examStyle: string | null = null): Promise<ProbeQuestion[]> {
   const list = candidates
     .map(
       (c) =>
@@ -46,7 +46,7 @@ export async function generateProbeQuestions(provider: LlmProvider, goalText: st
   const result = await provider.complete({
     role: 'prober',
     system: loadPrompt('prober'),
-    messages: [{ role: 'user', content: `Goal: ${goalText}\n\nWrite at most ${maxQuestions} questions.\n\n## Candidates (highest information first)\n${list}` }],
+    messages: [{ role: 'user', content: `Goal: ${goalText}${examStyle ? `\n\nExam style (from past exams): ${examStyle}` : ''}\n\nWrite at most ${maxQuestions} questions.\n\n## Candidates (highest information first)\n${list}` }],
     submit: { name: 'submit_probe_questions', description: 'Submit the probe questions with answer keys and rubrics.', schema: buildProbeSchema(new Set(candidates.map((c) => c.nodeId)), maxQuestions) },
   });
   return result.data.questions;

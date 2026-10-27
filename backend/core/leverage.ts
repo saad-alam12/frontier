@@ -16,7 +16,7 @@ export function centrality(nodeId: string, index: GraphIndex, decay = CENTRALITY
 }
 
 export interface GoalContext {
-  goals: Map<string, Goal>;
+  goals: Map<string, Pick<Goal, 'id' | 'priority' | 'status'>>;
   capabilities: Map<string, Capability>;
   targets: Target[];
 }

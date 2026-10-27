@@ -10,7 +10,7 @@ import { orderByDependencies, planCandidates } from '../core/plan';
 import type { Depth, Tier } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
-import { getGoal, listCapabilities, listTargets } from '../store/goals';
+import { getGoal, listCapabilities, listMaterials, listTargets } from '../store/goals';
 import { loadKnowledge } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 
@@ -42,8 +42,12 @@ export interface LessonPlan {
 
 export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeView = loadKnowledge(db)) {
   const targetIds = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
-  // Unverified ideas (a compile's guesses that no source covers yet) are not taught.
-  const fringe = new Set([...view.fringe].filter((id) => view.nodes.get(id)?.status !== 'unverified'));
+  // Unverified ideas (a compile's guesses no source covers yet) are taught only for goals with no
+  // material at all, or when the learner chose to start one.
+  const goal = getGoal(db, goalId);
+  const fromScratch = listMaterials(db, goalId).length === 0;
+  const teachable = (id: string) => view.nodes.get(id)?.status !== 'unverified' || fromScratch || (goal?.startedUnverified.includes(id) ?? false);
+  const fringe = new Set([...view.fringe].filter(teachable));
   const candidates = planCandidates(targetIds, view.owned, fringe, view.index);
   const candidateSet = new Set(candidates.map((c) => c.nodeId));
   const unreachable = targetIds.filter((id) => !view.owned.has(id) && !candidateSet.has(id)).map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id }));
@@ -85,6 +89,7 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
   });
   const result = await runPlanner(provider, {
     goalText: goal.text,
+    examStyle: goal.examProfile?.summary ?? null,
     capabilities: listCapabilities(db, goalId).map((c) => c.statement),
     targets: targetIds.map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id, targetDepth: targetDepthFor(id, view.goals), currentDepth: view.states.get(id)?.depth ?? 0 })),
     candidates: plannerCandidates,

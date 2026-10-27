@@ -1,23 +1,38 @@
 import { dialog, ipcMain } from 'electron';
-import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName } from './contract';
+import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MaterialCandidate } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
-import { compileGoal, goalDetail, listGoalDetails } from '../services/goals';
+import { createGoalFromForm, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
 import { createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
-import { createGoal, deleteGoal, updateGoal } from '../store/goals';
+import { deleteGoal, listGoals, startUnverified } from '../store/goals';
 import { deleteSource } from '../store/sources';
 import { getDrafts, setDraft } from '../store/drafts';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
 export function buildHandlers(ctx: AppContext): Handlers {
+  const detail = (goalId: string) => {
+    const d = goalDetail(ctx.db(), goalId, ctx.goalWorker().status(goalId));
+    if (!d) throw new Error('unknown goal');
+    return d;
+  };
+  /** Add files to the library unread and guess what each is for; reading starts once a goal uses them. */
+  const addMaterials = async (paths: string[]): Promise<MaterialCandidate[]> => {
+    const out: MaterialCandidate[] = [];
+    for (const path of paths) {
+      const { source, existed } = await ctx.ingestion().addFile(path);
+      const guess = await guessRole(ctx.db(), ctx.provider(), source.id).catch(() => ({ role: 'teaching' as const, reason: 'Could not tell; assumed teaching material.' }));
+      out.push({ sourceId: source.id, title: source.title, role: guess.role, reason: guess.reason, existed });
+    }
+    return out;
+  };
   return {
     'app.info': () => ({ version: ctx.version, dataFolder: ctx.settings.get().dataFolder, settingsFile: ctx.settingsFile }),
     'settings.get': () => ctx.settings.get(),
@@ -64,24 +79,36 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
-    'goals.list': () => listGoalDetails(ctx.db()),
-    'goals.add': ({ text, priority }) => {
-      const goal = createGoal(ctx.db(), text.trim(), priority);
-      return goalDetail(ctx.db(), goal.id) as NonNullable<ReturnType<typeof goalDetail>>;
+    'goals.list': () => listGoals(ctx.db()).map((g) => detail(g.id)),
+    'goals.get': ({ goalId }) => detail(goalId),
+    'goals.create': ({ form }) => {
+      const goal = createGoalFromForm(ctx.db(), { ...form, text: form.text.trim() });
+      ctx.goalWorker().refresh(goal.id);
+      return detail(goal.id);
     },
-    'goals.update': ({ goalId, ...patch }) => {
-      updateGoal(ctx.db(), goalId, patch);
-      refreshGoalFields(ctx.db());
-      const detail = goalDetail(ctx.db(), goalId);
-      if (!detail) throw new Error('unknown goal');
-      return detail;
+    'goals.update': ({ goalId, form }) => {
+      updateGoalFromForm(ctx.db(), goalId, form);
+      ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
     },
     'goals.remove': ({ goalId }) => {
       deleteGoal(ctx.db(), goalId);
       refreshGoalFields(ctx.db());
       return undefined;
     },
-    'goals.compile': ({ goalId }) => compileGoal({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder() }, goalId),
+    'goals.compile': async ({ goalId }) => {
+      await ctx.goalWorker().compileNow(goalId);
+      return detail(goalId);
+    },
+    'goals.startUnverified': ({ goalId, nodeId }) => {
+      startUnverified(ctx.db(), goalId, nodeId);
+      return detail(goalId);
+    },
+    'materials.pick': async () => {
+      const result = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], filters: [{ name: 'Sources', extensions: SUPPORTED_EXTENSIONS }] });
+      return result.canceled ? [] : addMaterials(result.filePaths);
+    },
+    'materials.addPaths': ({ paths }) => addMaterials(paths),
     'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
     'probe.open': ({ goalId }) => openProbe(ctx.db(), goalId),
     'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),

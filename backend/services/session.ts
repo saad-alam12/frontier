@@ -57,6 +57,8 @@ export interface SessionSnapshot {
   id: string;
   goalId: string;
   goalText: string;
+  /** The goal's short name for the breadcrumb (its sentence until compiled). */
+  goalTitle: string;
   startedAt: string;
   status: SessionRecord['status'];
   phase: Phase;
@@ -456,6 +458,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
     id: session.id,
     goalId: s.goalId,
     goalText: getGoal(db, s.goalId)?.text ?? '',
+    goalTitle: getGoal(db, s.goalId)?.title ?? getGoal(db, s.goalId)?.text ?? '',
     startedAt: session.startedAt,
     status: session.status,
     phase: s.phase,

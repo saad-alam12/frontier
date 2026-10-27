@@ -5,6 +5,8 @@ import type { Embedder } from './ingest/embedder';
 import { createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import { IngestionService } from './services/ingestion';
+import { GoalWorker, nextGoalStep } from './services/goals';
+import { listGoals } from './store/goals';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';
 import type { Database } from './store/db';
@@ -17,6 +19,7 @@ export class AppContext {
   private cachedDb: Database | null = null;
   private cachedEmbedder: Embedder | null = null;
   private cachedIngestion: IngestionService | null = null;
+  private cachedGoalWorker: GoalWorker | null = null;
 
   constructor(
     readonly version: string,
@@ -55,9 +58,22 @@ export class AppContext {
         sourcesDir: this.paths().sources,
         concurrency: this.settings.get().concurrency,
         onProgress: (p) => this.emit('library.progress', p),
+        onSourceDone: (sourceId) => this.goalWorker().onSourceDone(sourceId),
       });
     }
     return this.cachedIngestion;
+  }
+
+  goalWorker(): GoalWorker {
+    if (!this.cachedGoalWorker) {
+      this.cachedGoalWorker = new GoalWorker({ db: () => this.db(), provider: () => this.provider(), ingestion: () => this.ingestion(), onChange: (goalId) => this.emit('goals.changed', { goalId }) });
+    }
+    return this.cachedGoalWorker;
+  }
+
+  /** After a restart, pick up goals whose material was still being read, profiled or compiled. */
+  resumeGoalWork(): void {
+    for (const goal of listGoals(this.db())) if (nextGoalStep(this.db(), goal.id) !== null) this.goalWorker().refresh(goal.id);
   }
 
   onSettingsChanged(): void {

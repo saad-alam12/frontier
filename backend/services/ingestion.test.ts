@@ -13,7 +13,7 @@ import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
 import { deltaForSource, listSourceSummaries } from './library';
 import { recordEvidence } from './evidence';
-import { createGoal, saveCompile } from '../store/goals';
+import { createGoal, addCapabilities } from '../store/goals';
 import { refreshGoalFields } from './knowledge';
 
 /** Scripted extractor: reads a tiny marker language from the chunk text so fixtures stay readable. */
@@ -220,7 +220,7 @@ describe('ingestion pipeline', () => {
     own('Strategy profile');
     own('Best response');
     const goal = createGoal(db, 'exam');
-    saveCompile(db, goal.id, [{ statement: 'know BR deeply', targets: [{ nodeId: byName.get('Best response') as string, depth: 4 }] }]);
+    addCapabilities(db, goal.id, [{ statement: 'know BR deeply', targets: [{ nodeId: byName.get('Best response') as string, depth: 4 }] }]);
     refreshGoalFields(db);
     const delta = deltaForSource(db, a.source.id);
     const cls = new Map(delta.items.map((i) => [i.name, i.cls]));

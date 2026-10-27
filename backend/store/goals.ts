@@ -1,15 +1,26 @@
 import type { Database } from './db';
-import { nowIso } from './db';
+import { nowIso, parseJson } from './db';
 import { newId } from './ids';
-import type { Capability, Depth, Goal, Target } from '../core/types';
+import type { Assessment, Capability, Depth, ExamProfile, Goal, GoalKind, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
   text: string;
+  title: string | null;
+  kind: GoalKind;
+  assessment: Assessment;
+  target_grade: string | null;
+  date: string | null;
+  hours_per_week: number | null;
   priority: number;
   status: Goal['status'];
   created_at: string;
   compiled_at: string | null;
+  compiled_sources: string;
+  exam_profile: string | null;
+  course_plan: string;
+  profile_sources: string;
+  started_unverified: string;
 }
 interface CapabilityRow {
   id: string;
@@ -24,27 +35,63 @@ interface TargetRow {
   depth: number;
 }
 
-const toGoal = (r: GoalRow): Goal => ({ id: r.id, text: r.text, priority: r.priority, status: r.status, createdAt: r.created_at, compiledAt: r.compiled_at });
+const toGoal = (r: GoalRow): Goal => ({
+  id: r.id,
+  text: r.text,
+  title: r.title,
+  kind: r.kind,
+  assessment: r.assessment,
+  targetGrade: r.target_grade,
+  date: r.date,
+  hoursPerWeek: r.hours_per_week,
+  priority: r.priority,
+  status: r.status,
+  createdAt: r.created_at,
+  compiledAt: r.compiled_at,
+  compiledSources: parseJson<string[]>(r.compiled_sources, []),
+  examProfile: parseJson<ExamProfile | null>(r.exam_profile, null),
+  coursePlan: parseJson<UpcomingUnit[]>(r.course_plan, []),
+  profileSources: parseJson<string[]>(r.profile_sources, []),
+  startedUnverified: parseJson<string[]>(r.started_unverified, []),
+});
 const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
 const toTarget = (r: TargetRow): Target => ({ capabilityId: r.capability_id, nodeId: r.node_id, depth: r.depth as Depth });
 
-export function createGoal(db: Database, text: string, priority = 1): Goal {
-  const goal: Goal = { id: newId('goal'), text, priority, status: 'active', createdAt: nowIso(), compiledAt: null };
-  db.prepare('INSERT INTO goals (id, text, priority, status, created_at, compiled_at) VALUES (?, ?, ?, ?, ?, NULL)').run(
-    goal.id,
-    goal.text,
-    goal.priority,
-    goal.status,
-    goal.createdAt,
-  );
-  return goal;
+/** What the learner states about a goal; everything else is derived. */
+export interface GoalInput {
+  text: string;
+  kind?: GoalKind;
+  assessment?: Assessment;
+  targetGrade?: string | null;
+  date?: string | null;
+  hoursPerWeek?: number | null;
+  priority?: number;
 }
 
-export function updateGoal(db: Database, id: string, patch: Partial<Pick<Goal, 'text' | 'priority' | 'status'>>): void {
+export function createGoal(db: Database, input: GoalInput | string, priority = 1): Goal {
+  const g: GoalInput = typeof input === 'string' ? { text: input, priority } : input;
+  const id = newId('goal');
+  db.prepare(
+    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, hours_per_week, priority, status, created_at, compiled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+  ).run(id, g.text, g.kind ?? 'personal', g.assessment ?? 'none', g.targetGrade ?? null, g.date ?? null, g.hoursPerWeek ?? null, g.priority ?? 1, 'active', nowIso());
+  return getGoal(db, id) as Goal;
+}
+
+export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> & { status?: Goal['status'] }): void {
   const current = getGoal(db, id);
   if (!current) return;
   const next = { ...current, ...patch };
-  db.prepare('UPDATE goals SET text = ?, priority = ?, status = ? WHERE id = ?').run(next.text, next.priority, next.status, id);
+  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, hours_per_week = ?, priority = ?, status = ? WHERE id = ?').run(
+    next.text,
+    next.kind,
+    next.assessment,
+    next.targetGrade,
+    next.date,
+    next.hoursPerWeek,
+    next.priority,
+    next.status,
+    id,
+  );
 }
 
 export function deleteGoal(db: Database, id: string): void {
@@ -60,20 +107,66 @@ export function listGoals(db: Database): Goal[] {
   return (db.prepare('SELECT * FROM goals ORDER BY created_at').all() as unknown as GoalRow[]).map(toGoal);
 }
 
-/** Replace a goal's capabilities and targets with a fresh compile. */
-export function saveCompile(db: Database, goalId: string, capabilities: { statement: string; targets: { nodeId: string; depth: Depth }[] }[]): Capability[] {
-  db.prepare('DELETE FROM capabilities WHERE goal_id = ?').run(goalId);
+/** Record a compile: the goal's short title and which teaching sources it covered. */
+export function markCompiled(db: Database, goalId: string, title: string | null, sourceIds: string[]): void {
+  db.prepare('UPDATE goals SET compiled_at = ?, title = COALESCE(?, title), compiled_sources = ? WHERE id = ?').run(nowIso(), title, JSON.stringify(sourceIds), goalId);
+}
+
+export function saveProfile(db: Database, goalId: string, profile: ExamProfile | null, plan: UpcomingUnit[], sourceIds: string[]): void {
+  db.prepare('UPDATE goals SET exam_profile = ?, course_plan = ?, profile_sources = ? WHERE id = ?').run(profile ? JSON.stringify(profile) : null, JSON.stringify(plan), JSON.stringify(sourceIds), goalId);
+}
+
+export function startUnverified(db: Database, goalId: string, nodeId: string): void {
+  const goal = getGoal(db, goalId);
+  if (!goal || goal.startedUnverified.includes(nodeId)) return;
+  db.prepare('UPDATE goals SET started_unverified = ? WHERE id = ?').run(JSON.stringify([...goal.startedUnverified, nodeId]), goalId);
+}
+
+/** Replace a goal's material list (sources and their roles), keeping when each was first added. */
+export function setMaterials(db: Database, goalId: string, materials: { sourceId: string; role: MaterialRole }[]): void {
+  const existing = new Map(listMaterials(db, goalId).map((m) => [m.sourceId, m.addedAt]));
+  db.prepare('DELETE FROM goal_materials WHERE goal_id = ?').run(goalId);
+  const insert = db.prepare('INSERT INTO goal_materials (goal_id, source_id, role, added_at) VALUES (?, ?, ?, ?)');
+  const now = nowIso();
+  for (const m of materials) insert.run(goalId, m.sourceId, m.role, existing.get(m.sourceId) ?? now);
+}
+
+export function listMaterials(db: Database, goalId: string): GoalMaterial[] {
+  return (db.prepare('SELECT source_id, role, added_at FROM goal_materials WHERE goal_id = ? ORDER BY added_at, rowid').all(goalId) as { source_id: string; role: MaterialRole; added_at: string }[]).map((r) => ({
+    sourceId: r.source_id,
+    role: r.role,
+    addedAt: r.added_at,
+  }));
+}
+
+/** Every role a source plays across goals. */
+export function rolesOfSource(db: Database, sourceId: string): { goalId: string; role: MaterialRole }[] {
+  return (db.prepare('SELECT goal_id, role FROM goal_materials WHERE source_id = ?').all(sourceId) as { goal_id: string; role: MaterialRole }[]).map((r) => ({ goalId: r.goal_id, role: r.role }));
+}
+
+/** Add capabilities after the existing ones, with their targets. */
+export function addCapabilities(db: Database, goalId: string, capabilities: { statement: string; targets: { nodeId: string; depth: Depth }[] }[]): Capability[] {
+  const start = (db.prepare('SELECT COALESCE(MAX(ord) + 1, 0) AS n FROM capabilities WHERE goal_id = ?').get(goalId) as { n: number }).n;
   const insertCap = db.prepare('INSERT INTO capabilities (id, goal_id, statement, ord, mastered_at) VALUES (?, ?, ?, ?, NULL)');
-  const insertTarget = db.prepare('INSERT OR REPLACE INTO targets (capability_id, node_id, depth) VALUES (?, ?, ?)');
   const out: Capability[] = [];
   capabilities.forEach((cap, i) => {
     const id = newId('cap');
-    insertCap.run(id, goalId, cap.statement, i);
-    for (const t of cap.targets) insertTarget.run(id, t.nodeId, t.depth);
-    out.push({ id, goalId, statement: cap.statement, order: i, masteredAt: null });
+    insertCap.run(id, goalId, cap.statement, start + i);
+    addTargets(db, id, cap.targets);
+    out.push({ id, goalId, statement: cap.statement, order: start + i, masteredAt: null });
   });
-  db.prepare('UPDATE goals SET compiled_at = ? WHERE id = ?').run(nowIso(), goalId);
   return out;
+}
+
+/** Add targets to an existing capability; an existing target keeps the deeper of the two depths. */
+export function addTargets(db: Database, capabilityId: string, targets: { nodeId: string; depth: Depth }[]): void {
+  const upsert = db.prepare('INSERT INTO targets (capability_id, node_id, depth) VALUES (?, ?, ?) ON CONFLICT(capability_id, node_id) DO UPDATE SET depth = MAX(depth, excluded.depth)');
+  for (const t of targets) upsert.run(capabilityId, t.nodeId, t.depth);
+}
+
+export function deleteCapabilities(db: Database, ids: string[]): void {
+  const stmt = db.prepare('DELETE FROM capabilities WHERE id = ?');
+  for (const id of ids) stmt.run(id);
 }
 
 export function listCapabilities(db: Database, goalId?: string): Capability[] {

@@ -99,12 +99,14 @@ export function applyMergePlan(db: Database, plan: MergePlan): void {
   }
   const selectNode = db.prepare('SELECT aliases, sources FROM nodes WHERE id = ?');
   const updateNode = db.prepare('UPDATE nodes SET aliases = ?, sources = ?, updated_at = ? WHERE id = ?');
+  const verifyNode = db.prepare("UPDATE nodes SET status = 'verified' WHERE id = ?");
   for (const u of plan.nodeUpdates) {
     const row = selectNode.get(u.nodeId) as { aliases: string; sources: string } | undefined;
     if (!row) continue;
     const aliases = [...new Set([...parseJson<string[]>(row.aliases, []), ...u.aliases])];
     const sources = mergeRefs(parseJson<SourceRef[]>(row.sources, []), u.sources);
     updateNode.run(JSON.stringify(aliases), JSON.stringify(sources), now, u.nodeId);
+    if (u.verify) verifyNode.run(u.nodeId);
   }
   const deleteChain = db.prepare('DELETE FROM chains WHERE id = ?');
   for (const id of plan.droppedChainIds) deleteChain.run(id);

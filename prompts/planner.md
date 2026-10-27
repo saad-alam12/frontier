@@ -13,6 +13,7 @@ Choose at most the requested number of candidate nodes for this session. Rules:
 - Prefer nodes that unlock the most targets, and nodes the goal needs at higher depth.
 - A session serves one goal and should feel coherent: pick a connected cluster over scattered ideas.
 - `index` tier nodes get a short index pass, so they are cheap to include when they sit on the way to something.
+- When an exam style is given, favour the ideas that exam leans on.
 - Give each step a `why` in one sentence that connects it to the goal in the learner's terms.
 - Give the session a short `title` (a few words) and a one-sentence `orientation` that tells the learner what today builds and why it matters for the goal.
 

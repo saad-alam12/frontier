@@ -18,6 +18,8 @@ export interface PlannerCandidate {
 
 export interface PlannerInput {
   goalText: string;
+  /** The exam profile summary, when the goal has past exams. */
+  examStyle: string | null;
   capabilities: string[];
   targets: { nodeId: string; name: string; targetDepth: number; currentDepth: number }[];
   candidates: PlannerCandidate[];
@@ -53,7 +55,7 @@ export async function runPlanner(provider: LlmProvider, input: PlannerInput): Pr
     .join('\n');
   const targets = input.targets.map((t) => `- [${t.nodeId}] ${t.name}: depth ${t.currentDepth} → ${t.targetDepth}`).join('\n');
   const message = [
-    `## Goal\n${input.goalText}`,
+    `## Goal\n${input.goalText}${input.examStyle ? `\n\nExam style: ${input.examStyle}` : ''}`,
     `## Capabilities\n${input.capabilities.map((c) => `- ${c}`).join('\n')}`,
     `## Targets\n${targets || '(none)'}`,
     `## Owned already\n${input.ownedNames.length ? input.ownedNames.join('; ') : '(nothing yet)'}`,

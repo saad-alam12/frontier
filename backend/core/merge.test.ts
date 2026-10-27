@@ -64,6 +64,19 @@ describe('planMerge', () => {
     expect(plan.coveredNodeIds).toEqual(['node_nash']);
   });
 
+  it('grounds an unverified node when a source matches it, and attaches worked examples', () => {
+    const guess: KnowledgeNode = { ...existingNode, id: 'node_guess', name: 'Adam optimizer', aliases: [], sources: [], status: 'unverified' };
+    const plan = planMerge({
+      ...base(),
+      existingNodes: new Map([[guess.id, guess]]),
+      extractedNodes: [{ tempId: 'n1', kind: 'term', name: 'Adam', statement: 'restated', aliases: [], locator: 'p9' }],
+      extractedExamples: [{ illustrates: 'n1', title: 'One Adam step', body: 'With $\\beta_1 = 0.9$ ...' }],
+      identities: new Map([['n1', 'node_guess']]),
+    });
+    expect(plan.nodeUpdates).toEqual([{ nodeId: 'node_guess', aliases: ['Adam'], sources: [{ sourceId: 'srcB', locator: 'p9' }], verify: true }]);
+    expect(plan.examples).toMatchObject([{ nodeId: 'node_guess', sourceId: 'srcB', title: 'One Adam step' }]);
+  });
+
   it('re-ingesting the same content is a no-op apart from nothing', () => {
     const plan = planMerge({
       ...base(),

@@ -35,6 +35,9 @@ function createWindow(): void {
   else void mainWindow.loadFile(join(import.meta.dirname, '../renderer/index.html'));
 }
 
+// Day-month-year dates in native fields (the owner is in Germany; en-GB keeps the UI in English).
+app.commandLine.appendSwitch('lang', 'en-GB');
+
 void app.whenReady().then(() => {
   const ctx = new AppContext(
     app.getVersion(),
@@ -46,6 +49,7 @@ void app.whenReady().then(() => {
   ctx.emit = eventSink(() => mainWindow);
   registerIpc(ctx);
   createWindow();
+  ctx.resumeGoalWork();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

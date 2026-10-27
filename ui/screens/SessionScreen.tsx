@@ -119,7 +119,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
             {ready.map((g) => (
               <li key={g.goal.id} className="row items-center">
                 <div className="flex min-w-0 flex-col">
-                  <span>{g.goal.text}</span>
+                  <span>{g.goal.title ?? g.goal.text}</span>
                   <span className="t-small text-muted">{g.capabilities.length} skills</span>
                 </div>
                 <Button kind="primary" onClick={() => void start(g.goal.id)} disabled={busy !== null}>
@@ -135,7 +135,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
   const isBusy = busy !== null;
   const current = snap.current;
-  const crumbs = [{ label: snap.goalText, onClick: () => onNavigate('goals') }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
+  const crumbs = [{ label: snap.goalTitle, onClick: () => onNavigate('goals') }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
   return (

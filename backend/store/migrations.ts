@@ -230,6 +230,37 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX examples_node ON examples(node_id);
     `,
   },
+  {
+    version: 4,
+    sql: `
+      -- Goals v2: what kind of goal, how it is assessed, and the material it draws on.
+      ALTER TABLE goals ADD COLUMN title TEXT;
+      ALTER TABLE goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'personal';
+      ALTER TABLE goals ADD COLUMN assessment TEXT NOT NULL DEFAULT 'none';
+      ALTER TABLE goals ADD COLUMN target_grade TEXT;
+      ALTER TABLE goals ADD COLUMN date TEXT;
+      ALTER TABLE goals ADD COLUMN hours_per_week REAL;
+      ALTER TABLE goals ADD COLUMN exam_profile TEXT;
+      ALTER TABLE goals ADD COLUMN course_plan TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE goals ADD COLUMN profile_sources TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE goals ADD COLUMN compiled_sources TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE goals ADD COLUMN started_unverified TEXT NOT NULL DEFAULT '[]';
+
+      CREATE TABLE goal_materials (
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('teaching', 'practice', 'assessment', 'scope', 'reference')),
+        added_at TEXT NOT NULL,
+        PRIMARY KEY (goal_id, source_id)
+      );
+      CREATE INDEX goal_materials_source ON goal_materials(source_id);
+
+      -- Goals from before v2 were compiled against the whole library: keep that as their teaching material.
+      INSERT INTO goal_materials (goal_id, source_id, role, added_at)
+        SELECT g.id, s.id, 'teaching', s.added_at FROM goals g CROSS JOIN sources s WHERE s.kind != 'session';
+      UPDATE goals SET compiled_sources = (SELECT json_group_array(source_id) FROM goal_materials WHERE goal_id = goals.id) WHERE compiled_at IS NOT NULL;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

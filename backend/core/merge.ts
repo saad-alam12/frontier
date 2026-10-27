@@ -45,8 +45,8 @@ export interface MergeInput {
 
 export interface MergePlan {
   newNodes: KnowledgeNode[];
-  /** Existing nodes that gain aliases or citations. */
-  nodeUpdates: { nodeId: string; aliases: string[]; sources: SourceRef[] }[];
+  /** Existing nodes that gain aliases or citations; `verify` grounds an unverified node in this source. */
+  nodeUpdates: { nodeId: string; aliases: string[]; sources: SourceRef[]; verify?: boolean }[];
   newChains: Chain[];
   /** Existing chains that gain a citation. */
   chainUpdates: { chainId: string; sources: SourceRef[] }[];
@@ -81,7 +81,8 @@ export function planMerge(input: MergeInput): MergePlan {
         return true;
       });
       const hasRef = existing.sources.some((s) => s.sourceId === ref.sourceId && (s.locator ?? '') === (ref.locator ?? ''));
-      if (aliases.length || !hasRef) nodeUpdates.push({ nodeId: existingId, aliases, sources: hasRef ? [] : [ref] });
+      const verify = existing.status === 'unverified';
+      if (aliases.length || !hasRef || verify) nodeUpdates.push({ nodeId: existingId, aliases, sources: hasRef ? [] : [ref], ...(verify ? { verify } : {}) });
       continue;
     }
     const id = input.newId('node');

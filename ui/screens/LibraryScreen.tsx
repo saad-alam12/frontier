@@ -4,6 +4,7 @@ import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { ROLE_LABEL } from './goals/labels';
 
 const CLASS_LABEL: Record<DeltaClass, string> = {
   'new-fringe': 'Learnable now',
@@ -110,11 +111,9 @@ export function LibraryScreen() {
             <button type="button" className="row" onClick={() => setSelected(s.id)} aria-current={s.id === selected ? 'true' : undefined}>
               <span className="flex min-w-0 flex-col">
                 <span className={'truncate ' + (s.id === selected ? 'font-medium text-text' : 'text-soft')}>{s.title}</span>
-                <span className="t-small text-muted">
-                  {s.nodeCount} ideas · {STATUS_LABEL[s.status]}
-                </span>
+                <span className="t-small text-muted">{s.readsIdeas ? `${s.nodeCount} ideas · ${STATUS_LABEL[s.status]}` : `Kept as ${s.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}</span>
               </span>
-              {s.chunkCount > 0 && <Meter value={s.chunksDone / s.chunkCount} accent={s.status === 'running'} />}
+              {s.readsIdeas && s.chunkCount > 0 && <Meter value={s.chunksDone / s.chunkCount} accent={s.status === 'running'} />}
             </button>
           </li>
         ))}
@@ -130,9 +129,10 @@ export function LibraryScreen() {
           <div className="flex flex-col gap-[14px]">
             <h1 className="t-display">{current.title}</h1>
             {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
+            {!current.readsIdeas && <p className="t-lead m-0">Kept as {current.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')} for your goals: used for style, scope and practice, not read into ideas.</p>}
             {current.error && <Notice error>{current.error}</Notice>}
             <div className="button-row">
-              {current.status !== 'running' && current.chunksDone < current.chunkCount && <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>}
+              {current.readsIdeas && current.status !== 'running' && current.chunksDone < current.chunkCount && <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>}
               <Button kind="quiet" onClick={() => void remove(current.id)}>
                 Remove from library
               </Button>
@@ -156,19 +156,21 @@ export function LibraryScreen() {
               </ul>
             </Section>
           )}
-          <Section title="Parts" meta={`${current.chunksDone} of ${current.chunkCount} read`}>
-            <ul className="list-card">
-              {current.chunks.map((c) => (
-                <li key={c.idx} className="row">
-                  <span className="truncate text-soft">{c.locator || `Part ${c.idx + 1}`}</span>
-                  <span className="t-small shrink-0 text-muted">
-                    {c.status === 'done' ? `${c.nodeCount} ideas` : STATUS_LABEL[c.status]}
-                    {c.error && <span className="block text-danger">{c.error}</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Section>
+          {current.readsIdeas && (
+            <Section title="Parts" meta={`${current.chunksDone} of ${current.chunkCount} read`}>
+              <ul className="list-card">
+                {current.chunks.map((c) => (
+                  <li key={c.idx} className="row">
+                    <span className="truncate text-soft">{c.locator || `Part ${c.idx + 1}`}</span>
+                    <span className="t-small shrink-0 text-muted">
+                      {c.status === 'done' ? `${c.nodeCount} ideas` : STATUS_LABEL[c.status]}
+                      {c.error && <span className="block text-danger">{c.error}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
         </>
       ) : (
         <Empty>Choose a source to see what it adds for you.</Empty>

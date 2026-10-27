@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { ApiInput, ApiName, ApiOutput, EventName, FrontierBridge } from './contract';
 
@@ -14,6 +14,9 @@ const bridge: FrontierBridge = {
     };
     ipcRenderer.on(EVENT_CHANNEL, listener);
     return () => ipcRenderer.removeListener(EVENT_CHANNEL, listener);
+  },
+  pathForFile(file: File) {
+    return webUtils.getPathForFile(file);
   },
 };
 

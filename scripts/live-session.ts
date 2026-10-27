@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { createProvider } from '../backend/llm';
 import { SettingsSchema } from '../backend/settings/schema';
 import { openDatabase } from '../backend/store/db';
-import { createGoal, saveCompile } from '../backend/store/goals';
+import { createGoal, addCapabilities } from '../backend/store/goals';
 import { seedExampleGraph } from '../backend/store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../backend/store/evidence';
 import { recordEvidence } from '../backend/services/evidence';
@@ -22,7 +22,7 @@ const db = openDatabase(join(dir, 'frontier.db'));
 const ids = seedExampleGraph(db);
 for (const key of ['strategy', 'payoff']) recordEvidence(db, { nodeId: ids.get(key) as string, kind: 'explain', score: 0.95, reasoning: 'assumed known for the live check' });
 const goal = createGoal(db, 'Pass the game theory exam: find and justify Nash equilibria of small matrix games');
-saveCompile(db, goal.id, [
+addCapabilities(db, goal.id, [
   { statement: 'Can find all pure Nash equilibria of a 3x3 game and justify each', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('bestResponse') as string, depth: 2 }, { nodeId: ids.get('profile') as string, depth: 1 }] },
 ]);
 refreshGoalFields(db);

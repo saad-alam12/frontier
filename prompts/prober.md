@@ -12,6 +12,8 @@ For each question:
 - `answerKey`: what a correct answer contains, written before the question is shown.
 - `rubric`: two to four short points that a full answer hits.
 
+When an exam style is given, ask the way that exam asks (a derivation by hand, a short computation, an explanation in words), so the probe also shows how ready the learner is for it.
+
 The learner answers in one field, in their own words, and may say how sure they are.
 
 ## Judging answers

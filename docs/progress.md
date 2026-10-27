@@ -1,18 +1,15 @@
 # Progress
 
-## Morning summary (2026-10-27, written by the overnight cloud session)
+## Summary of R1 (2026-10-27, cloud session)
 
-**What works.** M0 to M4 are built, tested and pushed on `claude/build-progress-m4-oxebft` (88 tests, typecheck and lint clean, Electron build runs). The app opens with all eight screens; Settings, Library, Goals and Session are real, the rest are placeholders for M5 and M6. The model connection, the ingestion pipeline, goal compile, probe, plan and the full teaching loop all run against the fake provider in tests. Three things were also run live against the real model from the cloud session (it had its own credentials): the connection test, and a five-card teaching session (planner, two index passes, predict, explain, check) whose cards all validated on the first attempt and whose grading and explanations read well.
+**What changed.** Everything in `docs/feedback-round-1.md` is built, in the order of its section 9, one commit per section: probe and session bugs, one answer field read as dictated, the Atlas look on every screen, the session as a conversation with a frontier map, Library fixes and better extraction, models and effort per role with an escalation tutor and a comparison script, and Goals v2 (course or personal, assessment, material with roles, incremental compile, exam profile, goal page, edit goal). 106 tests pass; typecheck, lint and the Electron build are clean. Screens were checked against the mockups in Electron screenshots.
 
-**What to try first.** The steps under "Next step" below: install, open the app, test the connection, add a lecture PDF, compile a goal, run a session. Then write what you think under "Owner feedback" and start the next cloud session.
-
-**Update 2026-10-27:** the owner's review is done; see "Next step" (R1) and "Owner feedback".
+**Owner change applied.** Questions no longer use the mockups' 36 px medium Display style with hand-typed math: every question uses one Question style (24 px, regular weight) with real KaTeX math, and math is sized to match Geist everywhere. Recorded in `docs/visual-design.md`.
 
 **What is blocked or untested here.**
-- The embedding model download (Hugging Face hub) was blocked from the cloud container, so the local embedder has never run; it follows the documented transformers.js API. Your first ingest downloads it (about 130 MB).
-- No real PDF has been ingested live, only the fake-provider fixtures and a tiny generated PDF; the reader itself was verified inside Electron.
-- M5 (practice, scheduler, Today) and M6 (map, lookup, trails, packaging) are not started. Compound practice at the end of a session and tomorrow's preview question on the Today screen will appear with M5.
-- One terms question for you under "Open questions for the owner" (subscription login in a product you might distribute).
+- The embedding model download (Hugging Face) is still blocked from the cloud container, so `npm run live:compare` and live ingestion could not run here. One live connection test with the new model and effort settings passed (Haiku 5.5, medium, via the Agent SDK).
+- Goals v2's background work (reading new material, profiling past exams, recompiling) is tested with the fake model only; the role guess for a dropped file and the exam profile have not run against the real model.
+- Your existing database migrates automatically: each existing goal keeps its skills and gets every non-session source in your library as its teaching material. It has no short title until it is compiled again ("Edit goal", then save, or add material).
 
 ## Status
 
@@ -23,25 +20,29 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history, §5 library and extraction, §6 settings done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | Done, checkpoint ready | All sections of `docs/feedback-round-1.md`; 106 tests; owner checkpoint now |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
 ## Next step
 
-**Start R1.** The owner reviewed M0–M4 on 2026-10-27. Read `docs/feedback-round-1.md` (what to change, with acceptance checks and the order of work in its section 9) and `docs/visual-design.md` (the chosen Atlas look; mockups in `docs/mockups/`). Build R1, then stop at CHECKPOINT R1 READY with exact steps for the owner. Do not start M5 before the owner's R1 feedback.
+**CHECKPOINT R1 READY.** Do not start M5 until the owner's R1 feedback is written under "Owner feedback".
 
-The M4 checkpoint steps below are kept for reference; the owner tested steps 1–4 and part of 5, the rest will be tested after R1.
+Exact steps for the owner, on the Mac:
 
-Exact steps for the owner, on the Mac (M4 checkpoint, done):
-
-1. `git fetch && git checkout claude/build-progress-m4-oxebft && npm install && npm run dev`. The window should open with the sidebar.
-2. Settings: press "Test connection". Expect "Connected via agentSdk" in one attempt. If not, run `npm run live:connection` in a terminal and send me the output.
-3. Library: "Add files", pick a 20–40 page lecture PDF. The first run downloads the embedding model (a minute or two), then chunks fill in. Spot-check 20 ideas and the chains; add the same PDF again (should be skipped); add a second overlapping source (duplicates should merge).
-4. Goals: add a goal over that lecture, press Compile, then "Probe what I know" (answer some wrongly with high confidence), then "Preview next session".
-5. Session: "Start session" on that goal. Work through it honestly: predict with the slider, read the explanation, answer the check, state a link, write the idea in your own words, do the use task. Quit the app mid-session and reopen: it should resume at the same card. Finish with the close-out recall and the preview question.
-6. Judge the teaching quality: does the predict question make you feel the gap, does the explanation anchor in what you already said, is the grading fair, are the misconceptions real? Write it under "Owner feedback" below.
-7. Commit and push, then start the next cloud session with `claude --cloud "Continue the build"` (it will start M5).
+1. `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. The window opens in the dark Atlas look: a 96 px rail on the left, Settings at its bottom. Your database migrates on first start; your lectures, goal and progress are still there.
+2. **Settings.** Each job has a model dropdown and an effort level; the defaults are your table (goal compiler Opus 5.5 extra high, tutor Opus 5.5 medium, extractor Haiku 5.5 max, ...). Change one and check "Default: …" and "Use the default" appear. Press "Test connection": expect "Connected via agentSdk (claude-haiku-5-5) in 1 attempt".
+3. **Library.** Pick lecture 5. No raw `$` anywhere: statements render as math. Ideas are listed in lecture order with their page ("p 12"), "Built on" and "Leads to" (click one to jump to it); "A to Z" switches the order. The delta sentence should now count the lecture's root ideas (e.g. Jacobian matrix) as learnable now. To check the new extraction (headline ideas such as "Automatic differentiation", no summary-slide ideas, worked examples attached instead of stored as ideas, repeated animation pages collapsed), remove lecture 5 and add it again: it is re-read with the new prompt. Expect more ideas than before.
+4. **Model comparison (optional, costs usage).** `npm run live:compare -- path/to/lecture5.pdf --a claude-haiku-5-5:max --b claude-sonnet-5-5:high` prints both runs side by side (ideas, chains, samples, tokens, cost). Your database is not touched. Tell me which extractor setting to keep.
+5. **Goals: new goal.** Goals → "New goal". Type "Pass Deep Learning in Physics with a 1.0"; the questions appear one by one: "A course", "Written exam", the exam date (day/month/year), target grade 1.0, hours per week. Drop lecture 4 and lecture 5 PDFs, an exercise sheet and a past exam onto the material box (or use "Add files" / "From your library…"). Each file gets a guessed role tag (the exam should come up as "Past exam", in periwinkle); change one to check the dropdown. The right panel summarizes the goal live. Press "Create goal".
+6. **Goal page.** You land on the goal page. A line says what is happening (reading your material, learning the exam's style, mapping the skills). When it is done: the lecture timeline (ideas and how many are yours, the current lecture, upcoming lectures if you added a module description, the exam with mock exams four weeks before), "What the exam asks of you" with Ready / Learning / Not started, the exam style from your past exam in the right panel, material by role. Check that depth targets are mostly 1–2 (no longer almost all 3–4). Ideas the compiler expects but no lecture covers appear under "Expected, not in your material yet" and are not taught unless you press "Learn it anyway".
+7. **Incremental compile.** Create the goal with only lecture 5 first, wait for it to map, then "Edit goal" → add lecture 4 → "Save changes". The skills from lecture 5 stay (same text, same status) and new ones for lecture 4 are added.
+8. **Probe.** On the goal page, "Ask me a few questions". One question at a time ("Question 2 of 8"), Back/Next, one answer field, three confidence choices. Type half an answer, go to Library and back, quit and reopen the app: the probe and your half answer are still there. Leave one empty (or "Next" with nothing): it is graded as no idea. After "Submit answers": score, one-line rationale and any misconception per question.
+9. **Dictation.** Answer a question by speaking with Handy, including math ("d a i by d x j", "n3 by n0"). The hint under the field shows "Listening" while text arrives. The grade should not penalize spelling or notation. ⌘↵ submits.
+10. **Session.** "Start today's session" on the goal page. The breadcrumb reads goal / session / idea; the step path (Predict … Use) spans the column; the right panel shows "Your frontier" around the current idea and "Why this now". Answer a few steps: every earlier card, your answer exactly as given and its score and rationale stay on the page like a chat; finished ideas collapse to one row ("Jacobian matrix · 8/10") and expand on click; clicking a done step point or a map label scrolls to it.
+11. **Pause.** Press "Pause and come back later" (bottom of the session). You land on Today. Open Session again: same card, same history, nothing regenerated (it should appear instantly). "End session" asks once before ending.
+12. **Restart.** Quit mid-session and reopen: the session, its history and any half-written answer are back.
+13. Write what you think under "Owner feedback" (especially the visual details, the Question style, the goal flow and the new extraction), commit and push. The next cloud session starts M5.
 
 ## Owner feedback
 
@@ -109,6 +110,16 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Goals v2 storage: new columns on `goals` (title, kind, assessment, target grade, date, hours per week, exam profile, course plan, which sources the profile and the last compile used, unverified ideas started anyway) and a `goal_materials` table (goal, source, role). Migration 4 links every existing non-session source to every existing goal as teaching material, so old goals keep working.
+- 2026-10-27 — Only teaching and reference material is read into ideas. Files added through the goal flow go into the library unread; reading starts when the goal is saved. Library shows such files as "Kept as past exam" etc.
+- 2026-10-27 — The role of a dropped file is guessed by a small call on the `extractor` role (Haiku) from its title and first three chunks; the exam profile and upcoming lectures come from one `goalCompiler`-role call over the assessment and scope text. No new Settings roles for these.
+- 2026-10-27 — Background goal work (`GoalWorker`): read new teaching material → profile assessment/scope material when that set changed → compile when a newly read teaching source is not yet in the last compile. One run per goal at a time; it is triggered on save, when a source finishes ingesting, and at app start (`nextGoalStep` is the pure decision over stored state).
+- 2026-10-27 — Incremental compile output: `title`, new `capabilities`, `extend` (new targets on existing capability ids) and `retire`; a first compile must define at least three capabilities. Existing ids and `mastered_at` are never touched except for retired capabilities. The depth-skew warning is logged when more than half the targets are at depth 3+.
+- 2026-10-27 — Unverified ideas are planned only for goals with no material at all, or once the learner presses "Learn it anyway" (stored per goal). A matcher identity with an unverified node marks it verified (part of the merge plan).
+- 2026-10-27 — Goal page: a lecture counts as done at 80% of its ideas owned; the current lecture is the first one below that. "This week" shows only today (the first ideas on the goal's fringe) until the M5 scheduler exists. Mock exams are shown starting four weeks before a written exam's date. Skill status: Ready (mastered or all targets at depth), Learning (any evidence), Not started.
+- 2026-10-27 — The app runs Chromium with `--lang=en-GB` so native date fields read day/month/year while the UI stays in English.
+- 2026-10-27 — The "Outcome" assessment chip reads "An outcome" so the five choices fit on one line of the 720 px column.
 
 - 2026-10-27 — Effort per role: checked the current effort documentation (platform.claude.com/docs/en/build-with-claude/effort) and the installed SDK types. Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5 all accept low, medium, high, xhigh and max, so no combination is hidden; a custom model id is offered every level. The API provider sets `output_config.effort` and raises `max_tokens` to 64k at xhigh/max (32k otherwise) because thinking counts toward it. One live connection test at Haiku 5.5 medium passed through the Agent SDK from the cloud session.
 - 2026-10-27 — Escalation: a new `reteach` stage. After a worked example (support), the next failure on that idea calls the `tutorEscalation` role once, with the idea's full history, for a re-diagnosis and fresh explanation; then the loop resumes after the stage that failed. Edge flags `supported`/`escalated` persist per idea. Shown to the learner as "Another way in"; the role is labelled "Second opinion" in Settings.

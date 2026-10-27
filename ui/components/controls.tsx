@@ -118,10 +118,10 @@ export function DefGrid({ rows, wide }: { rows: { label: string; value: ReactNod
 }
 
 /** `Course · Written exam · 12 February 2027`: muted dots between items. */
-export function MetaLine({ items }: { items: ReactNode[] }) {
+export function MetaLine({ items, small }: { items: ReactNode[]; small?: boolean }) {
   const shown = items.filter((i) => i !== null && i !== undefined && i !== false && i !== '');
   return (
-    <div className="meta-line">
+    <div className={small ? 'meta-line is-small' : 'meta-line'}>
       {shown.map((item, i) => (
         <span key={i} style={{ display: 'contents' }}>
           {i > 0 && (

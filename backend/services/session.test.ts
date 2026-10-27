@@ -6,7 +6,7 @@ import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { FakeEmbedder } from '../ingest/embedder';
 import { openDatabase } from '../store/db';
-import { createGoal, saveCompile } from '../store/goals';
+import { createGoal, addCapabilities } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
@@ -55,7 +55,7 @@ async function setup(scores: number[] = []) {
   const own = (key: string) => recordEvidence(db, { nodeId: ids.get(key) as string, kind: 'explain', score: 0.95, reasoning: 't' });
   for (const key of ['strategy', 'payoff']) own(key);
   const goal = createGoal(db, 'Pass the game theory exam');
-  saveCompile(db, goal.id, [
+  addCapabilities(db, goal.id, [
     { statement: 'Can find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('profile') as string, depth: 1 }, { nodeId: ids.get('bestResponse') as string, depth: 2 }] },
     { statement: 'Can explain dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 2 }, { nodeId: ids.get('dominantNash') as string, depth: 3 }] },
   ]);

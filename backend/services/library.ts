@@ -1,7 +1,9 @@
 /** Read models for the Library screen: sources with chunk progress, and the delta view per source. */
 import { classifyDelta } from '../core/delta';
 import type { DeltaClass } from '../core/delta';
-import type { Depth, Source } from '../core/types';
+import { EXTRACTED_ROLES } from '../core/types';
+import type { Depth, MaterialRole, Source } from '../core/types';
+import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
 import { coveredNodeIds, listChunks, listSources } from '../store/sources';
 import type { SourceChunk } from '../store/sources';
@@ -11,13 +13,20 @@ import { targetDepthFor } from '../core/leverage';
 export interface SourceSummary extends Source {
   chunks: { idx: number; locator: string; status: SourceChunk['status']; error: string | null; nodeCount: number }[];
   nodeCount: number;
+  /** Roles this source plays in goals. */
+  roles: MaterialRole[];
+  /** False when every goal uses it only for practice, assessment or scope: it is kept as text, not read into ideas. */
+  readsIdeas: boolean;
 }
 
 export function listSourceSummaries(db: Database): SourceSummary[] {
   return listSources(db).map((s) => {
     const chunks = listChunks(db, s.id);
+    const roles = [...new Set(rolesOfSource(db, s.id).map((r) => r.role))];
     return {
       ...s,
+      roles,
+      readsIdeas: roles.length === 0 || roles.some((r) => EXTRACTED_ROLES.includes(r)),
       nodeCount: coveredNodeIds(db, s.id).length,
       chunks: chunks.map((c) => ({ idx: c.idx, locator: c.locator, status: c.status, error: c.error, nodeCount: c.nodeIds.length })),
     };
