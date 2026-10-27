@@ -6,6 +6,8 @@
 
 **What to try first.** The steps under "Next step" below: install, open the app, test the connection, add a lecture PDF, compile a goal, run a session. Then write what you think under "Owner feedback" and start the next cloud session.
 
+**Update 2026-10-27:** the owner's review is done; see "Next step" (R1) and "Owner feedback".
+
 **What is blocked or untested here.**
 - The embedding model download (Hugging Face hub) was blocked from the cloud container, so the local embedder has never run; it follows the documented transformers.js API. Your first ingest downloads it (about 130 MB).
 - No real PDF has been ingested live, only the fake-provider fixtures and a tiny generated PDF; the reader itself was verified inside Electron.
@@ -21,14 +23,17 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| M5 Practice, scheduler and Today | Not started | |
+| R1 Feedback round 1 and visual design | Not started | `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
 ## Next step
 
-CHECKPOINT M4 READY
+**Start R1.** The owner reviewed M0–M4 on 2026-10-27. Read `docs/feedback-round-1.md` (what to change, with acceptance checks and the order of work in its section 9) and `docs/visual-design.md` (the chosen Atlas look; mockups in `docs/mockups/`). Build R1, then stop at CHECKPOINT R1 READY with exact steps for the owner. Do not start M5 before the owner's R1 feedback.
 
-Exact steps for the owner, on the Mac:
+The M4 checkpoint steps below are kept for reference; the owner tested steps 1–4 and part of 5, the rest will be tested after R1.
+
+Exact steps for the owner, on the Mac (M4 checkpoint, done):
 
 1. `git fetch && git checkout claude/build-progress-m4-oxebft && npm install && npm run dev`. The window should open with the sidebar.
 2. Settings: press "Test connection". Expect "Connected via agentSdk" in one attempt. If not, run `npm run live:connection` in a terminal and send me the output.
@@ -40,7 +45,17 @@ Exact steps for the owner, on the Mac:
 
 ## Owner feedback
 
-(none yet)
+### 2026-10-27, after M4
+Full list with acceptance checks: `docs/feedback-round-1.md`. In short:
+- Works: connection test, ingesting real lectures (4 and 5) incl. the embedding model, re-upload detection, goal compile, probe questions, explanation and grading quality, restart. Usage per session is acceptable.
+- Bugs: probe disappears when leaving Goals; "Leave session" ends the session instead of pausing.
+- Answering: one field for answer and reasoning, empty = no idea, three-way confidence; answers are dictated (Handy), so prompts must read spoken math and ignore transcription slips.
+- Session: show the learner's own answers and all previous steps (questions, scores, rationales) like a chat; one thing at a time; probe one question at a time.
+- Library: render LaTeX, show chains, lecture order with page citations, roots count as learnable, no summary-slide or worked-example nodes, extract headline ideas, collapse repeated animation slides (low priority).
+- Goals v2: course vs personal, assessment types, material roles, exam profile from past exams, incremental compile, editable goals, unverified guesses not taught, saner depth targets.
+- Settings: model dropdowns, effort per role, new defaults, escalation role, comparison script.
+- Visual design: the Atlas direction in `docs/visual-design.md`; the owner checks alignment and consistency closely.
+- Not yet tested (later): session close-out, transcript ingestion, mid-session resume, reconstruction on the second session.
 
 ## Commands
 

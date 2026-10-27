@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Frontier — New goal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#141311}
+a{color:#B4C2FF}a:hover{color:#D3DCFF}
+input::placeholder{color:#8C877C}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 980px; box-sizing: border-box; display: flex; flex-wrap: wrap; background: #141311; color: #EEEAE2; font-family: Geist, -apple-system, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+  <nav aria-label="Main" style="flex: 0 0 96px; box-sizing: border-box; padding: 28px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; border-right: 1px solid #262420">
+    <div aria-hidden="true" style="width: 28px; height: 28px; margin-bottom: 26px; border-radius: 50%; border: 1.5px solid #EEEAE2; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{accent}}"></span></div>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Today</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Session</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Map</a>
+    <a href="#" aria-current="page" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #EEEAE2; background: #24221E; text-decoration: none">Goals</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Lookup</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Trails</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Library</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 56px 72px 48px; display: flex; flex-direction: column; gap: 36px">
+    <nav aria-label="Breadcrumb" style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-size: 15px">
+      <a href="#" style="color: #ADA79B; text-decoration: none">Goals</a>
+      <span aria-hidden="true" style="color: #4A463F">/</span>
+      <span aria-current="page" style="color: #EEEAE2">New goal</span>
+    </nav>
+
+    <section style="max-width: 720px; display: flex; flex-direction: column; gap: 36px">
+      <h1 style="margin: 0; font-weight: 500; font-size: 36px; line-height: 1.22; letter-spacing: -0.025em">What do you want to achieve?</h1>
+
+      <div style="padding: 18px 24px; border-radius: 18px; background: #1C1B18; box-shadow: inset 0 0 0 1px #2E2B26; font-size: 19px; font-weight: 300; line-height: 1.55">Pass Deep Learning in Physics with a 1.0</div>
+
+      <div style="display: flex; flex-direction: column; gap: 28px">
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 15px; color: #ADA79B">Is this a course, or something you're learning on your own?</div>
+          <div role="radiogroup" aria-label="Kind of goal" style="display: flex; flex-wrap: wrap; gap: 8px">
+            <button type="button" aria-pressed="true" style="padding: 9px 16px; border-radius: 999px; border: 0; background: #EEEAE2; color: #141311; font-size: 14px; font-weight: 500">A course</button>
+            <button type="button" aria-pressed="false" style="padding: 9px 16px; border-radius: 999px; border: 1px solid #3A3732; background: transparent; color: #D8D3C8; font-size: 14px">On my own</button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 15px; color: #ADA79B">How is it assessed?</div>
+          <div role="radiogroup" aria-label="Assessment" style="display: flex; flex-wrap: wrap; gap: 8px">
+            <button type="button" aria-pressed="true" style="padding: 9px 16px; border-radius: 999px; border: 0; background: #EEEAE2; color: #141311; font-size: 14px; font-weight: 500">Written exam</button>
+            <button type="button" aria-pressed="false" style="padding: 9px 16px; border-radius: 999px; border: 1px solid #3A3732; background: transparent; color: #D8D3C8; font-size: 14px">Oral exam</button>
+            <button type="button" aria-pressed="false" style="padding: 9px 16px; border-radius: 999px; border: 1px solid #3A3732; background: transparent; color: #D8D3C8; font-size: 14px">Presentation or project</button>
+            <button type="button" aria-pressed="false" style="padding: 9px 16px; border-radius: 999px; border: 1px solid #3A3732; background: transparent; color: #D8D3C8; font-size: 14px">Not assessed</button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 16px">
+          <div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 8px">
+            <label for="goal-date" style="font-size: 15px; color: #ADA79B">Exam date</label>
+            <input id="goal-date" type="text" value="12 February 2027" style="box-sizing: border-box; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #3A3732; background: #1C1B18; color: #EEEAE2; font: inherit; font-size: 15px">
+          </div>
+          <div style="flex: 1 1 140px; display: flex; flex-direction: column; gap: 8px">
+            <label for="goal-grade" style="font-size: 15px; color: #ADA79B">Target grade</label>
+            <input id="goal-grade" type="text" value="1.0" style="box-sizing: border-box; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #3A3732; background: #1C1B18; color: #EEEAE2; font: inherit; font-size: 15px">
+          </div>
+          <div style="flex: 1 1 140px; display: flex; flex-direction: column; gap: 8px">
+            <label for="goal-time" style="font-size: 15px; color: #ADA79B">Hours per week</label>
+            <input id="goal-time" type="text" value="4" style="box-sizing: border-box; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #3A3732; background: #1C1B18; color: #EEEAE2; font: inherit; font-size: 15px">
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 15px; color: #ADA79B">What material do you have? Drop files here; more can come later.</div>
+          <div style="border-radius: 18px; background: #1C1B18; box-shadow: inset 0 0 0 1px #2E2B26">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #2E2B26"><span>TUM_DL_Lecture_04.pdf</span><span style="padding: 4px 10px; border-radius: 999px; background: #24221E; color: #D8D3C8; font-size: 12px">Teaching content</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #2E2B26"><span>TUM_DL_Lecture_05.pdf</span><span style="padding: 4px 10px; border-radius: 999px; background: #24221E; color: #D8D3C8; font-size: 12px">Teaching content</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #2E2B26"><span>Exercise_sheet_05.pdf</span><span style="padding: 4px 10px; border-radius: 999px; background: #24221E; color: #D8D3C8; font-size: 12px">Practice</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #2E2B26"><span>Exam_2025.pdf</span><span style="padding: 4px 10px; border-radius: 999px; background: rgba(142,164,255,0.14); color: #B4C2FF; font-size: 12px">Past exam</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px"><span>Module_description.pdf</span><span style="padding: 4px 10px; border-radius: 999px; background: #24221E; color: #D8D3C8; font-size: 12px">Scope</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside aria-label="Goal summary" style="flex: 1 1 520px; max-width: 560px; box-sizing: border-box; padding: 48px 40px; border-left: 1px solid #262420; background: #171613; display: flex; flex-direction: column; gap: 28px">
+    <h2 style="margin: 0; font-weight: 500; font-size: 24px; letter-spacing: -0.02em">Your goal</h2>
+
+    <dl style="margin: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); row-gap: 14px; column-gap: 16px; font-size: 14px">
+      <dt style="color: #8C877C">Kind</dt><dd style="margin: 0">Course</dd>
+      <dt style="color: #8C877C">Target</dt><dd style="margin: 0">1.0 in a written exam</dd>
+      <dt style="color: #8C877C">Date</dt><dd style="margin: 0">12 February 2027 · 15 weeks</dd>
+      <dt style="color: #8C877C">Pace</dt><dd style="margin: 0">4 hours a week</dd>
+      <dt style="color: #8C877C">Material</dt><dd style="margin: 0">2 lectures, 1 exercise sheet, 1 past exam, module description</dd>
+    </dl>
+
+    <div style="height: 1px; background: #262420"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <div style="font-size: 14px; color: #ADA79B">What happens next</div>
+      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; font-size: 14px">
+        <li style="display: flex; gap: 14px"><span style="flex: 0 0 22px; height: 22px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #ADA79B">1</span><span>Read your material and map its ideas</span></li>
+        <li style="display: flex; gap: 14px"><span style="flex: 0 0 22px; height: 22px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #ADA79B">2</span><span>Learn the exam's style from the past exam</span></li>
+        <li style="display: flex; gap: 14px"><span style="flex: 0 0 22px; height: 22px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #ADA79B">3</span><span>Ask you a few questions to find your edge</span></li>
+        <li style="display: flex; gap: 14px"><span style="flex: 0 0 22px; height: 22px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #ADA79B">4</span><span>Plan the weeks until the exam</span></li>
+      </ol>
+    </div>
+
+    <div style="flex-grow: 1"></div>
+    <button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 22px; border-radius: 999px; border: 0; background: #EEEAE2; color: #141311; font-size: 14px; font-weight: 500">Create goal</button>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#8EA4FF","options":["#8EA4FF","#7FD6C2","#E8C468","#C9A2FF"]},"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#8EA4FF' };
+  }
+}
+</script>
+</body>
+</html>

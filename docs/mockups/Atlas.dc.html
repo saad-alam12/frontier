@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Frontier — Atlas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#141311}
+a{color:#B4C2FF}a:hover{color:#D3DCFF}
+textarea::placeholder{color:#8C877C}
+textarea:focus{outline:none}
+button{font-family:inherit;cursor:pointer}
+@keyframes atlas-pulse{0%{box-shadow:0 0 0 0 rgba(142,164,255,0.5)}70%{box-shadow:0 0 0 14px rgba(142,164,255,0)}100%{box-shadow:0 0 0 0 rgba(142,164,255,0)}}
+@keyframes atlas-wave{0%,100%{transform:scaleY(0.45)}50%{transform:scaleY(1)}}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; box-sizing: border-box; display: flex; flex-wrap: wrap; background: #141311; color: #EEEAE2; font-family: Geist, -apple-system, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+  <nav aria-label="Main" style="flex: 0 0 96px; box-sizing: border-box; padding: 28px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; border-right: 1px solid #262420">
+    <div aria-hidden="true" style="width: 28px; height: 28px; margin-bottom: 26px; border-radius: 50%; border: 1.5px solid #EEEAE2; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{accent}}"></span></div>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Today</a>
+    <a href="#" aria-current="page" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #EEEAE2; background: #24221E; text-decoration: none">Session</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Map</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Goals</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Lookup</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Trails</a>
+    <a href="#" style="width: 72px; padding: 8px 0; border-radius: 10px; text-align: center; font-size: 12px; color: #ADA79B; text-decoration: none">Library</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 56px 72px 48px; display: flex; flex-direction: column; gap: 36px">
+    <div style="max-width: 720px; display: flex; flex-direction: column; gap: 26px">
+      <nav aria-label="Breadcrumb" style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-size: 15px; color: #8C877C">
+        <a href="#" style="color: #ADA79B; text-decoration: none">Deep Learning in Physics</a>
+        <span aria-hidden="true" style="color: #4A463F">/</span>
+        <a href="#" style="color: #ADA79B; text-decoration: none">Lecture 5</a>
+        <span aria-hidden="true" style="color: #4A463F">/</span>
+        <span aria-current="page" style="color: #EEEAE2">Jacobian of a composition</span>
+      </nav>
+      <ol aria-label="Steps" style="list-style: none; margin: 0; padding: 0; display: flex; font-size: 12px; line-height: 1">
+        <li aria-current="step" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; color: #EEEAE2; font-weight: 500"><span aria-hidden="true" style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; background: {{accent}}; box-shadow: 0 0 0 4px rgba(142,164,255,0.18)"></span><span style="flex: 1 1 auto; height: 1px; margin-right: 8px; background: #2E2B26"></span></span>Predict</li>
+        <li style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; color: #8C877C"><span aria-hidden="true" style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box"></span><span style="flex: 1 1 auto; height: 1px; margin-right: 8px; background: #2E2B26"></span></span>Explain</li>
+        <li style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; color: #8C877C"><span aria-hidden="true" style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box"></span><span style="flex: 1 1 auto; height: 1px; margin-right: 8px; background: #2E2B26"></span></span>Check</li>
+        <li style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; color: #8C877C"><span aria-hidden="true" style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box"></span><span style="flex: 1 1 auto; height: 1px; margin-right: 8px; background: #2E2B26"></span></span>Connect</li>
+        <li style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; color: #8C877C"><span aria-hidden="true" style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box"></span><span style="flex: 1 1 auto; height: 1px; margin-right: 8px; background: #2E2B26"></span></span>Own words</li>
+        <li style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; color: #8C877C"><span aria-hidden="true" style="display: flex; align-items: center"><span style="flex: 0 0 11px; height: 11px; border-radius: 50%; border: 1.5px solid #4A463F; box-sizing: border-box"></span></span>Use</li>
+      </ol>
+    </div>
+
+    <section style="max-width: 720px; display: flex; flex-direction: column; gap: 32px">
+      <h1 style="margin: 0; font-family: Geist, -apple-system, system-ui, sans-serif; font-weight: 500; font-size: 36px; line-height: 1.22; letter-spacing: -0.025em">A program runs x → a → b → c, one function at a time. Before I explain anything: how would you get the matrix of all <span style="color: #B4C2FF">∂cᵢ/∂xⱼ</span> from the three steps, and what shape is it?</h1>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 18px; border-radius: 18px; background: #1C1B18; box-shadow: inset 0 0 0 1px #2E2B26">
+        <label for="atlas-answer" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Your answer</label>
+        <textarea id="atlas-answer" rows="4" placeholder="Say it or type it, however it comes. Leave it empty if you have no idea." style="width: 100%; box-sizing: border-box; resize: none; padding: 0; border: 0; background: transparent; color: #EEEAE2; font-family: Geist, -apple-system, system-ui, sans-serif; font-size: 19px; font-weight: 300; line-height: 1.55">I think you multiply the three Jacobians, h times g times f, so it ends up n3 by n0. Not sure about the order though</textarea>
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid #2E2B26">
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #ADA79B">
+            <span aria-hidden="true" style="display: flex; align-items: center; gap: 3px; height: 18px">
+              <span style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}}; animation: atlas-wave 1.1s ease-in-out infinite"></span>
+              <span style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}}; animation: atlas-wave 0.9s ease-in-out 0.1s infinite"></span>
+              <span style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}}; animation: atlas-wave 1.3s ease-in-out 0.2s infinite"></span>
+              <span style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}}; animation: atlas-wave 1s ease-in-out 0.3s infinite"></span>
+              <span style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}}; animation: atlas-wave 1.2s ease-in-out 0.15s infinite"></span>
+            </span>
+            <span>Listening</span>
+          </div>
+          <div role="radiogroup" aria-label="How sure are you" style="display: flex; gap: 4px; font-size: 13px">
+            <button type="button" aria-pressed="false" style="padding: 6px 12px; border: 0; border-radius: 999px; background: transparent; color: #ADA79B">A guess</button>
+            <button type="button" aria-pressed="true" style="padding: 6px 12px; border: 0; border-radius: 999px; background: #2C2A25; color: #EEEAE2">Fairly sure</button>
+            <button type="button" aria-pressed="false" style="padding: 6px 12px; border: 0; border-radius: 999px; background: transparent; color: #ADA79B">Sure</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center">
+        <button type="button" style="min-height: 44px; padding: 0 22px; border-radius: 999px; border: 0; background: #EEEAE2; color: #141311; font-size: 14px; font-weight: 500">Submit</button>
+        <button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid #3A3732; background: transparent; color: #D8D3C8; font-size: 14px">I have no idea</button>
+        <span style="font-size: 12px; color: #8C877C; margin-left: 6px">⌘↵ to submit</span>
+      </div>
+    </section>
+  </main>
+
+  <aside aria-label="Your frontier" style="flex: 1 1 520px; max-width: 560px; box-sizing: border-box; padding: 48px 40px; border-left: 1px solid #262420; background: #171613; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-family: Geist, -apple-system, system-ui, sans-serif; font-weight: 500; font-size: 24px; letter-spacing: -0.02em">Your frontier</h2>
+      <span style="font-size: 12px; color: #ADA79B">6 ideas on your edge</span>
+    </div>
+
+    <div role="img" aria-label="Map of lecture 5: ideas you own on the left, the current idea on the dashed edge line, ideas beyond it on the right" style="position: relative; width: 460px; max-width: 100%; height: 400px">
+      <svg width="460" height="400" viewBox="0 0 460 400" aria-hidden="true" style="position: absolute; left: 0; top: 0">
+        <path d="M300 0 C330 90 262 150 286 215 S338 330 296 400" fill="none" stroke="#8EA4FF" stroke-opacity="0.45" stroke-width="1.2" stroke-dasharray="4 6"></path>
+        <g stroke="#4A463F" stroke-width="1">
+          <line x1="40" y1="80" x2="130" y2="40"></line>
+          <line x1="60" y1="320" x2="150" y2="250"></line>
+          <line x1="70" y1="180" x2="250" y2="190"></line>
+          <line x1="150" y1="250" x2="250" y2="190"></line>
+          <line x1="150" y1="250" x2="200" y2="330"></line>
+          <line x1="200" y1="330" x2="310" y2="300"></line>
+          <line x1="250" y1="190" x2="340" y2="130"></line>
+          <line x1="310" y1="300" x2="340" y2="130"></line>
+          <line x1="340" y1="130" x2="400" y2="62"></line>
+          <line x1="340" y1="130" x2="420" y2="190"></line>
+          <line x1="420" y1="190" x2="430" y2="270"></line>
+        </g>
+      </svg>
+      <span style="position: absolute; left: 40px; top: 80px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 130px; top: 40px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 70px; top: 180px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 60px; top: 320px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 150px; top: 250px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 200px; top: 330px; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #EEEAE2"></span>
+      <span style="position: absolute; left: 250px; top: 190px; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: {{accent}}; animation: atlas-pulse 2.4s ease-out infinite"></span>
+      <span style="position: absolute; left: 340px; top: 130px; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 1.5px solid {{accent}}; box-sizing: border-box; background: #171613"></span>
+      <span style="position: absolute; left: 310px; top: 300px; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 1.5px solid {{accent}}; box-sizing: border-box; background: #171613"></span>
+      <span style="position: absolute; left: 400px; top: 62px; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #4A463F"></span>
+      <span style="position: absolute; left: 420px; top: 190px; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #4A463F"></span>
+      <span style="position: absolute; left: 430px; top: 270px; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #4A463F"></span>
+
+      <span style="position: absolute; left: 52px; top: 70px; font-size: 11px; color: #8C877C">Universal approximation</span>
+      <span style="position: absolute; left: 142px; top: 30px; font-size: 11px; color: #8C877C">Inductive bias</span>
+      <span style="position: absolute; left: 30px; top: 192px; font-size: 11px; color: #8C877C">Chain rule</span>
+      <span style="position: absolute; left: 72px; top: 330px; font-size: 11px; color: #8C877C">Differentials</span>
+      <span style="position: absolute; left: 160px; top: 258px; font-size: 11px; color: #8C877C">Jacobian</span>
+      <span style="position: absolute; left: 150px; top: 344px; font-size: 11px; color: #8C877C">Matrix–vector products</span>
+      <span style="position: absolute; left: 180px; top: 206px; font-family: Geist, -apple-system, system-ui, sans-serif; font-size: 15px; color: #EEEAE2">Jacobian of a composition</span>
+      <span style="position: absolute; left: 290px; top: 104px; font-size: 12px; color: #B4C2FF">JVP and VJP</span>
+      <span style="position: absolute; left: 268px; top: 316px; font-size: 12px; color: #B4C2FF">Matrix as a program</span>
+      <span style="position: absolute; left: 366px; top: 40px; font-size: 11px; color: #6F6A60">Forward mode</span>
+      <span style="position: absolute; left: 368px; top: 204px; font-size: 11px; color: #6F6A60">Reverse mode</span>
+      <span style="position: absolute; left: 388px; top: 284px; font-size: 11px; color: #6F6A60">Backprop</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: #ADA79B">
+      <span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #EEEAE2"></span>Yours</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid {{accent}}; box-sizing: border-box"></span>Learnable now</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: #5A554C"></span>Beyond your edge</span>
+    </div>
+
+    <div style="padding: 18px 20px; border-radius: 14px; background: #1E1C19; box-shadow: inset 0 0 0 1px #2E2B26; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; color: #ADA79B">Why this now</div>
+      <div style="font-family: Geist, -apple-system, system-ui, sans-serif; font-size: 16px; font-weight: 300; line-height: 1.5; color: #E4DFD5">Owning this moves your edge to JVPs and the matrix-as-program idea, the last steps before reverse mode and backprop.</div>
+    </div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#8EA4FF","options":["#8EA4FF","#7FD6C2","#E8C468","#C9A2FF"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#8EA4FF' };
+  }
+}
+</script>
+</body>
+</html>

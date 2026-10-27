@@ -71,7 +71,15 @@ Out of MVP: self-tuning, bridges, dictation, sketch handles, conflict investigat
 
 **Accept:** a full session on a real goal runs end to end on the subscription; evidence, own statements and bugs are in the DB; reopening the app mid-session resumes at the same card; teaching quality reviewed by the owner (manual checkpoint).
 
+## R1 — Feedback round 1 and visual design (≈10–14 h)
+
+Everything in `docs/feedback-round-1.md`, in the order its section 9 gives, and the Atlas visual design in `docs/visual-design.md` across all screens. Includes Goals v2 (goal kinds, assessment types, material roles, incremental compile, edit goal), session history, one answer field, Library/extraction fixes, model and effort settings, and the model comparison script.
+
+**Accept:** every acceptance check in `docs/feedback-round-1.md`; then CHECKPOINT R1 READY for the owner.
+
 ## M5 — Practice, scheduler and Today (≈3.5 h)
+
+M5 builds on Goals v2: the scheduler uses the goal's date and `hoursPerWeek`, practice uses the exam profile and the goal's `practice` materials, and behaviour follows the assessment type (design §3). Practice uses the one-field answer from R1.
 
 - Scheduler: due nodes from FSRS, grouping into compound sets, choosing build / deepen / consolidate.
 - Problem Generator agent (rung, cue distance, presentation; never names the node; solution + rubric committed first; avoids repeating recent problems).
