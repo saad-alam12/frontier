@@ -12,6 +12,10 @@ import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/prob
 import type { LessonPlan } from '../services/planner';
 import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot } from '../services/session';
 import type { Grade, LearnerResponse } from '../agents/tutor';
+import type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView } from '../services/practice';
+import type { TodayGoal, TodayView } from '../services/today';
+
+export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, TodayGoal, TodayView };
 
 export type { DeltaItem, IdeaRef, Effort, ModelOptions, GoalForm, GoalWorkState, MaterialView };
 export type { Assessment, ExamProfile, GoalKind, MaterialRole, UpcomingUnit } from '../core/types';
@@ -80,6 +84,14 @@ export interface ApiMethods {
   'session.pause': { input: { sessionId: string }; output: undefined };
   /** End the session for good. */
   'session.end': { input: { sessionId: string }; output: undefined };
+  'today.view': { input: undefined; output: TodayView };
+  /** The open practice set outside a session, if any. */
+  'practice.current': { input: undefined; output: PracticeView | null };
+  'practice.get': { input: { setId: string }; output: PracticeView };
+  /** Generate a compound set over the goal's fading ideas, or a mock exam; null when nothing is due. */
+  'practice.start': { input: { goalId: string; kind: 'compound' | 'mock' }; output: PracticeView | null };
+  /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
+  'practice.submit': { input: { problemId: string; answer: string; confidence: number | null }; output: PracticeView };
   /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
   'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
   'drafts.set': { input: { key: string; value: string }; output: undefined };
@@ -94,6 +106,7 @@ export interface ApiEvents {
   'app.toast': { kind: 'info' | 'error'; message: string };
   'library.progress': IngestProgress;
   'goals.changed': { goalId: string };
+  'practice.graded': { setId: string; problemId: string };
 }
 export type EventName = keyof ApiEvents;
 

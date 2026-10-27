@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { call } from '../api';
+import { call, onEvent } from '../api';
 import type { GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
 import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
@@ -7,6 +7,7 @@ import { Button, Empty, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface } from '../components/AnswerSurface';
 import { FrontierPanel } from '../components/FrontierPanel';
+import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
 import { useDrafts } from '../hooks/useDrafts';
 
@@ -50,6 +51,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
   useEffect(() => {
     void refresh();
+    return onEvent('practice.graded', () => void refresh());
   }, [refresh]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
@@ -367,6 +369,16 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
       );
     case 'teach':
       return <TeachStep snap={snap} busy={busy} onSend={onSend} />;
+    case 'practice':
+      return snap.practice ? (
+        <section className="flex flex-col gap-[28px]">
+          <div className="flex flex-col gap-[14px]">
+            <h2 className="t-heading m-0">Before we close: practice</h2>
+            <p className="m-0 text-soft">A few ideas from earlier sessions are starting to fade. These problems use them together; they never say which.</p>
+          </div>
+          <PracticeFlow view={snap.practice} revealedId={snap.practiceRevealed} busy={busy} onSubmit={(_id, answer, confidence) => onSend({ answer, confidence: confidence ?? undefined })} onNext={() => onSend({ answer: '' })} />
+        </section>
+      ) : null;
     case 'close':
       return <RecallStep sessionId={snap.id} prompt="Every idea from today, from memory, as a list or a map. Then one line on what you can now do." submitLabel="Finish recall" busy={busy} onSend={onSend} />;
     case 'preview':
@@ -512,16 +524,32 @@ function PlanPanel({ snap }: { snap: SessionSnapshot }) {
     <>
       <h2 className="t-title">Today&rsquo;s plan</h2>
       <VerticalPath
-        items={snap.plan.steps.map((s) => ({
+        items={[...snap.plan.steps.map((s) => ({
           key: s.nodeId,
-          state: s.status === 'done' ? 'done' : s.status === 'active' ? 'current' : 'upcoming',
+          state: (s.status === 'done' ? 'done' : s.status === 'active' ? 'current' : 'upcoming') as 'current' | 'done' | 'upcoming',
           children: (
             <div className="flex flex-col gap-[2px]">
               <Markdown text={s.name} inline className={s.status === 'pending' ? 'text-secondary' : ''} />
               <span className="t-small text-muted">{s.mode === 'index' ? 'Index pass' : s.mode === 'derive' ? 'Teach and derive' : 'Teach'}</span>
             </div>
           ),
-        }))}
+        })),
+        ...(snap.practice
+          ? [
+              {
+                key: 'practice',
+                state: (snap.phase === 'practice' ? 'current' : snap.practice.currentIndex === null ? 'done' : 'upcoming') as 'current' | 'done' | 'upcoming',
+                children: (
+                  <div className="flex flex-col gap-[2px]">
+                    <span>Practice</span>
+                    <span className="t-small text-muted">
+                      {snap.practice.problems.length} {snap.practice.problems.length === 1 ? 'problem' : 'problems'} on fading ideas
+                    </span>
+                  </div>
+                ),
+              },
+            ]
+          : [])]}
       />
     </>
   );

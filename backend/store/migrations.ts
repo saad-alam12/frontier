@@ -261,6 +261,15 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       UPDATE goals SET compiled_sources = (SELECT json_group_array(source_id) FROM goal_materials WHERE goal_id = goals.id) WHERE compiled_at IS NOT NULL;
     `,
   },
+  {
+    version: 5,
+    sql: `
+      -- M5: practice sets can run inside a session; answers are graded after the solution is shown.
+      ALTER TABLE practice_sets ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
+      CREATE INDEX problems_set ON problems(set_id);
+      CREATE INDEX answers_problem ON answers(problem_id);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

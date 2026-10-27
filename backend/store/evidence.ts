@@ -78,6 +78,10 @@ export function listEvidenceForSession(db: Database, sessionId: string): Evidenc
   return (db.prepare('SELECT * FROM evidence WHERE session_id = ? ORDER BY at, id').all(sessionId) as unknown as EvidenceRow[]).map(rowToEvidence);
 }
 
+export function listEvidenceSince(db: Database, sinceIso: string): Evidence[] {
+  return (db.prepare('SELECT * FROM evidence WHERE at >= ? ORDER BY at, id').all(sinceIso) as unknown as EvidenceRow[]).map(rowToEvidence);
+}
+
 export function countEvidence(db: Database): number {
   return (db.prepare('SELECT count(*) AS n FROM evidence').get() as { n: number }).n;
 }

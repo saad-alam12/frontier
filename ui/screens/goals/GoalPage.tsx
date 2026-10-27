@@ -55,9 +55,17 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
     <>
       <div className="flex flex-col gap-[16px]">
         <h2 className="t-title">This week</h2>
-        {detail.nextIdeas.length > 0 ? (
+        {detail.schedule && (
           <div className="this-week">
             <span className="text-text">Today</span>
+            <span>
+              {{ build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' }[detail.schedule.mode]}, about {detail.schedule.dailyMinutes} minutes. <span className="text-secondary">{detail.schedule.modeReason}</span>
+            </span>
+          </div>
+        )}
+        {detail.nextIdeas.length > 0 ? (
+          <div className="this-week">
+            <span className="text-text">{detail.schedule ? 'New next' : 'Today'}</span>
             <Markdown text={detail.nextIdeas.join(', then ')} inline />
           </div>
         ) : (

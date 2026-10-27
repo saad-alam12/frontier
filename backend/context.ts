@@ -72,6 +72,17 @@ export class AppContext {
   }
 
   /** After a restart, pick up goals whose material was still being read, profiled or compiled. */
+  /** What sessions and practice need to run and grade; grades are announced to the renderer. */
+  practiceDeps() {
+    return {
+      db: this.db(),
+      provider: this.provider(),
+      ingestion: this.ingestion(),
+      onGraded: (event: { setId: string; problemId: string }) => this.emit('practice.graded', event),
+      onError: (message: string) => this.emit('app.toast', { kind: 'error', message }),
+    };
+  }
+
   resumeGoalWork(): void {
     for (const goal of listGoals(this.db())) if (nextGoalStep(this.db(), goal.id) !== null) this.goalWorker().refresh(goal.id);
   }

@@ -11,6 +11,8 @@ import { createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
+import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
+import { todayView } from '../services/today';
 import { deleteGoal, listGoals, startUnverified } from '../store/goals';
 import { deleteSource } from '../store/sources';
 import { getDrafts, setDraft } from '../store/drafts';
@@ -114,16 +116,21 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db()),
-    'session.start': ({ goalId }) => startSession({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, goalId),
-    'session.respond': ({ sessionId, response }) => respond({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, sessionId, response),
+    'session.start': ({ goalId }) => startSession(ctx.practiceDeps(), goalId),
+    'session.respond': ({ sessionId, response }) => respond(ctx.practiceDeps(), sessionId, response),
     'session.pause': ({ sessionId }) => {
       pauseSession(ctx.db(), sessionId);
       return undefined;
     },
     'session.end': async ({ sessionId }) => {
-      await abandonSession({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, sessionId);
+      await abandonSession(ctx.practiceDeps(), sessionId);
       return undefined;
     },
+    'today.view': () => todayView(ctx.db()),
+    'practice.current': () => currentPractice(ctx.db()),
+    'practice.get': ({ setId }) => practiceView(ctx.db(), setId),
+    'practice.start': ({ goalId, kind }) => startPractice(ctx.practiceDeps(), goalId, { kind }),
+    'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
     'drafts.set': ({ key, value }) => {
       setDraft(ctx.db(), key, value);

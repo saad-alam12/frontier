@@ -117,7 +117,7 @@ Past steps render above the current one in the same column: the card text in bod
 - Labels: owned 11 px `text-muted`, learnable 12 px `accent-text`, current 15 px `text`, beyond 11 px `text-faint`.
 - Legend below: Yours · Learnable now · Beyond your edge.
 - Then a "Why this now" card (`surface-raised`, radius 14): 12 px label, 16 px weight 300 sentence.
-- In the side panel the map shows the neighbourhood of the current idea (about 10–15 nodes), laid out with a deterministic force layout so it does not jump between steps. The full Map screen (M6) uses the same styles.
+- In the side panel the map shows the neighbourhood of the current idea (about 10–15 nodes) in two stacks of rows, laid out deterministically so it does not jump between steps: ideas you own on the left with labels ending at their point, the current and learnable ideas on the right with labels starting at their point, ideas beyond the edge one step further out. The dashed edge line runs down the gap and bends only to pass through the current idea. Labels have fixed boxes with an ellipsis (two lines for the current idea), so nothing ever overlaps; links touching the current idea are drawn in the accent at low opacity. The full Map screen (M6) uses the same node styles.
 
 ### Empty states
 One plain sentence in `text-secondary` and, where useful, one action. No dashed boxes.

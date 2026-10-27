@@ -16,6 +16,7 @@ import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { recordEvidence } from './evidence';
 import { abandonSession, currentSession, pauseSession, respond, startSession } from './session';
+import { settleGrading } from './practice';
 import type { SessionState } from './session';
 
 /** A tutor that answers any stage with a plausible card and grades from a queue of scores. */
@@ -221,6 +222,37 @@ describe('teaching session', () => {
     expect(third.plan.steps[0]?.nodeId).toBe(nashId);
     expect(third.history.nodes.find((n) => n.nodeId === nashId)?.items.map((h) => h.stage)).toEqual(['predict', 'explain', 'check']);
     expect(third.plan.steps.filter((s) => s.nodeId === nashId)).toHaveLength(1);
+  });
+
+  it('runs compound practice on fading ideas after the last idea, then closes', async () => {
+    const { db, ids, goal, provider, deps } = await setup([0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]);
+    const longAgo = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    recordEvidence(db, { nodeId: ids.get('dominant') as string, kind: 'explain', score: 0.9, reasoning: 'learned long ago', at: longAgo });
+    provider.script('problemGenerator', (req: CompleteRequest<unknown>) => {
+      const count = [...(req.messages[0]?.content ?? '').matchAll(/### Problem (\d+)/g)].length;
+      return { problems: Array.from({ length: count }, (_, index) => ({ index, statement: `Which strategy would you never regret playing here? Payoffs ... (${index})`, solution: 'The one that beats every other whatever the opponent does.', rubric: ['names it', 'checks every column'] })) };
+    });
+    provider.script('grader', (req: CompleteRequest<unknown>) => {
+      const nodeIds = [...(req.messages[0]?.content ?? '').matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1] as string);
+      return { score: 7, feedback: 'Good.', ideas: nodeIds.map((nodeId) => ({ nodeId, score: 7 })), misconception: null };
+    });
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    let guard = 0;
+    while (snap.phase === 'teach' && guard++ < 40) snap = await respond(deps, snap.id, answer('an answer', 0.7));
+    expect(snap.phase).toBe('practice');
+    expect(snap.practice?.problems).toHaveLength(1);
+    expect(snap.practice?.problems[0]?.solution).toBeNull();
+    snap = await respond(deps, snap.id, answer('the dominant one', 0.66));
+    expect(snap.phase).toBe('practice');
+    expect(snap.practiceRevealed).toBe(snap.practice?.problems[0]?.id);
+    expect(snap.practice?.problems[0]?.solution).toContain('beats every other');
+    await settleGrading();
+    expect(currentSession(db)?.practice?.problems[0]?.grade?.score).toBe(7);
+    const practised = listEvidenceForSession(db, snap.id).filter((e) => e.kind === 'practice' && !e.context.implicit);
+    expect(practised.map((e) => e.nodeId)).toEqual([ids.get('dominant')]);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.phase).toBe('close');
   });
 
   it('drops to a worked example after three failures and skips ahead after easy successes', async () => {

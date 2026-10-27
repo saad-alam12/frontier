@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
+import { resumeGrading } from './services/practice';
 
 let mainWindow: BrowserWindow | null = null;
 let context: AppContext | null = null;
@@ -50,6 +51,7 @@ void app.whenReady().then(() => {
   registerIpc(ctx);
   createWindow();
   ctx.resumeGoalWork();
+  resumeGrading(ctx.practiceDeps());
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

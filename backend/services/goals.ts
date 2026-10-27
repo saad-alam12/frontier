@@ -23,6 +23,8 @@ import { createUnverifiedNodes, getNodes } from '../store/world';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
+import { goalSchedule } from './practice';
+import type { GoalSchedule } from './practice';
 
 export interface GoalForm extends GoalInput {
   materials: { sourceId: string; role: MaterialRole }[];
@@ -53,6 +55,8 @@ export interface GoalDetail {
   materials: MaterialView[];
   /** The next ideas a session would start from, for "This week". */
   nextIdeas: string[];
+  /** What the scheduler suggests today; null until the goal is compiled. */
+  schedule: GoalSchedule | null;
   work: GoalWorkState;
 }
 
@@ -96,6 +100,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
     expected: expectedIds.map((id) => ({ nodeId: id, name: nodes.get(id)?.name ?? id, statement: nodes.get(id)?.statement ?? '', started: goal.startedUnverified.includes(id) })),
     materials,
     nextIdeas: candidates.filter((c) => c.onFringe).slice(0, 3).map((c) => view.nodes.get(c.nodeId)?.name ?? c.nodeId),
+    schedule: capabilities.length ? goalSchedule(db, goalId) : null,
     work,
   };
 }

@@ -126,7 +126,7 @@ Goals have priority weights and can change anytime; recompiling reuses everythin
 - **None (open-ended):** no endpoint; the planner keeps proposing the next frontier; milestones are checkpoints; it periodically asks where to go next.
 - **Date:** the scheduler (M5) plans backwards from it so recall peaks on the date; without a date it paces by `hoursPerWeek`.
 
-In R1 the assessment shapes the compiler (capabilities, depth distribution), the prober and planner (exam style); the rest arrives with M5.
+The assessment shapes the compiler (capabilities, depth distribution), the prober and planner (exam style), the problem generator (exam style and the goal's exercise sheets) and the scheduler (the exam date pulls reviews forward so recall peaks on the day; mock exams open four weeks before a written exam).
 
 ---
 

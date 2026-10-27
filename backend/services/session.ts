@@ -22,9 +22,11 @@ import type { IngestionService } from './ingestion';
 import { loadKnowledge } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 import { MAX_PLAN_NODES, candidatesForGoal, planSession } from './planner';
+import { practiceView, startPractice, submitPracticeAnswer } from './practice';
+import type { PracticeDeps, PracticeView } from './practice';
 import type { LessonPlan, LessonStep } from './planner';
 
-export type Phase = 'reconstruct' | 'orient' | 'teach' | 'close' | 'preview' | 'done';
+export type Phase = 'reconstruct' | 'orient' | 'teach' | 'practice' | 'close' | 'preview' | 'done';
 export type NodeStatus = 'pending' | 'active' | 'done';
 
 export interface NodeHistoryEntry {
@@ -52,6 +54,10 @@ export interface SessionState {
   pendingEffort: number | null;
   /** A half-done idea carried over from an ended session; restored when its step begins. Absent in older states. */
   resume?: ResumePoint | null;
+  /** The compound practice set run after the last idea, when anything was fading. */
+  practiceSetId?: string | null;
+  /** The practice problem whose solution is showing; the next response moves on. */
+  practiceRevealed?: string | null;
 }
 
 /** Where the learner stopped inside an idea: the open card and the loop state around it. */
@@ -85,6 +91,10 @@ export interface SessionSnapshot {
   history: SessionHistory;
   /** The ideas around the current one, for the side panel map. */
   frontier: FrontierMap | null;
+  /** Compound practice inside the session, once it has started. */
+  practice: PracticeView | null;
+  /** The practice problem whose solution is showing, waiting for "Next". */
+  practiceRevealed: string | null;
 }
 
 /** One answered step: the card as shown, the learner's answer exactly as given, the rating. */
@@ -123,6 +133,7 @@ export interface FrontierMap {
 }
 
 const FRONTIER_SIZE = 12;
+const SESSION_PRACTICE_PROBLEMS = 2;
 
 export type PublicCard =
   | { stage: 'predict' | 'connect' | 'compress'; prompt: string }
@@ -132,7 +143,7 @@ export type PublicCard =
   | { stage: 'use'; task: string }
   | { stage: 'index'; gist: string; placement: string; question: string };
 
-export interface SessionDeps {
+export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> {
   db: Database;
   provider: LlmProvider;
   /** When present, the tutor's prose is ingested as a source after the session. */
@@ -234,6 +245,28 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
       await handleTeachResponse(deps, sessionId, state, response, goalText);
       break;
     }
+    case 'practice': {
+      const setId = state.practiceSetId;
+      if (!setId) {
+        state.phase = 'close';
+        break;
+      }
+      if (state.practiceRevealed) {
+        state.practiceRevealed = null;
+        if (practiceView(db, setId).currentIndex === null) state.phase = 'close';
+        break;
+      }
+      const view = practiceView(db, setId);
+      const problem = view.currentIndex === null ? undefined : view.problems[view.currentIndex];
+      if (!problem) {
+        state.phase = 'close';
+        break;
+      }
+      submitPracticeAnswer(deps, problem.id, response.answer, response.confidence ?? null);
+      state.practiceRevealed = problem.id;
+      appendSessionEvent(db, sessionId, 'practice-answer', { setId, problemId: problem.id });
+      break;
+    }
     case 'close': {
       const view = loadKnowledge(db);
       const taught = state.plan.steps.filter((s) => state.nodeStatus[s.nodeId] === 'done');
@@ -269,6 +302,23 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
   return snapshot(db, { ...session, state });
 }
 
+/**
+ * Compound practice after the last idea (design §4.1 step 5): up to two problems over the goal's
+ * fading ideas, not the ones just taught. A failed generation skips practice rather than the close.
+ */
+async function startSessionPractice(deps: SessionDeps, sessionId: string, state: SessionState): Promise<boolean> {
+  if (state.practiceSetId !== undefined && state.practiceSetId !== null) return true;
+  try {
+    const set = await startPractice(deps, state.goalId, { sessionId, maxProblems: SESSION_PRACTICE_PROBLEMS, exclude: state.plan.steps.map((s) => s.nodeId) });
+    state.practiceSetId = set?.id ?? null;
+    if (set) appendSessionEvent(deps.db, sessionId, 'practice-start', { setId: set.id, problems: set.problems.length });
+    return set !== null;
+  } catch (error) {
+    appendSessionEvent(deps.db, sessionId, 'practice-failed', { error: error instanceof Error ? error.message : String(error) });
+    return false;
+  }
+}
+
 async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goalText: string): Promise<void> {
   state.stepIndex = index;
   state.edge = emptyEdge();
@@ -276,9 +326,9 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
   state.pendingEffort = null;
   const step = state.plan.steps[index];
   if (!step) {
-    state.phase = 'close';
     state.stage = null;
     state.card = null;
+    state.phase = (await startSessionPractice(deps, sessionId, state)) ? 'practice' : 'close';
     return;
   }
   state.phase = 'teach';
@@ -560,6 +610,8 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
     closing: s.closing,
     history: sessionHistory(db, session),
     frontier: step ? frontierMap(db, s, step.nodeId) : null,
+    practice: s.practiceSetId ? practiceView(db, s.practiceSetId) : null,
+    practiceRevealed: s.practiceRevealed ?? null,
   };
 }
 
