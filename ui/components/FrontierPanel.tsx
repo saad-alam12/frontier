@@ -1,4 +1,5 @@
 import type { FrontierMap, FrontierState } from '../../backend/api/contract';
+import { Markdown } from './Markdown';
 import { EDGE_PATH, MAP_HEIGHT, MAP_WIDTH, layoutFrontier } from '../lib/frontierLayout';
 
 const STATE_WORD: Record<FrontierState, string> = { owned: 'Yours', current: 'Learning now', learnable: 'Learnable now', beyond: 'Beyond your edge' };
@@ -10,7 +11,7 @@ export function FrontierPanel({ map, why, onSelect }: { map: FrontierMap; why: s
   const pct = (x: number, total: number) => `${(x / total) * 100}%`;
   const describe = (['current', 'owned', 'learnable', 'beyond'] as FrontierState[])
     .map((state) => {
-      const names = placed.filter((p) => p.state === state).map((p) => p.name);
+      const names = placed.filter((p) => p.state === state).map((p) => plain(p.name));
       return names.length ? `${STATE_WORD[state]}: ${names.join(', ')}.` : '';
     })
     .join(' ');
@@ -46,12 +47,12 @@ export function FrontierPanel({ map, why, onSelect }: { map: FrontierMap; why: s
             : { right: pct(MAP_WIDTH - p.x - 8, MAP_WIDTH), top: pct(p.y - (p.state === 'learnable' ? 26 : 22), MAP_HEIGHT), textAlign: 'right' as const };
           const className = `map-label is-${p.state}`;
           return onSelect ? (
-            <button key={p.id} type="button" className={className} style={style} title={p.name} onClick={() => onSelect(p.id)}>
-              {p.name}
+            <button key={p.id} type="button" className={className} style={style} title={plain(p.name)} onClick={() => onSelect(p.id)}>
+              <Markdown text={p.name} inline />
             </button>
           ) : (
-            <span key={p.id} className={className} style={style} title={p.name}>
-              {p.name}
+            <span key={p.id} className={className} style={style} title={plain(p.name)}>
+              <Markdown text={p.name} inline />
             </span>
           );
         })}
@@ -80,4 +81,9 @@ export function FrontierPanel({ map, why, onSelect }: { map: FrontierMap; why: s
       )}
     </>
   );
+}
+
+/** Names in tooltips and the text alternative: math delimiters dropped. */
+function plain(name: string): string {
+  return name.replace(/\$/g, '');
 }

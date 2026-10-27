@@ -540,6 +540,27 @@ a:hover {
   font-weight: 500;
 }
 
+.chip-group.is-small {
+  gap: 4px;
+}
+.mini-chip {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+.mini-chip:hover {
+  color: var(--text);
+}
+.mini-chip[aria-checked='true'] {
+  background: var(--chip-selected);
+  color: var(--text);
+}
+
 .role-tag {
   display: inline-flex;
   align-items: center;
@@ -1117,4 +1138,19 @@ button.map-label:hover {
 }
 .chevron.is-open {
   transform: translateY(1px) rotate(-135deg);
+}
+
+/* ---------- Library ideas ---------- */
+
+.idea-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 200ms ease-out;
+}
+.idea-row.is-highlighted {
+  background: var(--surface-raised);
+}
+.idea-row .link-button {
+  font-size: inherit;
 }

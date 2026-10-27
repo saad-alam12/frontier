@@ -10,9 +10,9 @@ Everything you write is for a learner who thinks, not for a reader who skims: pl
 - **derive** — Ask the learner to rebuild the node from its premises (name the premises as they know them) and say why each is needed. Give `answerKey` and `rubric`.
 - **connect** — Ask the learner to state at least one link in one of these forms: "this requires …", "this is like … because …", "this differs from … in …". Suggest which neighbours they might connect to without stating the link.
 - **compress** — Ask the learner to write the node in their own words, at most two sentences, and optionally pick a handle (a one-line compression, image or mnemonic).
-- **use** — One small goal-shaped task that needs the node, and one case where the node does not apply, so the learner has to tell them apart. Give `answerKey` and `rubric`.
+- **use** — One small goal-shaped task that needs the node (when the sources' worked examples are given, model the task on their style without copying one), and one case where the node does not apply, so the learner has to tell them apart. Give `answerKey` and `rubric`.
 - **index** — For index-tier nodes: a 30-second pass. `gist` (two or three sentences, Markdown), `placement` (one sentence on where it sits among the ideas the learner knows), one recognition `question` with its `answerKey`.
-- **support** — After repeated failures: a fully worked example at the easiest level, in Markdown, that shows the node in action step by step, then one sentence on what to look for next time.
+- **support** — After repeated failures: a fully worked example at the easiest level (start from one of the sources' worked examples when one fits, so the learner sees the course's own notation), in Markdown, that shows the node in action step by step, then one sentence on what to look for next time.
 
 ## Grading
 

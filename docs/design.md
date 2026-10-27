@@ -36,6 +36,7 @@ What is true, independent of the learner. Never stores learner state.
   - Independent arguments for the same conclusion are separate chains. Never union their premises.
   - A conclusion can be a premise in other chains, so chains compose into derivations.
 - **Chain simplification** (deterministic, at merge time): drop a chain when a kept chain for the same conclusion has a strict subset of its premises, or when its premises are covered by a kept chain's premises plus their transitive ancestry. Only provable redundancy is removed.
+- **Worked example** — `{ id, nodeId, sourceId, locator, title, body }`: a concrete problem with its worked solution from a source, attached to the node it illustrates. Examples are never nodes; the tutor uses them for worked-example cards and to model use tasks on the course's style.
 - The world layer is built by the ingestion pipeline (section 7) from sources and from teaching session transcripts.
 
 ### 2.2 You layer (personal overlay)
@@ -69,7 +70,8 @@ Goals set `targetDepth` per node. Most nodes need 1–2; core nodes need 4–5.
 
 - A node is **owned** when `depth >= 2` and its current recall probability (from FSRS) is at least 0.8.
 - The **fringe** is every node that is not owned but has at least one chain whose premises are all owned. These are learnable now with low intrinsic load. (Adapted from the "outer fringe" of Knowledge Space Theory.)
-- `term` nodes with no chains into them are on the fringe whenever a goal needs them.
+- A **root** (a node with no chains into it: a definition, a basic claim, a procedure) is on the fringe whenever it is not owned, with or without a goal. Only nodes with unowned premises "need a prerequisite first".
+- Unverified nodes (a goal compile's guesses that no source grounds yet) can be on the fringe but are not planned for teaching (section 3).
 - The fringe is computed in code, never by the LLM.
 
 ### 2.5 Implicit credit
@@ -193,8 +195,8 @@ Each session the scheduler chooses between **build** (new fringe nodes), **deepe
 
 Sources: PDFs, slides, Markdown notes, web pages, YouTube transcripts, exercise notebooks, and the system's own teaching session transcripts.
 
-1. **Chunk** the source (token-budgeted, respecting headings/pages).
-2. **Extract.** The extractor reads one chunk plus a digest of what this source already produced ("graph so far", ids verbatim) and submits nodes and chains with citations. It references existing ids instead of restating them.
+1. **Chunk** the source (token-budgeted, respecting headings/pages). Slide PDFs that export every animation build as a page are collapsed first: consecutive pages whose text is contained in the next page's are dropped, the fullest page keeps the whole page range.
+2. **Extract.** The extractor reads one chunk plus a digest of what this source already produced ("graph so far", ids verbatim) and submits nodes, chains and worked examples with citations. It references existing ids instead of restating them. It covers every distinct idea, always including the source's headline ideas (titles, section names, summary claims); summary and recap slides never create nodes; worked examples are attached to the node they illustrate.
 3. **Match.** For each new node, embedding search finds candidates in the world layer; an LLM judge decides identity only (same claim or not), with a bias toward merging paraphrases. It never edits the extracted content.
 4. **Merge.** Deterministic code writes nodes and chains, resolves ids, dedupes chains by (premises, conclusion), runs chain simplification, records coverage. A failed stage writes nothing; the next run retries.
 5. **Delta view.** Each extracted node is classified for this learner: `known` (at target depth), `deeper` (known, source adds depth), `new-fringe`, `new-beyond` (needs a prerequisite first), `conflict` (contradicts the graph or another source). The learner sees: "Of 42 ideas in this lecture, 28 you have; 9 are new and learnable now; 3 need a prerequisite; 2 conflict." New nodes are queued by leverage.
@@ -231,7 +233,7 @@ A desktop app (macOS first, then Windows/Linux) with seven screens:
 | Goals | Add and edit goals, see capabilities and progress |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions, replay |
-| Library | Add sources, see the delta view, ingestion progress |
+| Library | Add sources, see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
 | Settings | Model provider and models, data folder, preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.

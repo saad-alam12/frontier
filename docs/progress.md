@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history, §5 library and extraction done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -108,6 +108,12 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Fringe rule changed (owner, R1 §4.4): every unowned root is learnable now, goal or not; the `goalNeeded` input is gone. Planning drops unverified roots from the fringe so a compile's guesses are never taught (§5.4, completed with the goal materials rule in Goals v2).
+- 2026-10-27 — Worked examples live in an `examples` table written by the merger (part of the merge plan, one writer for the world layer), deleted with their source or node. The tutor receives them for the node it teaches.
+- 2026-10-27 — Build-page collapse runs for PDFs only (`collapseBuildPages` before chunking); a page is dropped when its whitespace-normalized text is contained in the next page's.
+- 2026-10-27 — Library ideas: one list in source order (first chunk, then extraction order), with an "A to Z" toggle. Each idea shows its citations in this source ("p 12", "pp 7–9"), "Built on" per chain (alternative chains as "Or built on") and "Leads to"; names of ideas in the same source jump to them, others are plain text. The learnability label replaces the old grouping by class.
+- 2026-10-27 — Extractor node cap raised from 40 to 60 per chunk now that the prompt asks for full coverage.
 
 - 2026-10-27 — Session history is rebuilt from session events on every snapshot (`sessionHistory`): each `card` event is paired with the next `response` event for the same idea and stage; the open card is not history. Answer keys never reach it (cards go through `publicCard`).
 - 2026-10-27 — The side-panel map shows up to 12 ideas around the current one (`neighbourhood` in core: premises first, at most four dependents, other plan steps included) laid out deterministically in the UI: x by state band (yours, current on the dashed edge line, learnable, beyond), y by neighbour averaging seeded from an id hash. "Learnable" = on the fringe or still on today's plan. "N ideas on your edge" counts the goal's fringe candidates.

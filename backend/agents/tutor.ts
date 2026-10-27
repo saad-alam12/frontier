@@ -53,6 +53,8 @@ export interface TutorStepInput {
   premises: { name: string; statement: string; owned: boolean; ownStatement: string | null; handle: string | null }[];
   dependents: { name: string }[];
   bugs: string[];
+  /** Worked examples from the sources for this node: material for worked-example cards and use tasks. */
+  examples: { title: string; locator: string; body: string }[];
   excerpts: { locator: string; text: string }[];
   /** Earlier cards and responses for this node, oldest first. */
   history: { stage: Stage; card: TutorCard; response: LearnerResponse | null; grade: Grade | null }[];
@@ -81,6 +83,7 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   );
   if (input.dependents.length) sections.push(`## What builds on this node later\n${input.dependents.map((d) => `- ${d.name}`).join('\n')}`);
   if (input.bugs.length) sections.push(`## Open misconceptions for this node\n${input.bugs.map((b) => `- ${b}`).join('\n')}`);
+  if (input.examples.length) sections.push(`## Worked examples from the sources\n${input.examples.map((e) => `### ${e.title} (${e.locator})\n${e.body}`).join('\n\n')}`);
   if (input.excerpts.length) sections.push(`## Source excerpts\n${input.excerpts.map((e) => `### ${e.locator}\n${e.text}`).join('\n\n')}`);
   if (input.history.length) {
     sections.push(

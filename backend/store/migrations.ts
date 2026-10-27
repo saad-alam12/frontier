@@ -214,6 +214,22 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- Worked examples from sources, attached to the idea they illustrate (never stored as ideas).
+      CREATE TABLE examples (
+        id TEXT PRIMARY KEY,
+        node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        locator TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX examples_node ON examples(node_id);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

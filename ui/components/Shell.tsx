@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Markdown } from './Markdown';
 
 export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'lookup' | 'trails' | 'library' | 'settings';
 
@@ -80,13 +81,17 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
                 </span>
               )}
               {last ? (
-                <span aria-current="page">{c.label}</span>
+                <span aria-current="page">
+                  <Markdown text={c.label} inline />
+                </span>
               ) : c.onClick ? (
                 <button type="button" onClick={c.onClick}>
-                  {c.label}
+                  <Markdown text={c.label} inline />
                 </button>
               ) : (
-                <span className="text-secondary">{c.label}</span>
+                <span className="text-secondary">
+                  <Markdown text={c.label} inline />
+                </span>
               )}
             </li>
           );

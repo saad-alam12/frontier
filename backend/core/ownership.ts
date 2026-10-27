@@ -21,21 +21,18 @@ export interface FringeInput {
   nodes: Iterable<KnowledgeNode>;
   index: GraphIndex;
   owned: Set<string>;
-  /** Term nodes with no chains into them are on the fringe only when a goal needs them. */
-  goalNeeded: Set<string>;
 }
 
-/** Nodes not owned that have at least one chain whose premises are all owned. */
-export function computeFringe({ nodes, index, owned, goalNeeded }: FringeInput): Set<string> {
+/**
+ * Nodes not owned that are learnable now: a root (no chains into it: a definition, a basic claim or
+ * procedure) always is; any other node is once some chain into it has every premise owned.
+ */
+export function computeFringe({ nodes, index, owned }: FringeInput): Set<string> {
   const fringe = new Set<string>();
   for (const node of nodes) {
     if (owned.has(node.id)) continue;
     const chains = index.into.get(node.id) ?? [];
-    if (chains.length === 0) {
-      if (node.kind === 'term' && goalNeeded.has(node.id)) fringe.add(node.id);
-      continue;
-    }
-    if (chains.some((c) => c.premises.every((p) => owned.has(p)))) fringe.add(node.id);
+    if (chains.length === 0 || chains.some((c) => c.premises.every((p) => owned.has(p)))) fringe.add(node.id);
   }
   return fringe;
 }

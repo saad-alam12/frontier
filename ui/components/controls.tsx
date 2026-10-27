@@ -28,16 +28,19 @@ export function ChoiceChips<T extends string>({
   options,
   value,
   onChange,
+  small,
 }: {
   label: string;
   options: { value: T; label: string }[];
   value: T | null;
   onChange: (value: T) => void;
+  /** A quiet toggle for list controls (13 px), not a question to answer. */
+  small?: boolean;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="chip-group">
+    <div role="radiogroup" aria-label={label} className={small ? 'chip-group is-small' : 'chip-group'}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className="chip" onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={small ? 'mini-chip' : 'chip'} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}

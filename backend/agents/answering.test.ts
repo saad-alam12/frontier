@@ -14,6 +14,7 @@ function stepInput(answer: string): TutorStepInput {
     premises: [],
     dependents: [],
     bugs: [],
+    examples: [],
     excerpts: [],
     history: [],
     previous: { stage: 'predict', card: { stage: 'predict', prompt: 'How would you get all $\\partial c_i / \\partial x_j$?' }, response: { answer, confidence: 0.66 } },

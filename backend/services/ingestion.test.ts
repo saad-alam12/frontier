@@ -7,7 +7,7 @@ import type { CompleteRequest } from '../llm/provider';
 import { FakeEmbedder } from '../ingest/embedder';
 import { openDatabase } from '../store/db';
 import { listChunks, listSources } from '../store/sources';
-import { countNodes, listChains, listNodes } from '../store/world';
+import { countNodes, listChains, listExamplesForNode, listNodes } from '../store/world';
 import { countEmbeddings } from '../store/embeddings';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
@@ -36,7 +36,8 @@ function extractorFromFixture(req: CompleteRequest<unknown>) {
   for (const m of text.matchAll(/CHAIN ([^=]+)=> ([^\n]+)/g)) {
     chains.push({ premises: (m[1] as string).split('+').map((s) => ref(s.trim())), conclusion: ref((m[2] as string).trim()) });
   }
-  return { nodes, chains, conflicts: [] };
+  const examples = [...text.matchAll(/EXAMPLE\[([^\]]+)\] ([^:]+): ([^\n]+)/g)].map((m) => ({ illustrates: ref((m[1] as string).trim()), title: (m[2] as string).trim(), body: (m[3] as string).trim() }));
+  return { nodes, chains, examples, conflicts: [] };
 }
 
 /** Scripted matcher: same lowercase name means same node. */
@@ -91,7 +92,48 @@ function setup(script: Parameters<typeof FakeProvider.prototype.script>[1][] = [
   return { db, provider, service, events, dir };
 }
 
+const FILLER = 'Slide notes that only repeat what came before. '.repeat(140);
+
+/** A lecture whose summary slide and worked example land in chunks of their own. */
+const LECTURE_C = `# Lecture 3: Equilibria in practice
+
+## Equilibrium
+
+NODE[term] Strategy profile: One strategy for each player.
+NODE[term] Nash equilibrium: A strategy profile in which no player can gain by changing only their own strategy.
+CHAIN Strategy profile => Nash equilibrium
+
+${FILLER}
+
+## Worked example
+
+Find the equilibrium of the coordination game with payoffs (2,2), (0,0), (0,0), (1,1).
+EXAMPLE[Nash equilibrium] Equilibria of a coordination game: Check each cell for profitable deviations: (A,A) and (B,B) are equilibria, the mixed cells are not.
+
+${FILLER}
+
+## Summary
+
+Recap: a strategy profile lists one strategy per player; a Nash equilibrium is a profile with no profitable unilateral deviation.
+`;
+
 describe('ingestion pipeline', () => {
+  it('attaches worked examples to the idea they illustrate and makes no node of a summary slide', async () => {
+    const { db, provider, service } = setup();
+    const { source } = await service.addText({ kind: 'markdown', title: 'Lecture 3', text: LECTURE_C });
+    expect(listChunks(db, source.id).length).toBeGreaterThanOrEqual(3);
+    await service.runSource(source.id);
+    expect(listNodes(db).map((n) => n.name).sort()).toEqual(['Nash equilibrium', 'Strategy profile']);
+    const nash = listNodes(db).find((n) => n.name === 'Nash equilibrium') as { id: string };
+    const examples = listExamplesForNode(db, nash.id);
+    expect(examples).toHaveLength(1);
+    expect(examples[0]).toMatchObject({ title: 'Equilibria of a coordination game', sourceId: source.id });
+    const system = provider.calls.find((c) => c.role === 'extractor')?.system ?? '';
+    expect(system).toMatch(/Summary, recap, outline and overview slides restate ideas/);
+    expect(system).toMatch(/Worked examples are not ideas/);
+    expect(system).toMatch(/Headline ideas first/);
+  });
+
   it('ingests a markdown lecture into nodes and chains with citations', async () => {
     const { db, service, dir, events } = setup();
     const file = join(dir, 'lecture-a.md');
@@ -187,6 +229,24 @@ describe('ingestion pipeline', () => {
     expect(cls.get('Nash equilibrium')).toBe('new-fringe');
     expect(cls.get('Dominant strategies give a Nash equilibrium')).toBe('new-beyond');
     expect(delta.sentence).toMatch(/Of 5 ideas/);
-    expect(delta.counts['new-fringe']).toBe(1);
+    expect(cls.get('Strictly dominant strategy')).toBe('new-fringe'); // a root: learnable now
+    expect(delta.counts['new-fringe']).toBe(2);
+  });
+
+  it('reports the roots of a fresh source as learnable now when nothing is owned and no goal exists', async () => {
+    const { db, service } = setup();
+    const a = await service.addText({ kind: 'markdown', title: 'A', text: LECTURE_A });
+    await service.runSource(a.source.id);
+    const delta = deltaForSource(db, a.source.id);
+    const cls = new Map(delta.items.map((i) => [i.name, i.cls]));
+    for (const root of ['Best response', 'Strategy profile', 'Strictly dominant strategy']) expect(cls.get(root)).toBe('new-fringe');
+    expect(cls.get('Nash equilibrium')).toBe('new-beyond');
+    expect(delta.sentence).toContain('3 are new and learnable now');
+    // in order of appearance, with citations and the chains in both directions
+    expect(delta.items.map((i) => i.name)).toEqual(['Best response', 'Strategy profile', 'Nash equilibrium', 'Strictly dominant strategy', 'Dominant strategies give a Nash equilibrium']);
+    const nash = delta.items.find((i) => i.name === 'Nash equilibrium');
+    expect(nash?.citations[0]).toMatch(/Lecture 2/);
+    expect(nash?.builtOn.map((premises) => premises.map((p) => p.name).sort())).toEqual([['Best response', 'Strategy profile']]);
+    expect(nash?.leadsTo.map((l) => l.name)).toEqual(['Dominant strategies give a Nash equilibrium']);
   });
 });

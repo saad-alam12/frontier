@@ -9,6 +9,31 @@ export const DEFAULT_CHUNK_TOKENS = 1500;
 const MIN_CHUNK_TOKENS = 200;
 
 /**
+ * Slide PDFs often export every animation build as its own page, each repeating the one before plus a
+ * little more. Collapse consecutive pages whose text is contained in the next page's text: keep the
+ * last (fullest) page and give it the whole page range, so citations still point at real pages.
+ */
+export function collapseBuildPages(blocks: TextBlock[]): TextBlock[] {
+  const out: TextBlock[] = [];
+  let runStart: string | null = null;
+  blocks.forEach((block, i) => {
+    const next = blocks[i + 1];
+    const text = normalize(block.text);
+    if (next && text && normalize(next.text).includes(text)) {
+      runStart ??= block.locator;
+      return;
+    }
+    out.push(runStart ? { text: block.text, locator: joinLocators(runStart, block.locator) } : block);
+    runStart = null;
+  });
+  return out;
+}
+
+function normalize(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Pack blocks into chunks under a token budget without splitting a block unless it alone exceeds the
  * budget, in which case it is split at paragraph (then sentence) boundaries. Locators are kept as ranges.
  */

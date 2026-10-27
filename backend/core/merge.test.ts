@@ -17,7 +17,7 @@ const existingChain: Chain = { id: 'chain_1', premises: ['node_br'], conclusion:
 
 function counter() {
   let n = 0;
-  return (prefix: 'node' | 'chain') => `${prefix}_${++n}`;
+  return (prefix: 'node' | 'chain' | 'example') => `${prefix}_${++n}`;
 }
 
 function base(): MergeInput {

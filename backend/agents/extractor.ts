@@ -19,6 +19,13 @@ export const ExtractedChainSchema = z.object({
   locator: z.string().trim().max(80).optional(),
 });
 
+export const ExtractedExampleSchema = z.object({
+  illustrates: z.string().trim().min(1),
+  title: z.string().trim().min(3).max(120),
+  body: z.string().trim().min(10).max(4000),
+  locator: z.string().trim().max(80).optional(),
+});
+
 export const ConflictSchema = z.object({
   nodeId: z.string().trim().min(1),
   description: z.string().trim().min(3).max(400),
@@ -27,6 +34,7 @@ export const ConflictSchema = z.object({
 export type Extraction = {
   nodes: z.infer<typeof ExtractedNodeSchema>[];
   chains: z.infer<typeof ExtractedChainSchema>[];
+  examples: z.infer<typeof ExtractedExampleSchema>[];
   conflicts: z.infer<typeof ConflictSchema>[];
 };
 
@@ -34,8 +42,9 @@ export type Extraction = {
 export function buildExtractionSchema(knownIds: Set<string>) {
   return z
     .object({
-      nodes: z.array(ExtractedNodeSchema).max(40),
+      nodes: z.array(ExtractedNodeSchema).max(60),
       chains: z.array(ExtractedChainSchema).max(80).default([]),
+      examples: z.array(ExtractedExampleSchema).max(20).default([]),
       conflicts: z.array(ConflictSchema).max(20).default([]),
     })
     .superRefine((value, ctx) => {
@@ -51,6 +60,9 @@ export function buildExtractionSchema(knownIds: Set<string>) {
           if (!valid(p)) ctx.addIssue({ code: 'custom', path: ['chains', i, 'premises', j], message: `unknown id ${p}` });
           if (p === c.conclusion) ctx.addIssue({ code: 'custom', path: ['chains', i, 'premises', j], message: 'a chain cannot have its conclusion as a premise' });
         });
+      });
+      value.examples.forEach((e, i) => {
+        if (!valid(e.illustrates)) ctx.addIssue({ code: 'custom', path: ['examples', i, 'illustrates'], message: `unknown id ${e.illustrates}; an example must illustrate a node from this chunk or the graph so far` });
       });
       value.conflicts.forEach((k, i) => {
         if (!knownIds.has(k.nodeId)) ctx.addIssue({ code: 'custom', path: ['conflicts', i, 'nodeId'], message: `conflicts must name an id from the graph so far` });
@@ -95,7 +107,7 @@ export async function runExtractor(provider: LlmProvider, input: ExtractorInput)
     role: 'extractor',
     system: loadPrompt('extractor'),
     messages: [{ role: 'user', content: message }],
-    submit: { name: 'submit_extraction', description: 'Submit the nodes, chains and conflicts found in this chunk.', schema: buildExtractionSchema(knownIds) },
+    submit: { name: 'submit_extraction', description: 'Submit the nodes, chains, worked examples and conflicts found in this chunk.', schema: buildExtractionSchema(knownIds) },
   });
   return result.data;
 }

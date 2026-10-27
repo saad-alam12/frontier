@@ -6,7 +6,7 @@ import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { chainKey } from '../core/chains';
 import type { MergePlan } from '../core/merge';
-import type { Chain, KnowledgeNode, SourceRef } from '../core/types';
+import type { Chain, KnowledgeNode, SourceRef, WorkedExample } from '../core/types';
 
 interface NodeRow {
   id: string;
@@ -114,6 +114,8 @@ export function applyMergePlan(db: Database, plan: MergePlan): void {
     insertChain.run(c.id, JSON.stringify(c.premises), c.conclusion, JSON.stringify(c.sources), chainKey(c.premises, c.conclusion), now);
     for (const p of c.premises) insertPremise.run(c.id, p);
   }
+  const insertExample = db.prepare('INSERT INTO examples (id, node_id, source_id, locator, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const e of plan.examples) insertExample.run(e.id, e.nodeId, e.sourceId, e.locator, e.title, e.body, now);
   const selectChain = db.prepare('SELECT sources FROM chains WHERE id = ?');
   const updateChain = db.prepare('UPDATE chains SET sources = ? WHERE id = ?');
   for (const u of plan.chainUpdates) {
@@ -143,4 +145,16 @@ function mergeRefs(existing: SourceRef[], added: SourceRef[]): SourceRef[] {
     }
   }
   return out;
+}
+
+export function listExamplesForNode(db: Database, nodeId: string): WorkedExample[] {
+  const rows = db.prepare('SELECT id, node_id, source_id, locator, title, body FROM examples WHERE node_id = ? ORDER BY created_at, id').all(nodeId) as unknown as {
+    id: string;
+    node_id: string;
+    source_id: string;
+    locator: string;
+    title: string;
+    body: string;
+  }[];
+  return rows.map((r) => ({ id: r.id, nodeId: r.node_id, sourceId: r.source_id, locator: r.locator, title: r.title, body: r.body }));
 }

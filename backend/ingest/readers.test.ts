@@ -3,7 +3,7 @@ import { readMarkdown } from './readers/markdown';
 import { readHtml } from './readers/html';
 import { readPdf } from './readers/pdf';
 import { kindForFile } from './readers';
-import { chunkBlocks, estimateTokens } from './chunker';
+import { chunkBlocks, collapseBuildPages, estimateTokens } from './chunker';
 
 /** Builds a tiny valid PDF with one text line per page (Helvetica, no compression). */
 export function makePdf(pages: string[]): Buffer {
@@ -83,6 +83,30 @@ describe('file kinds', () => {
     expect(kindForFile('a.md')).toBe('markdown');
     expect(kindForFile('a.htm')).toBe('html');
     expect(kindForFile('a.docx')).toBeNull();
+  });
+});
+
+describe('collapseBuildPages', () => {
+  it('keeps the fullest page of each animation build with the whole page range', () => {
+    const blocks = [
+      { text: 'Title slide', locator: 'p1' },
+      { text: 'Chain rule', locator: 'p2' },
+      { text: 'Chain rule\n  first term', locator: 'p3' },
+      { text: 'Chain rule first term\nsecond term', locator: 'p4' },
+      { text: 'Reverse mode', locator: 'p5' },
+      { text: 'Something else entirely', locator: 'p6' },
+    ];
+    expect(collapseBuildPages(blocks)).toEqual([
+      { text: 'Title slide', locator: 'p1' },
+      { text: 'Chain rule first term\nsecond term', locator: 'p2–p4' },
+      { text: 'Reverse mode', locator: 'p5' },
+      { text: 'Something else entirely', locator: 'p6' },
+    ]);
+  });
+
+  it('leaves pages of a clean script alone', () => {
+    const blocks = [1, 2, 3].map((i) => ({ text: `Page ${i} has its own text.`, locator: `p${i}` }));
+    expect(collapseBuildPages(blocks)).toEqual(blocks);
   });
 });
 

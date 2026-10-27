@@ -42,7 +42,9 @@ export interface LessonPlan {
 
 export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeView = loadKnowledge(db)) {
   const targetIds = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
-  const candidates = planCandidates(targetIds, view.owned, view.fringe, view.index);
+  // Unverified ideas (a compile's guesses that no source covers yet) are not taught.
+  const fringe = new Set([...view.fringe].filter((id) => view.nodes.get(id)?.status !== 'unverified'));
+  const candidates = planCandidates(targetIds, view.owned, fringe, view.index);
   const candidateSet = new Set(candidates.map((c) => c.nodeId));
   const unreachable = targetIds.filter((id) => !view.owned.has(id) && !candidateSet.has(id)).map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id }));
   return { targetIds, candidates, unreachable };

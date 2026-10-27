@@ -217,7 +217,7 @@ function History({ snap, expanded, onToggle }: { snap: SessionSnapshot; expanded
             {reconstruct.recalled.map((r) => (
               <li key={r.nodeId} className="flex items-baseline gap-[10px]">
                 <span className="shrink-0 font-medium">{Math.round(r.score * 10)}/10</span>
-                <span>{r.name}</span>
+                <Markdown text={r.name} inline />
                 {r.note && <span className="text-soft">{r.note}</span>}
               </li>
             ))}
@@ -241,7 +241,7 @@ function HistoryNodeView({ node, open, onToggle }: { node: HistoryNode; open: bo
     <section id={`node-${node.nodeId}`} className={collapsible ? 'history-node is-done' : 'history-node'} aria-label={node.name}>
       {collapsible && (
         <button type="button" className="history-row" aria-expanded={open} onClick={onToggle}>
-          <span className="font-medium">{node.name}</span>
+          <Markdown text={node.name} inline className="font-medium" />
           <span className="flex items-center gap-[12px]">
             {node.score !== null && <span>{Math.round(node.score * 10)}/10</span>}
             <span className={open ? 'chevron is-open' : 'chevron'} aria-hidden="true" />
@@ -346,7 +346,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
           <ul className="list-card">
             {snap.plan.steps.map((s) => (
               <li key={s.nodeId} className="flex flex-col gap-[2px]">
-                <span className="font-medium">{s.name}</span>
+                <Markdown text={s.name} inline className="font-medium" />
                 <span className="text-soft">{s.why}</span>
               </li>
             ))}
@@ -372,7 +372,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
                 {snap.closing.recall.map((r) => (
                   <li key={r.nodeId} className="flex flex-col gap-[2px]">
                     <span className="row">
-                      <span>{r.name}</span>
+                      <Markdown text={r.name} inline />
                       <span className="shrink-0">{Math.round(r.score * 10)}/10</span>
                     </span>
                     {r.note && <span className="t-small text-secondary">{r.note}</span>}
@@ -510,7 +510,7 @@ function PlanPanel({ snap }: { snap: SessionSnapshot }) {
           state: s.status === 'done' ? 'done' : s.status === 'active' ? 'current' : 'upcoming',
           children: (
             <div className="flex flex-col gap-[2px]">
-              <span className={s.status === 'pending' ? 'text-secondary' : undefined}>{s.name}</span>
+              <Markdown text={s.name} inline className={s.status === 'pending' ? 'text-secondary' : ''} />
               <span className="t-small text-muted">{s.mode === 'index' ? 'Index pass' : s.mode === 'derive' ? 'Teach and derive' : 'Teach'}</span>
             </div>
           ),

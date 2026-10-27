@@ -24,6 +24,11 @@ export function listSourceSummaries(db: Database): SourceSummary[] {
   });
 }
 
+export interface IdeaRef {
+  id: string;
+  name: string;
+}
+
 export interface DeltaItem {
   nodeId: string;
   name: string;
@@ -32,6 +37,14 @@ export interface DeltaItem {
   cls: DeltaClass;
   depth: Depth;
   targetDepth: Depth;
+  /** Position of first appearance in the source (chunk order, then extraction order). */
+  order: number;
+  /** Where this source states it, e.g. ["p12", "p14–p15"]. */
+  citations: string[];
+  /** One entry per chain into the idea: the premises that jointly build it. */
+  builtOn: IdeaRef[][];
+  /** Ideas this one is a premise of. */
+  leadsTo: IdeaRef[];
 }
 
 export interface DeltaSummary {
@@ -49,7 +62,9 @@ export function deltaForSource(db: Database, sourceId: string): DeltaSummary {
   const conflicts = new Set<string>();
   for (const chunk of listChunks(db, sourceId)) for (const k of chunk.conflicts) conflicts.add(k.nodeId);
   const delta = classifyDelta({ nodeIds, states: view.states, owned: view.owned, fringe: view.fringe, targetDepths, conflicts });
-  const order: DeltaClass[] = ['new-fringe', 'new-beyond', 'deeper', 'known', 'conflict'];
+  const appearance = new Map<string, number>();
+  for (const chunk of listChunks(db, sourceId)) for (const id of chunk.nodeIds) if (!appearance.has(id)) appearance.set(id, appearance.size);
+  const ref = (id: string): IdeaRef => ({ id, name: view.nodes.get(id)?.name ?? id });
   const items: DeltaItem[] = nodeIds
     .map((id) => {
       const node = view.nodes.get(id);
@@ -62,11 +77,16 @@ export function deltaForSource(db: Database, sourceId: string): DeltaSummary {
         cls: delta.classes.get(id) ?? 'new-beyond',
         depth: state?.depth ?? 0,
         targetDepth: targetDepths.get(id) ?? 0,
+        order: appearance.get(id) ?? Number.MAX_SAFE_INTEGER,
+        citations: [...new Set((node?.sources ?? []).filter((r) => r.sourceId === sourceId && r.locator).map((r) => r.locator as string))],
+        builtOn: (view.index.into.get(id) ?? []).map((chain) => chain.premises.map(ref)),
+        leadsTo: [...new Set((view.index.outOf.get(id) ?? []).map((chain) => chain.conclusion))].map(ref),
       };
     })
-    .sort((a, b) => order.indexOf(a.cls) - order.indexOf(b.cls) || a.name.localeCompare(b.name));
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   const c = delta.counts;
   const have = c.known + c.deeper;
-  const sentence = `Of ${nodeIds.length} ideas in this source, ${have} you have${c.deeper ? ` (${c.deeper} could go deeper)` : ''}; ${c['new-fringe']} are new and learnable now; ${c['new-beyond']} need a prerequisite first${c.conflict ? `; ${c.conflict} conflict with what you know` : ''}.`;
+  const haveText = have === 0 ? 'you have none yet' : `you have ${have}${c.deeper ? ` (${c.deeper} could go deeper)` : ''}`;
+  const sentence = `Of ${nodeIds.length} ideas in this source, ${haveText}; ${c['new-fringe']} are new and learnable now; ${c['new-beyond']} need a prerequisite first${c.conflict ? `; ${c.conflict} conflict with what you know` : ''}.`;
   return { sourceId, total: nodeIds.length, counts: c, items, sentence };
 }

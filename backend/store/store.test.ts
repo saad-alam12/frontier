@@ -61,7 +61,8 @@ describe('seed graph', () => {
     const view = loadKnowledge(db, now);
     expect(view.owned.size).toBe(2);
     const fringeKeys = [...view.fringe].map((id) => [...ids].find(([, v]) => v === id)?.[0]).sort();
-    expect(fringeKeys).toEqual(['bestResponse', 'dominant', 'dominated', 'profile']);
+    // unlocked by the owned terms, plus every unowned root (learnable now with no premises)
+    expect(fringeKeys).toEqual(['bestResponse', 'coordination', 'dominant', 'dominated', 'extensive', 'game', 'pd', 'probability', 'profile', 'ultimatum', 'zeroSum']);
   });
 });
 
@@ -123,7 +124,7 @@ describe('goals and tiers', () => {
     expect(getState(db, ids.get('spe') as string)?.tier).toBe('index');
     expect(getState(db, ids.get('minimax') as string)?.tier).toBe('archive');
     const view = loadKnowledge(db);
-    // root terms are never on the fringe unless a goal needs them; nash needs chains first
+    // nash has chains into it whose premises are not owned yet
     expect(view.fringe.has(ids.get('nash') as string)).toBe(false);
   });
 });

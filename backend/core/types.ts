@@ -30,6 +30,17 @@ export interface Chain {
   sources: SourceRef[];
 }
 
+/** A worked example from a source, attached to the idea it illustrates. */
+export interface WorkedExample {
+  id: string;
+  nodeId: string;
+  sourceId: string;
+  locator: string;
+  title: string;
+  /** Markdown with LaTeX: the problem and its worked solution. */
+  body: string;
+}
+
 export type EvidenceKind = 'predict' | 'check' | 'explain' | 'derive' | 'use' | 'practice' | 'recall' | 'lookup';
 
 export interface EvidenceContext {

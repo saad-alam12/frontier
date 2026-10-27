@@ -11,7 +11,7 @@ import { runMatcher } from '../agents/matcher';
 import type { MatchQuery } from '../agents/matcher';
 import { planMerge } from '../core/merge';
 import type { KnowledgeNode, Source, SourceKind } from '../core/types';
-import { chunkBlocks } from '../ingest/chunker';
+import { chunkBlocks, collapseBuildPages } from '../ingest/chunker';
 import { textHash } from '../ingest/embedder';
 import type { Embedder } from '../ingest/embedder';
 import { readBytes, readSourceFile } from '../ingest/readers';
@@ -85,7 +85,7 @@ export class IngestionService {
   }
 
   private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[]): Source {
-    const chunks = chunkBlocks(blocks);
+    const chunks = chunkBlocks(kind === 'pdf' ? collapseBuildPages(blocks) : blocks);
     return createSource(this.db, { kind, title, path, hash }, chunks);
   }
 
@@ -157,6 +157,7 @@ export class IngestionService {
       sourceId: source.id,
       extractedNodes: extraction.nodes.map((n) => ({ ...n, locator: n.locator ?? chunk.locator })),
       extractedChains: extraction.chains.map((c) => ({ ...c, locator: c.locator ?? chunk.locator })),
+      extractedExamples: extraction.examples.map((e) => ({ ...e, locator: e.locator ?? chunk.locator })),
       identities,
       existingNodes,
       existingChains: listChains(this.db),

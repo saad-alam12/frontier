@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call, onEvent } from '../api';
-import type { DeltaClass, DeltaSummary, SourceSummary } from '../../backend/api/contract';
+import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../../backend/api/contract';
 import { Breadcrumb, Screen } from '../components/Shell';
-import { Button, Empty, Meter, Notice, Section } from '../components/controls';
+import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 
 const CLASS_LABEL: Record<DeltaClass, string> = {
-  'new-fringe': 'New and learnable now',
-  'new-beyond': 'New, needs a prerequisite first',
-  deeper: 'Known, this source goes deeper',
-  known: 'Already known',
+  'new-fringe': 'Learnable now',
+  'new-beyond': 'Needs a prerequisite first',
+  deeper: 'Yours, this goes deeper',
+  known: 'Yours',
   conflict: 'Conflicts with what you know',
 };
+
+const CLASS_TONE: Record<DeltaClass, string> = {
+  'new-fringe': 'text-accent-text',
+  'new-beyond': 'text-muted',
+  deeper: 'text-text',
+  known: 'text-text',
+  conflict: 'text-danger',
+};
+
+type Order = 'source' | 'alpha';
 
 const STATUS_LABEL: Record<SourceSummary['status'], string> = {
   pending: 'Waiting',
@@ -26,6 +36,8 @@ export function LibraryScreen() {
   const [delta, setDelta] = useState<DeltaSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [order, setOrder] = useState<Order>('source');
+  const [highlight, setHighlight] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const list = await call('library.list');
@@ -102,7 +114,7 @@ export function LibraryScreen() {
                   {s.nodeCount} ideas · {STATUS_LABEL[s.status]}
                 </span>
               </span>
-              <Meter value={s.chunkCount ? s.chunksDone / s.chunkCount : 0} accent={s.status === 'running'} />
+              {s.chunkCount > 0 && <Meter value={s.chunksDone / s.chunkCount} accent={s.status === 'running'} />}
             </button>
           </li>
         ))}
@@ -126,23 +138,24 @@ export function LibraryScreen() {
               </Button>
             </div>
           </div>
-          {delta &&
-            (Object.keys(CLASS_LABEL) as DeltaClass[])
-              .filter((cls) => delta.counts[cls] > 0)
-              .map((cls) => (
-                <Section key={cls} title={CLASS_LABEL[cls]} meta={`${delta.counts[cls]}`}>
-                  <ul className="list-card">
-                    {delta.items
-                      .filter((i) => i.cls === cls)
-                      .map((i) => (
-                        <li key={i.nodeId} className="flex flex-col gap-[4px]">
-                          <span className="font-medium">{i.name}</span>
-                          <Markdown text={i.statement} className="text-soft" />
-                        </li>
-                      ))}
-                  </ul>
-                </Section>
-              ))}
+          {delta && delta.items.length > 0 && (
+            <Section title="Ideas" meta={<ChoiceChips label="Order" options={[{ value: 'source', label: 'In order' }, { value: 'alpha', label: 'A to Z' }]} value={order} onChange={setOrder} small />}>
+              <ul className="list-card">
+                {sortItems(delta.items, order).map((item) => (
+                  <IdeaRow
+                    key={item.nodeId}
+                    item={item}
+                    highlighted={highlight === item.nodeId}
+                    inSource={(id) => delta.items.some((i) => i.nodeId === id)}
+                    onOpen={(id) => {
+                      setHighlight(id);
+                      document.getElementById(`idea-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                  />
+                ))}
+              </ul>
+            </Section>
+          )}
           <Section title="Parts" meta={`${current.chunksDone} of ${current.chunkCount} read`}>
             <ul className="list-card">
               {current.chunks.map((c) => (
@@ -161,5 +174,55 @@ export function LibraryScreen() {
         <Empty>Choose a source to see what it adds for you.</Empty>
       )}
     </Screen>
+  );
+}
+
+function sortItems(items: DeltaItem[], order: Order): DeltaItem[] {
+  return order === 'source' ? items : [...items].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** "p12" → "p 12", "p12–p14" → "pp 12–14"; headings stay as they are. */
+function formatCitation(locator: string): string {
+  const range = /^p(\d+)–p(\d+)$/.exec(locator);
+  if (range) return `pp ${range[1]}–${range[2]}`;
+  const page = /^p(\d+)$/.exec(locator);
+  return page ? `p ${page[1]}` : locator;
+}
+
+function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; highlighted: boolean; inSource: (id: string) => boolean; onOpen: (id: string) => void }) {
+  const refs = (list: IdeaRef[]) =>
+    list.map((r, i) => (
+      <span key={r.id}>
+        {i > 0 && ', '}
+        {inSource(r.id) ? (
+          <button type="button" className="link-button" onClick={() => onOpen(r.id)}>
+            <Markdown text={r.name} inline />
+          </button>
+        ) : (
+          <span className="text-secondary" title="From another source">
+            <Markdown text={r.name} inline />
+          </span>
+        )}
+      </span>
+    ));
+  return (
+    <li id={`idea-${item.nodeId}`} className={highlighted ? 'idea-row is-highlighted' : 'idea-row'}>
+      <div className="row">
+        <Markdown text={item.name} inline className="font-medium" />
+        {item.citations.length > 0 && <span className="t-small shrink-0 text-muted">{item.citations.map(formatCitation).join(', ')}</span>}
+      </div>
+      <Markdown text={item.statement} className="text-soft" />
+      {(item.builtOn.length > 0 || item.leadsTo.length > 0) && (
+        <div className="t-small flex flex-col gap-[2px] text-muted">
+          {item.builtOn.map((premises, i) => (
+            <span key={i}>
+              {i === 0 ? 'Built on' : 'Or built on'} {refs(premises)}
+            </span>
+          ))}
+          {item.leadsTo.length > 0 && <span>Leads to {refs(item.leadsTo)}</span>}
+        </div>
+      )}
+      <span className={`t-small ${CLASS_TONE[item.cls]}`}>{CLASS_LABEL[item.cls]}</span>
+    </li>
   );
 }

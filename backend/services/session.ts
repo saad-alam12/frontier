@@ -15,7 +15,8 @@ import { getState } from '../store/evidence';
 import { getGoal } from '../store/goals';
 import { activeSession, appendSessionEvent, createSession, endSession, getSession, listSessionEvents, listSessions, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
-import { chunksCoveringNode } from '../store/sources';
+import { chunksCoveringNode, getSource } from '../store/sources';
+import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge } from './knowledge';
@@ -382,6 +383,7 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
     premises,
     dependents: deps,
     bugs: listBugsForNode(db, node.id).map((b) => b.description),
+    examples: listExamplesForNode(db, node.id).map((e) => ({ title: e.title, locator: `${getSource(db, e.sourceId)?.title ?? 'source'}, ${e.locator}`, body: e.body })),
     excerpts: chunksCoveringNode(db, node.id).map((c) => ({ locator: `${c.sourceTitle}, ${c.locator}`, text: c.text.slice(0, 1800) })),
     history: (state.history[node.id] ?? []).filter((h) => h.response !== null || h.grade !== null),
     previous,

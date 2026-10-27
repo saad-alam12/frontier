@@ -54,19 +54,16 @@ describe('fringe', () => {
   const nodes = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => node(id)).concat([node('g', 'term')]);
 
   it('contains unowned nodes whose premises are all owned', () => {
-    const fringe = computeFringe({ nodes, index, owned: new Set(['a', 'b']), goalNeeded: new Set() });
-    expect([...fringe]).toEqual(['c']);
+    const fringe = computeFringe({ nodes, index, owned: new Set(['a', 'b']) });
+    expect([...fringe].sort()).toEqual(['c', 'd', 'g']);
   });
 
   it('moves up as nodes become owned and excludes owned nodes', () => {
-    const fringe = computeFringe({ nodes, index, owned: new Set(['a', 'b', 'c', 'd']), goalNeeded: new Set() });
-    expect([...fringe]).toEqual(['e']);
+    const fringe = computeFringe({ nodes, index, owned: new Set(['a', 'b', 'c', 'd']) });
+    expect([...fringe].sort()).toEqual(['e', 'g']);
   });
 
-  it('includes root terms only when a goal needs them', () => {
-    expect(computeFringe({ nodes, index, owned: new Set(), goalNeeded: new Set() }).has('g')).toBe(false);
-    expect(computeFringe({ nodes, index, owned: new Set(), goalNeeded: new Set(['g']) }).has('g')).toBe(true);
-    // root claims with no chains are never on the fringe: they need a source or a term chain first
-    expect(computeFringe({ nodes, index, owned: new Set(), goalNeeded: new Set(['a']) }).has('a')).toBe(false);
+  it('counts every root (term, claim or procedure with no chains into it) as learnable now, goal or not', () => {
+    expect([...computeFringe({ nodes, index, owned: new Set() })].sort()).toEqual(['a', 'b', 'd', 'g']);
   });
 });

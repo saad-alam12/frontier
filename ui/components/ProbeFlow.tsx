@@ -64,7 +64,7 @@ export function ProbeResults({ outcomes }: { outcomes: ProbeOutcome[] }) {
       {outcomes.map((o) => (
         <li key={o.nodeId} className="flex flex-col gap-[4px]">
           <span className="row">
-            <span className="font-medium">{o.nodeName}</span>
+            <Markdown text={o.nodeName} inline className="font-medium" />
             <span className="shrink-0">{Math.round(o.score * 10)}/10</span>
           </span>
           <Markdown text={o.reasoning} className="text-soft" />

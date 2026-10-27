@@ -4,7 +4,7 @@
  * the plan in one transaction; it is the only writer of the world layer.
  */
 import { chainKey, simplifyChains } from './chains';
-import type { Chain, KnowledgeNode, NodeKind, SourceRef } from './types';
+import type { Chain, KnowledgeNode, NodeKind, SourceRef, WorkedExample } from './types';
 
 export interface ExtractedNode {
   /** Temporary id used within this extraction, e.g. "n3". */
@@ -23,15 +23,24 @@ export interface ExtractedChain {
   locator?: string;
 }
 
+export interface ExtractedExample {
+  /** Temp id or existing node id of the idea it illustrates. */
+  illustrates: string;
+  title: string;
+  body: string;
+  locator?: string;
+}
+
 export interface MergeInput {
   sourceId: string;
   extractedNodes: ExtractedNode[];
   extractedChains: ExtractedChain[];
+  extractedExamples?: ExtractedExample[];
   /** tempId → existing node id when the matcher judged them the same claim. */
   identities: Map<string, string>;
   existingNodes: Map<string, KnowledgeNode>;
   existingChains: Chain[];
-  newId: (prefix: 'node' | 'chain') => string;
+  newId: (prefix: 'node' | 'chain' | 'example') => string;
 }
 
 export interface MergePlan {
@@ -47,6 +56,8 @@ export interface MergePlan {
   coveredNodeIds: string[];
   /** Chains that referenced an unknown id and were skipped. */
   skippedChains: { chain: ExtractedChain; reason: string }[];
+  /** Worked examples resolved to the node they illustrate. */
+  examples: WorkedExample[];
 }
 
 export function planMerge(input: MergeInput): MergePlan {
@@ -117,6 +128,12 @@ export function planMerge(input: MergeInput): MergePlan {
   const newChains = candidateChains.filter((c) => keptIds.has(c.id));
   const droppedChainIds = dropped.map((d) => d.chain.id);
 
+  const examples: WorkedExample[] = [];
+  for (const e of input.extractedExamples ?? []) {
+    const nodeId = resolveId(e.illustrates);
+    if (nodeId) examples.push({ id: input.newId('example'), nodeId, sourceId: input.sourceId, locator: e.locator ?? '', title: e.title, body: e.body });
+  }
+
   return {
     newNodes,
     nodeUpdates,
@@ -125,5 +142,6 @@ export function planMerge(input: MergeInput): MergePlan {
     droppedChainIds,
     coveredNodeIds: [...covered],
     skippedChains,
+    examples,
   };
 }
