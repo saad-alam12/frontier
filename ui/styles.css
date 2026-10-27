@@ -1005,14 +1005,12 @@ input[type='date'].input::-webkit-calendar-picker-indicator {
 .frontier-map {
   position: relative;
   width: 100%;
-  max-width: 460px;
-  aspect-ratio: 460 / 400;
+  max-width: 480px;
 }
 .frontier-map svg {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  overflow: visible;
 }
 .map-node {
   position: absolute;
@@ -1044,27 +1042,47 @@ input[type='date'].input::-webkit-calendar-picker-indicator {
 }
 .map-label {
   position: absolute;
-  max-width: 40%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   font-size: 11px;
-  line-height: 1.3;
+  line-height: 16px;
   border: 0;
   padding: 0;
   background: none;
-  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  cursor: default;
+}
+button.map-label {
+  cursor: pointer;
+}
+.map-label-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.map-label.is-current .map-label-text {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 .map-label.is-owned {
   color: var(--text-muted);
 }
 .map-label.is-learnable {
   font-size: 12px;
+  line-height: 17px;
   color: var(--accent-text);
 }
 .map-label.is-current {
-  max-width: 48%;
   font-size: 15px;
+  line-height: 20px;
   color: var(--text);
 }
 .map-label.is-beyond {

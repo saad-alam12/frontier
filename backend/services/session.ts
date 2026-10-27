@@ -13,7 +13,7 @@ import { nowIso } from '../store/db';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
 import { getState } from '../store/evidence';
 import { getGoal } from '../store/goals';
-import { activeSession, appendSessionEvent, createSession, endSession, getSession, listSessionEvents, listSessions, saveSessionState } from '../store/sessions';
+import { activeSession, appendSessionEvent, createSession, endSession, getSession, listEndedSessions, listSessionEvents, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
@@ -21,7 +21,7 @@ import { recordEvidence, setOwnStatement } from './evidence';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge } from './knowledge';
 import type { KnowledgeView } from './knowledge';
-import { candidatesForGoal, planSession } from './planner';
+import { MAX_PLAN_NODES, candidatesForGoal, planSession } from './planner';
 import type { LessonPlan, LessonStep } from './planner';
 
 export type Phase = 'reconstruct' | 'orient' | 'teach' | 'close' | 'preview' | 'done';
@@ -50,6 +50,20 @@ export interface SessionState {
   previousNodes: { id: string; name: string }[];
   closing: { canDo: string; previewQuestion: string; recall: { nodeId: string; name: string; score: number; note: string }[] } | null;
   pendingEffort: number | null;
+  /** A half-done idea carried over from an ended session; restored when its step begins. Absent in older states. */
+  resume?: ResumePoint | null;
+}
+
+/** Where the learner stopped inside an idea: the open card and the loop state around it. */
+export interface ResumePoint {
+  nodeId: string;
+  fromSessionId: string;
+  stage: Stage;
+  card: TutorCard;
+  supportAfter: Stage | null;
+  edge: EdgeState;
+  pendingEffort: number | null;
+  history: NodeHistoryEntry[];
 }
 
 /** What the renderer sees. Answer keys and rubrics never leave the backend. */
@@ -80,6 +94,8 @@ export interface HistoryItem {
   card: PublicCard;
   response: LearnerResponse | null;
   grade: Grade | null;
+  /** True for steps answered in an earlier session and carried over with a half-done idea. */
+  carried: boolean;
 }
 
 export interface HistoryNode {
@@ -134,9 +150,13 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
   if (active) return snapshot(db, active);
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
-  const plan = await planSession(db, deps.provider, goalId);
+  const ended = listEndedSessions<SessionState>(db, goalId);
+  const view = loadKnowledge(db);
+  const carried = ended[0] ? carriedPlace(ended[0], (id, depth) => view.owned.has(id) && (view.states.get(id)?.depth ?? 0) >= depth) : null;
+  const planned = await planSession(db, deps.provider, goalId, carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES);
+  const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
-  const previousNodes = previouslyTaughtNodes(db, goalId);
+  const previousNodes = previouslyTaughtNodes(ended);
   const state: SessionState = {
     goalId,
     plan,
@@ -152,9 +172,12 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
     previousNodes,
     closing: null,
     pendingEffort: null,
+    resume: carried?.resume ?? null,
   };
+  if (carried) state.nodeStatus[carried.step.nodeId] = 'active';
   const session = createSession(db, goalId, state);
-  appendSessionEvent(db, session.id, 'start', { goalId, plan: { title: plan.title, steps: plan.steps.map((s) => s.nodeId) } });
+  appendSessionEvent(db, session.id, 'start', { goalId, plan: { title: plan.title, steps: plan.steps.map((s) => s.nodeId) }, resumes: carried ? { nodeId: carried.step.nodeId, fromSessionId: carried.resume.fromSessionId } : null });
+  if (carried) carryEvents(db, carried.resume.fromSessionId, session.id, carried.step.nodeId);
   return snapshot(db, session);
 }
 
@@ -165,12 +188,17 @@ export function pauseSession(db: Database, sessionId: string): void {
   appendSessionEvent(db, sessionId, 'pause', {});
 }
 
-/** End a session early for good; what was learned so far stays as evidence. */
-export function abandonSession(db: Database, sessionId: string): void {
+/**
+ * End a session early. What was learned stays as evidence, the tutor's prose is ingested, and the
+ * next session on the goal recalls the finished ideas and continues a half-done one where it stopped.
+ */
+export async function abandonSession(deps: SessionDeps, sessionId: string): Promise<void> {
+  const { db } = deps;
   const session = getSession<SessionState>(db, sessionId);
   if (!session || session.status !== 'active') return;
   endSession(db, sessionId, 'abandoned');
   appendSessionEvent(db, sessionId, 'abandon', {});
+  await ingestTranscript(deps, sessionId, session.state);
 }
 
 /** Advance the session with the learner's response to the current card (or an acknowledgement). */
@@ -255,6 +283,18 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
   }
   state.phase = 'teach';
   state.nodeStatus[step.nodeId] = 'active';
+  const resume = state.resume;
+  if (resume && resume.nodeId === step.nodeId) {
+    state.stage = resume.stage;
+    state.card = resume.card;
+    state.supportAfter = resume.supportAfter;
+    state.edge = resume.edge;
+    state.pendingEffort = resume.pendingEffort;
+    state.history[step.nodeId] = resume.history;
+    state.resume = null;
+    appendSessionEvent(deps.db, sessionId, 'resume', { nodeId: step.nodeId, stage: resume.stage, fromSessionId: resume.fromSessionId });
+    return;
+  }
   const first = stagesFor(step.mode)[0] as Stage;
   await produceCard(deps, sessionId, state, step, first, null, goalText);
 }
@@ -408,10 +448,49 @@ function finishHistory(state: SessionState, nodeId: string, stage: Stage, respon
   }
 }
 
-function previouslyTaughtNodes(db: Database, goalId: string): { id: string; name: string }[] {
-  const last = listSessions<SessionState>(db, 20).find((s) => s.goalId === goalId && s.status === 'done');
-  if (!last) return [];
-  return last.state.plan.steps.filter((s) => last.state.nodeStatus[s.nodeId] === 'done').map((s) => ({ id: s.nodeId, name: s.name }));
+/** The finished ideas of the most recent ended session (done or ended early) that finished any. */
+function previouslyTaughtNodes(ended: SessionRecord<SessionState>[]): { id: string; name: string }[] {
+  for (const session of ended) {
+    const done = session.state.plan.steps.filter((s) => session.state.nodeStatus[s.nodeId] === 'done').map((s) => ({ id: s.nodeId, name: s.name }));
+    if (done.length) return done;
+  }
+  return [];
+}
+
+/**
+ * The half-done idea of a session that was ended early: the idea being taught when it ended, or one
+ * it had carried over itself and not reached yet. Nothing carries once the idea is owned at its target depth.
+ */
+export function carriedPlace(session: SessionRecord<SessionState>, reached: (nodeId: string, targetDepth: number) => boolean): { step: LessonStep; resume: ResumePoint } | null {
+  if (session.status !== 'abandoned') return null;
+  const s = session.state;
+  let resume: ResumePoint | null = null;
+  const step = s.plan.steps[s.stepIndex];
+  if (s.phase === 'teach' && step && s.stage && s.card) {
+    resume = { nodeId: step.nodeId, fromSessionId: session.id, stage: s.stage, card: s.card, supportAfter: s.supportAfter, edge: s.edge, pendingEffort: s.pendingEffort, history: s.history[step.nodeId] ?? [] };
+  } else if (s.resume) {
+    resume = { ...s.resume, fromSessionId: session.id };
+  }
+  if (!resume) return null;
+  const carriedStep = s.plan.steps.find((st) => st.nodeId === resume.nodeId);
+  return carriedStep && !reached(carriedStep.nodeId, carriedStep.targetDepth) ? { step: carriedStep, resume } : null;
+}
+
+/** The carried idea goes first; the planner's own pick of it is dropped. */
+function withCarriedStep(plan: LessonPlan, step: LessonStep): LessonPlan {
+  const rest = plan.steps.filter((s) => s.nodeId !== step.nodeId).map((s) => ({ ...s, dependsOn: s.dependsOn.filter((d) => d !== step.nodeId) }));
+  const carried = { ...step, dependsOn: [] };
+  if (plan.steps.length === 0) return { ...plan, title: `Continue: ${step.name}`, orientation: `Today picks up ${step.name} where you stopped.`, steps: [carried] };
+  return { ...plan, steps: [carried, ...rest] };
+}
+
+/** Copy the carried idea's cards and answers into the new session so its history shows them. */
+function carryEvents(db: Database, fromSessionId: string, toSessionId: string, nodeId: string): void {
+  for (const event of listSessionEvents(db, fromSessionId)) {
+    if ((event.kind === 'card' || event.kind === 'response') && event.payload.nodeId === nodeId) {
+      appendSessionEvent(db, toSessionId, event.kind, { ...event.payload, carriedFrom: fromSessionId });
+    }
+  }
 }
 
 async function ingestTranscript(deps: SessionDeps, sessionId: string, state: SessionState): Promise<void> {
@@ -492,7 +571,7 @@ export function sessionHistory(db: Database, session: SessionRecord<SessionState
   let reconstruct: SessionHistory['reconstruct'] = null;
   const previousNames = new Map(s.previousNodes.map((n) => [n.id, n.name]));
   for (const event of listSessionEvents(db, session.id)) {
-    const p = event.payload as { nodeId?: string; stage?: Stage; card?: TutorCard; response?: LearnerResponse; grade?: Grade; text?: string; recalled?: { nodeId: string; score: number; note: string }[] };
+    const p = event.payload as { carriedFrom?: string; nodeId?: string; stage?: Stage; card?: TutorCard; response?: LearnerResponse; grade?: Grade; text?: string; recalled?: { nodeId: string; score: number; note: string }[] };
     if (event.kind === 'reconstruct') {
       reconstruct = { text: p.text ?? '', recalled: (p.recalled ?? []).map((r) => ({ ...r, name: previousNames.get(r.nodeId) ?? r.nodeId })) };
       continue;
@@ -502,7 +581,7 @@ export function sessionHistory(db: Database, session: SessionRecord<SessionState
     items.set(p.nodeId, list);
     if (event.kind === 'card' && p.card) {
       const card = publicCard(p.card);
-      if (card) list.push({ id: event.id, stage: p.stage, card, response: null, grade: null });
+      if (card) list.push({ id: event.id, stage: p.stage, card, response: null, grade: null, carried: Boolean(p.carriedFrom) });
     } else if (event.kind === 'response' && p.response) {
       const open = [...list].reverse().find((h) => h.stage === p.stage && h.response === null);
       if (open) {

@@ -158,7 +158,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
-      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null }} thinking />}
+      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} thinking />}
 
       <div ref={currentRef} className="flex flex-col gap-[36px]">
         {pending && !pending.card && <p className="t-small m-0 text-muted">Thinking…</p>}
@@ -169,7 +169,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
         <div className="button-row gap-[18px] border-t border-line pt-[18px]">
           {confirmEnd ? (
             <>
-              <span className="t-small text-secondary">End for good? What you learned is kept; the rest of today&rsquo;s plan is dropped.</span>
+              <span className="t-small text-secondary">End this session? What you learned is kept, and next time you continue this idea where you stopped.</span>
               <Button kind="quiet" onClick={() => void end()} disabled={isBusy}>
                 End session
               </Button>
@@ -269,7 +269,7 @@ function Exchange({ id, item, thinking }: { id: string; item: HistoryItem; think
     : '';
   return (
     <article id={id} className="flex flex-col gap-[14px]">
-      <div className="t-caption text-muted">{STAGE_LABEL[item.stage]}</div>
+      <div className="t-caption text-muted">{item.carried && item.response ? `${STAGE_LABEL[item.stage]} · last session` : STAGE_LABEL[item.stage]}</div>
       <CardText card={item.card} past />
       {!read && item.response && (
         <div className="answer-block flex flex-col gap-[8px]">

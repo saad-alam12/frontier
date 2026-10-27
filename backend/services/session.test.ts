@@ -172,8 +172,55 @@ describe('teaching session', () => {
     const after = await respond(deps, again.id, answer('a profile is one strategy per player'));
     expect(after.phase).toBe('orient');
     expect(listEvidenceForSession(db, again.id).filter((e) => e.kind === 'recall')).toHaveLength(3);
-    abandonSession(db, again.id);
+    await abandonSession(deps, again.id);
     expect(listSessions<SessionState>(db).find((s) => s.id === again.id)?.status).toBe('abandoned');
+  });
+
+  it('ending a session keeps the place: the next one recalls finished ideas and continues the half-done one', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.9, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const nashId = ids.get('nash') as string;
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    snap = await respond(deps, snap.id, answer('the move that pays best given the others')); // predict → explain
+    snap = await respond(deps, snap.id, { answer: '', effort: 3 }); // explain read → check
+    expect(snap.current?.stage).toBe('check');
+    const openCard = snap.card;
+    await abandonSession(deps, snap.id);
+    expect(listSources(db).filter((s) => s.kind === 'session')).toHaveLength(1); // transcript ingested on end too
+
+    const next = await startSession(deps, goal.id);
+    expect(next.id).not.toBe(snap.id);
+    expect(next.phase).toBe('reconstruct');
+    expect(next.previousNodes.map((n) => n.name).sort()).toEqual(['Best response', 'Strategy profile']);
+    expect(next.plan.steps[0]?.nodeId).toBe(nashId);
+    const carried = next.history.nodes.find((n) => n.nodeId === nashId);
+    expect(carried?.items.map((h) => [h.stage, h.response?.answer, h.carried])).toEqual([
+      ['predict', 'the move that pays best given the others', true],
+      ['explain', '', true],
+    ]);
+    let after = await respond(deps, next.id, answer('profiles and best replies'));
+    expect(after.phase).toBe('orient');
+    const callsBefore = deps.provider.calls.length;
+    after = await respond(deps, next.id, answer(''));
+    expect(deps.provider.calls.length).toBe(callsBefore); // the open card comes back, nothing regenerated
+    expect(after.current?.nodeId).toBe(nashId);
+    expect(after.current?.stage).toBe('check');
+    expect(after.card).toEqual(openCard);
+    after = await respond(deps, next.id, answer('yes, nobody gains by moving alone'));
+    expect(after.current?.stage).toBe('derive');
+    const items = after.history.nodes.find((n) => n.nodeId === nashId)?.items ?? [];
+    expect(items.map((h) => h.stage)).toEqual(['predict', 'explain', 'check']);
+    expect(items[2]?.carried).toBe(true);
+    expect(items[2]?.response?.answer).toBe('yes, nobody gains by moving alone');
+    expect(listEvidenceForSession(db, next.id).find((e) => e.kind === 'check')?.effort).toBe(3);
+
+    // ending again carries it again, with everything said so far
+    await abandonSession(deps, next.id);
+    const third = await startSession(deps, goal.id);
+    expect(third.plan.steps[0]?.nodeId).toBe(nashId);
+    expect(third.history.nodes.find((n) => n.nodeId === nashId)?.items.map((h) => h.stage)).toEqual(['predict', 'explain', 'check']);
+    expect(third.plan.steps.filter((s) => s.nodeId === nashId)).toHaveLength(1);
   });
 
   it('drops to a worked example after three failures and skips ahead after easy successes', async () => {

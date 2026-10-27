@@ -161,7 +161,7 @@ Index-tier nodes get a 30-second **index pass** instead: gist, where it sits on 
 
 - **Stay at the edge.** Three failures in a row → drop a level (worked example, or a prerequisite node). A failure after that worked example → escalate once: a stronger model re-diagnoses the misconception from the idea's whole history and explains afresh. Repeated easy successes → remove support or skip ahead.
 - **One goal per session.** Interleaving happens across sessions.
-- **Pause, don't lose.** Leaving a session pauses it; it resumes at the same card with nothing regenerated. Ending a session early is a separate, deliberate action. Unsent answers are kept as drafts.
+- **Pause, don't lose.** Leaving a session pauses it; it resumes at the same card with nothing regenerated. Ending a session early is a separate, deliberate action that still keeps the learner's place: the next session on the goal recalls the ideas finished in it and continues a half-done idea at the step where it stopped, with the earlier answers shown. Unsent answers are kept as drafts.
 - **Passive reading is never the default.** Reading is raw material for the step loop.
 - **Grounding.** Every taught claim cites a source the learner added, a fetched reference, or is marked `unverified` until checked.
 

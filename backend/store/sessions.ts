@@ -61,6 +61,11 @@ export function listSessions<S>(db: Database, limit = 50): SessionRecord<S>[] {
   return (db.prepare('SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?').all(limit) as unknown as SessionRow[]).map((r) => toSession<S>(r));
 }
 
+/** Sessions on a goal that have ended (done or ended early), newest first. */
+export function listEndedSessions<S>(db: Database, goalId: string, limit = 20): SessionRecord<S>[] {
+  return (db.prepare("SELECT * FROM sessions WHERE goal_id = ? AND status != 'active' ORDER BY started_at DESC, rowid DESC LIMIT ?").all(goalId, limit) as unknown as SessionRow[]).map((r) => toSession<S>(r));
+}
+
 export function saveSessionState<S>(db: Database, id: string, state: S): void {
   db.prepare('UPDATE sessions SET state = ? WHERE id = ?').run(JSON.stringify(state), id);
 }

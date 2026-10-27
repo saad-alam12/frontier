@@ -46,6 +46,11 @@ Exact steps for the owner, on the Mac:
 
 ## Owner feedback
 
+### 2026-10-27, after R1
+- **End session must keep my place.** The next session continues a half-done idea at the step where I stopped, shows my earlier answers, and recalls the ideas I finished in the ended session. (Before: `abandonSession` made the next plan start again at Predict, and `previouslyTaughtNodes` and transcript ingestion only looked at sessions with status "done".) Done: see Decisions.
+- **"Your frontier" map is messy.** Labels overlapped each other and the dots, and the dashed line ran through the text. Lay it out with no collisions and check it in an Electron screenshot. Done: see Decisions.
+- Then continue with M5 and M6, every new screen in the Atlas look and checked in an Electron screenshot; stop at the M6 checkpoint with a short summary at the top of this file.
+
 ### 2026-10-27, after M4
 Full list with acceptance checks: `docs/feedback-round-1.md`. In short:
 - Works: connection test, ingesting real lectures (4 and 5) incl. the embedding model, re-upload detection, goal compile, probe questions, explanation and grading quality, restart. Usage per session is acceptable.
@@ -110,6 +115,9 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Ending a session early keeps the place (owner, after R1). `abandonSession` now ingests the transcript like a finished session. The next session on the goal: (1) recalls the finished ideas of the most recent ended session (done or ended early) that finished any; (2) if the last ended session stopped inside an idea, that idea is carried over as the first plan step, with its open card, stage, edge counters, pending effort rating and per-idea history (`SessionState.resume`), restored when the step begins, so the same card reappears with no model call; its earlier cards and answers are copied into the new session's events (marked `carriedFrom`) so the conversation shows them with a "last session" caption. The planner plans one fewer idea and its own pick of the carried idea is dropped. Nothing carries once the idea is owned at its target depth. Ending again before reaching the carried idea carries it again.
+- 2026-10-27 — Frontier map relaid (owner, after R1): measured in pixels of the panel's real width, two stacks of rows: ideas you own on the left with labels ending at their point, the current idea and learnable ideas on the right with labels starting at their point, ideas beyond your edge one step further out. The dashed edge line runs down the gap and bends only to pass through the current idea. Every label has a fixed box with an ellipsis (the current idea gets two lines), so collisions are impossible by construction; `ui/lib/frontierLayout.test.ts` checks labels, points and the edge line never touch across 800 random maps and four widths. Links touching the current idea are drawn in the accent; rows are ordered by barycentre to keep links short.
 
 - 2026-10-27 — Goals v2 storage: new columns on `goals` (title, kind, assessment, target grade, date, hours per week, exam profile, course plan, which sources the profile and the last compile used, unverified ideas started anyway) and a `goal_materials` table (goal, source, role). Migration 4 links every existing non-session source to every existing goal as teaching material, so old goals keep working.
 - 2026-10-27 — Only teaching and reference material is read into ideas. Files added through the goal flow go into the library unread; reading starts when the goal is saved. Library shows such files as "Kept as past exam" etc.

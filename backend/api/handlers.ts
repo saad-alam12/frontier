@@ -120,8 +120,8 @@ export function buildHandlers(ctx: AppContext): Handlers {
       pauseSession(ctx.db(), sessionId);
       return undefined;
     },
-    'session.end': ({ sessionId }) => {
-      abandonSession(ctx.db(), sessionId);
+    'session.end': async ({ sessionId }) => {
+      await abandonSession({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, sessionId);
       return undefined;
     },
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
