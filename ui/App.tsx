@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sidebar, type ScreenName } from './components/Sidebar';
+import { NavRail, type ScreenName } from './components/Shell';
 import { TodayScreen } from './screens/TodayScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { MapScreen } from './screens/MapScreen';
@@ -12,18 +12,16 @@ import { SettingsScreen } from './screens/SettingsScreen';
 export function App() {
   const [screen, setScreen] = useState<ScreenName>('today');
   return (
-    <div className="flex h-full">
-      <Sidebar current={screen} onSelect={setScreen} />
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        {screen === 'today' && <TodayScreen />}
-        {screen === 'session' && <SessionScreen onLeave={() => setScreen('today')} />}
-        {screen === 'map' && <MapScreen />}
-        {screen === 'goals' && <GoalsScreen />}
-        {screen === 'lookup' && <LookupScreen />}
-        {screen === 'trails' && <TrailsScreen />}
-        {screen === 'library' && <LibraryScreen />}
-        {screen === 'settings' && <SettingsScreen />}
-      </main>
+    <div className="app">
+      <NavRail current={screen} onSelect={setScreen} />
+      {screen === 'today' && <TodayScreen onNavigate={setScreen} />}
+      {screen === 'session' && <SessionScreen onNavigate={setScreen} />}
+      {screen === 'map' && <MapScreen />}
+      {screen === 'goals' && <GoalsScreen onNavigate={setScreen} />}
+      {screen === 'lookup' && <LookupScreen />}
+      {screen === 'trails' && <TrailsScreen />}
+      {screen === 'library' && <LibraryScreen />}
+      {screen === 'settings' && <SettingsScreen />}
     </div>
   );
 }

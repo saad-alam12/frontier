@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CONFIDENCE_LEVELS } from '../../backend/core/types';
-import { Button } from './Page';
+import { Button } from './controls';
 
 export const ANSWER_PLACEHOLDER = 'Say it or type it, however it comes. Leave it empty if you have no idea.';
 const HINT = 'Speak or type, however it comes';

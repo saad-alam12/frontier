@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call } from '../api';
 import type { GoalDetail, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
-import { Button, Empty, Page, inputClass } from '../components/Page';
+import { Screen, type ScreenName } from '../components/Shell';
+import { Button, Empty, Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface } from '../components/AnswerSurface';
 import { useDrafts } from '../hooks/useDrafts';
+
+const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
 
 const STAGE_LABEL: Record<Stage, string> = {
   predict: 'Predict',
@@ -18,7 +21,8 @@ const STAGE_LABEL: Record<Stage, string> = {
   support: 'Worked example',
 };
 
-export function SessionScreen({ onLeave }: { onLeave: () => void }) {
+export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => void }) {
+  const onLeave = () => onNavigate('today');
   const [snap, setSnap] = useState<SessionSnapshot | null | undefined>(undefined);
   const [goals, setGoals] = useState<GoalDetail[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,22 +71,26 @@ export function SessionScreen({ onLeave }: { onLeave: () => void }) {
       await refresh();
     });
 
-  if (snap === undefined) return <Page title="Session" />;
+  if (snap === undefined) return <Screen>{null}</Screen>;
 
   if (!snap) {
     const ready = goals.filter((g) => g.goal.status === 'active' && g.capabilities.length > 0);
     return (
-      <Page title="Session" subtitle="One goal per session. The system has already chosen what to do; you press start.">
-        {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      <Screen>
+        <div className="flex flex-col gap-[14px]">
+          <h1 className="t-display">Session</h1>
+          <p className="t-lead m-0">One goal per session. What to learn is already chosen; you press start.</p>
+        </div>
+        {error && <Notice error>{error}</Notice>}
         {ready.length === 0 ? (
-          <Empty>Add and compile a goal first, under Goals.</Empty>
+          <Empty action={<Button onClick={() => onNavigate('goals')}>Go to goals</Button>}>Add and compile a goal first.</Empty>
         ) : (
-          <ul className="space-y-2">
+          <ul className="list-card">
             {ready.map((g) => (
-              <li key={g.goal.id} className="flex items-center justify-between rounded-lg border border-stone-200 bg-white p-4">
+              <li key={g.goal.id} className="row items-center">
                 <div>
-                  <div className="text-sm font-medium">{g.goal.text}</div>
-                  <div className="text-xs text-stone-500">{g.capabilities.length} capabilities</div>
+                  <div>{g.goal.text}</div>
+                  <div className="t-small text-muted">{g.capabilities.length} skills</div>
                 </div>
                 <Button kind="primary" onClick={() => void start(g.goal.id)} disabled={busy !== null}>
                   {busy === 'start' ? 'Planning…' : 'Start session'}
@@ -91,46 +99,43 @@ export function SessionScreen({ onLeave }: { onLeave: () => void }) {
             ))}
           </ul>
         )}
-      </Page>
+      </Screen>
     );
   }
 
   return (
-    <div className="flex h-full">
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-8 py-6">
-          <header className="mb-6 flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-stone-500">{snap.goalText}</div>
-              <h1 className="text-2xl font-semibold tracking-tight">{snap.plan.title}</h1>
-            </div>
-            {snap.status === 'active' && (
-              <div className="flex shrink-0 items-center gap-2">
-                <Button onClick={() => void pause()} disabled={busy !== null}>
-                  Pause
-                </Button>
-                {confirmEnd ? (
-                  <span className="flex items-center gap-2 text-xs text-stone-600">
-                    End for good? What you learned so far is kept.
-                    <Button kind="danger" onClick={() => void end()} disabled={busy !== null}>
-                      End session
-                    </Button>
-                    <Button onClick={() => setConfirmEnd(false)}>Keep going</Button>
-                  </span>
-                ) : (
-                  <button type="button" className="text-xs text-stone-500 underline" onClick={() => setConfirmEnd(true)} disabled={busy !== null}>
+    <Screen aside={<LessonMap snap={snap} />} asideLabel="Lesson map">
+      <div className="flex flex-col gap-[14px]">
+        <div className="section-head">
+          <span className="text-[15px] text-secondary">{snap.goalText}</span>
+          {snap.status === 'active' && (
+            <div className="button-row shrink-0">
+              <Button onClick={() => void pause()} disabled={busy !== null}>
+                Pause
+              </Button>
+              {confirmEnd ? (
+                <>
+                  <span className="t-small text-secondary">End for good? What you learned so far is kept.</span>
+                  <Button onClick={() => void end()} disabled={busy !== null}>
                     End session
-                  </button>
-                )}
-              </div>
-            )}
-          </header>
-          {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-          <PhaseView snap={snap} busy={busy !== null} onSend={send} onLeave={() => void refresh()} />
+                  </Button>
+                  <Button kind="quiet" onClick={() => setConfirmEnd(false)}>
+                    Keep going
+                  </Button>
+                </>
+              ) : (
+                <Button kind="quiet" onClick={() => setConfirmEnd(true)} disabled={busy !== null}>
+                  End session
+                </Button>
+              )}
+            </div>
+          )}
         </div>
+        <h1 className="t-display">{snap.plan.title}</h1>
       </div>
-      <LessonMap snap={snap} />
-    </div>
+      {error && <Notice error>{error}</Notice>}
+      <PhaseView snap={snap} busy={busy !== null} onSend={send} onLeave={() => void refresh()} />
+    </Screen>
   );
 }
 
@@ -148,13 +153,14 @@ function PhaseView({ snap, busy, onSend, onLeave }: { snap: SessionSnapshot; bus
       );
     case 'orient':
       return (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-[24px]">
           <Card title="Today">
-            <p className="text-[15px]">{snap.plan.orientation}</p>
-            <ol className="mt-3 space-y-1 text-sm">
-              {snap.plan.steps.map((s, i) => (
-                <li key={s.nodeId}>
-                  <span className="text-stone-400">{i + 1}.</span> <span className="font-medium">{s.name}</span> <span className="text-stone-500">— {s.why}</span>
+            <p className="m-0 text-[15px]">{snap.plan.orientation}</p>
+            <ol className="m-0 mt-[14px] flex list-none flex-col gap-[10px] p-0">
+              {snap.plan.steps.map((s) => (
+                <li key={s.nodeId} className="flex flex-col">
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-secondary">{s.why}</span>
                 </li>
               ))}
             </ol>
@@ -178,16 +184,16 @@ function PhaseView({ snap, busy, onSend, onLeave }: { snap: SessionSnapshot; bus
       );
     case 'preview':
       return (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-[24px]">
           <Card title="What you can do now">
-            <p className="text-[15px]">{snap.closing?.canDo}</p>
+            <p className="m-0 text-[15px]">{snap.closing?.canDo}</p>
             {snap.closing && snap.closing.recall.length > 0 && (
-              <ul className="mt-3 space-y-1 text-sm">
+              <ul className="m-0 mt-[12px] flex list-none flex-col gap-[6px] p-0">
                 {snap.closing.recall.map((r) => (
-                  <li key={r.nodeId} className="flex items-center gap-2">
+                  <li key={r.nodeId} className="flex items-baseline gap-[10px]">
                     <ScorePill score={r.score} />
                     <span>{r.name}</span>
-                    {r.note && <span className="text-stone-500">— {r.note}</span>}
+                    {r.note && <span className="text-muted">{r.note}</span>}
                   </li>
                 ))}
               </ul>
@@ -196,7 +202,7 @@ function PhaseView({ snap, busy, onSend, onLeave }: { snap: SessionSnapshot; bus
           {snap.closing?.previewQuestion && (
             <Card title="Tomorrow opens with">
               <Markdown text={snap.closing.previewQuestion} />
-              <p className="mt-2 text-xs text-stone-500">No need to answer now. Let it sit.</p>
+              <p className="t-small m-0 mt-[10px] text-muted">No need to answer now. Let it sit.</p>
             </Card>
           )}
           <Button kind="primary" onClick={() => onSend({ answer: '' })} disabled={busy}>
@@ -206,9 +212,9 @@ function PhaseView({ snap, busy, onSend, onLeave }: { snap: SessionSnapshot; bus
       );
     case 'done':
       return (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-[24px]">
           <Card title="Session complete">
-            <p className="text-[15px]">{snap.closing?.canDo || 'Evidence and your own words are saved.'}</p>
+            <p className="m-0 text-[15px]">{snap.closing?.canDo || 'Evidence and your own words are saved.'}</p>
           </Card>
           <Button kind="primary" onClick={onLeave}>
             Done
@@ -245,41 +251,42 @@ function TeachView({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
   const asksConfidence = card.stage !== 'compress' && card.stage !== 'connect';
 
   return (
-    <section className="space-y-4">
+    <section className="flex flex-col gap-[24px]">
       {grade && (
-        <div className={'rounded-lg border p-4 ' + (grade.confidentlyWrong ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-stone-50')}>
-          <div className="mb-1 flex items-center gap-2 text-sm">
+        <div className="flex flex-col gap-[6px]">
+          <div className="flex items-baseline gap-[10px]">
             <ScorePill score={grade.score} />
-            {grade.confidentlyWrong && <span className="text-xs font-medium text-red-700">Confidently wrong. Worth a second look.</span>}
+            {grade.confidentlyWrong && <span className="t-small text-secondary">Confidently wrong. Worth a second look.</span>}
           </div>
-          <Markdown text={grade.feedback} className="text-sm" />
-          {grade.misconception && <p className="mt-1 text-xs text-red-700">Noted as a misconception to repair: {grade.misconception}</p>}
+          <Markdown text={grade.feedback} className="text-soft" />
+          {grade.misconception && <p className="t-small m-0 text-secondary">Noted to repair: {grade.misconception}</p>}
         </div>
       )}
       <Card title={STAGE_LABEL[card.stage]}>
         <CardBody card={card} />
       </Card>
       {busy ? (
-        <p className="text-sm text-stone-500">Thinking…</p>
+        <p className="t-small m-0 text-muted">Thinking…</p>
       ) : card.stage === 'explain' || card.stage === 'support' ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-stone-600">How hard was that to follow?</span>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setEffort(n)}
-              className={'h-8 w-8 rounded-full border text-sm ' + (effort === n ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 bg-white')}
-            >
-              {n}
-            </button>
-          ))}
-          <Button kind="primary" onClick={() => onSend({ answer: '', effort: effort ?? undefined })}>
-            Continue
-          </Button>
+        <div className="flex flex-col gap-[18px]">
+          <div className="flex flex-col gap-[12px]">
+            <span className="text-[15px] text-secondary">How hard was that to follow?</span>
+            <div role="radiogroup" aria-label="How hard was that to follow" className="chip-group">
+              {EFFORT_LABELS.map((label, i) => (
+                <button key={label} type="button" role="radio" aria-checked={effort === i + 1} className="chip" onClick={() => setEffort(i + 1)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="button-row">
+            <Button kind="primary" onClick={() => onSend({ answer: '', effort: effort ?? undefined })}>
+              Continue
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-[18px]">
           <AnswerSurface
             value={draft.answer}
             onChange={(answer) => set({ answer })}
@@ -289,7 +296,9 @@ function TeachView({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
             placeholder={card.stage === 'compress' ? 'In your own words, at most two sentences.' : undefined}
             rows={card.stage === 'compress' ? 3 : 4}
           />
-          {card.stage === 'compress' && <input className={inputClass} placeholder="Handle (optional): a one-line compression, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />}
+          {card.stage === 'compress' && (
+            <input className="input" aria-label="Handle" placeholder="Handle (optional): a one-line compression, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />
+          )}
           <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} />
         </div>
       )}
@@ -313,12 +322,10 @@ function CardBody({ card }: { card: PublicCard }) {
       return <Markdown text={card.task} />;
     case 'index':
       return (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-[18px]">
           <Markdown text={card.gist} />
-          <p className="text-sm text-stone-600">{card.placement}</p>
-          <div className="border-t border-stone-200 pt-3">
-            <Markdown text={card.question} />
-          </div>
+          <p className="m-0 text-secondary">{card.placement}</p>
+          <Markdown text={card.question} />
         </div>
       );
   }
@@ -328,16 +335,16 @@ function RecallForm({ title, intro, busy, onSend, submitLabel }: { title: string
   const [text, setText] = useState('');
   const submit = () => !busy && onSend({ answer: text });
   return (
-    <section className="space-y-4">
+    <section className="flex flex-col gap-[24px]">
       <Card title={title}>
-        <p className="text-[15px]">{intro}</p>
+        <p className="m-0 text-[15px]">{intro}</p>
       </Card>
       <AnswerSurface value={text} onChange={setText} onSubmit={submit} placeholder="From memory, however it comes." rows={8} disabled={busy} />
-      <div className="flex items-center gap-3">
+      <div className="answer-actions">
         <Button kind="primary" onClick={submit} disabled={busy}>
           {busy ? 'Comparing…' : submitLabel}
         </Button>
-        <span className="text-xs text-stone-500">⌘↵ to submit</span>
+        <span className="keyboard-hint">⌘↵ to submit</span>
       </div>
     </section>
   );
@@ -345,55 +352,35 @@ function RecallForm({ title, intro, busy, onSend, submitLabel }: { title: string
 
 function LessonMap({ snap }: { snap: SessionSnapshot }) {
   return (
-    <aside className="w-64 shrink-0 overflow-y-auto border-l border-stone-200 bg-white p-4">
-      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-stone-500">Lesson map</div>
-      <ol className="space-y-2">
+    <>
+      <h2 className="t-title">Lesson map</h2>
+      <ol className="m-0 flex list-none flex-col gap-[14px] p-0">
         {snap.plan.steps.map((s) => {
           const active = snap.current?.nodeId === s.nodeId;
           return (
-            <li key={s.nodeId} className="text-sm">
-              <div className="flex items-start gap-2">
-                <span
-                  className={
-                    'mt-1 h-2.5 w-2.5 shrink-0 rounded-full ' +
-                    (s.status === 'done' ? 'bg-green-600' : active ? 'bg-stone-900 ring-2 ring-stone-300' : 'bg-stone-300')
-                  }
-                />
-                <div>
-                  <div className={active ? 'font-medium' : 'text-stone-700'}>{s.name}</div>
-                  <div className="text-[11px] uppercase text-stone-400">{s.mode === 'index' ? 'index pass' : s.mode === 'derive' ? 'teach + derive' : 'teach'}</div>
-                  {active && snap.current && (
-                    <div className="mt-1 text-xs text-stone-500">
-                      {STAGE_LABEL[snap.current.stage]} · step {snap.current.stageIndex + 1} of {snap.current.stageCount}
-                    </div>
-                  )}
-                </div>
+            <li key={s.nodeId} className="flex gap-[14px]">
+              <span className={`dot mt-[5px] ${s.status === 'done' ? 'is-done' : active ? 'is-current' : 'is-upcoming'}`} aria-hidden="true" />
+              <div>
+                <div className={active ? 'font-medium' : 'text-soft'}>{s.name}</div>
+                <div className="t-caption text-muted">{s.mode === 'index' ? 'Index pass' : s.mode === 'derive' ? 'Teach and derive' : 'Teach'}</div>
               </div>
             </li>
           );
         })}
       </ol>
-      <div className="mt-6 text-xs text-stone-500">
-        {snap.phase === 'teach' && 'Everything you type becomes evidence. Your own words are never rewritten.'}
-        {snap.phase === 'reconstruct' && 'Recall first, then the map shows what came back.'}
-      </div>
-    </aside>
+    </>
   );
 }
 
-function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-5">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-stone-500">{title}</h2>
-        {subtitle && <span className="truncate text-xs text-stone-400">{subtitle}</span>}
-      </div>
-      {children}
+    <div className="flex flex-col gap-[10px]">
+      <div className="t-caption text-muted">{title}</div>
+      <div className="text-[16px]">{children}</div>
     </div>
   );
 }
 
 function ScorePill({ score }: { score: number }) {
-  const tone = score >= 0.7 ? 'bg-green-50 text-green-700' : score >= 0.4 ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-700';
-  return <span className={'rounded px-1.5 py-0.5 text-[11px] font-medium ' + tone}>{Math.round(score * 10)}/10</span>;
+  return <span className="font-medium text-text">{Math.round(score * 10)}/10</span>;
 }

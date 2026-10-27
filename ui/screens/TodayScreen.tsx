@@ -1,9 +1,20 @@
-import { Empty, Page } from '../components/Page';
+import type { ScreenName } from '../components/Shell';
+import { Screen } from '../components/Shell';
+import { Button, Empty } from '../components/controls';
 
-export function TodayScreen() {
+export function TodayScreen({ onNavigate }: { onNavigate: (s: ScreenName) => void }) {
   return (
-    <Page title="Today">
-      <Empty>Nothing here yet. This screen arrives in a later milestone.</Empty>
-    </Page>
+    <Screen>
+      <h1 className="t-display">Today</h1>
+      <Empty
+        action={
+          <Button kind="primary" onClick={() => onNavigate('session')}>
+            Go to session
+          </Button>
+        }
+      >
+        Your daily plan, what is fading and tonight&rsquo;s question arrive with practice. For now, sessions start from a goal.
+      </Empty>
+    </Screen>
   );
 }

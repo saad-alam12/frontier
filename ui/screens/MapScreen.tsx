@@ -1,9 +1,11 @@
-import { Empty, Page } from '../components/Page';
+import { Screen } from '../components/Shell';
+import { Empty } from '../components/controls';
 
 export function MapScreen() {
   return (
-    <Page title="Map">
-      <Empty>Nothing here yet. This screen arrives in a later milestone.</Empty>
-    </Page>
+    <Screen>
+      <h1 className="t-display">Map</h1>
+      <Empty>The full map of what you know arrives in a later version. The session panel already shows the part around what you are learning.</Empty>
+    </Screen>
   );
 }

@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -108,6 +108,13 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Atlas is implemented as CSS variables in `ui/styles.css` (exposed to Tailwind through `@theme inline`) plus a small set of component classes (`.btn`, `.chip`, `.answer-surface`, `.list-card`, `.def-grid`, `.step-path`, `.v-path`, `.markdown`); screens compose them from `ui/components/` (`Shell`, `controls`, `paths`, `AnswerSurface`, `Markdown`). Spacing in screens uses the token steps only.
+- 2026-10-27 — Questions use a new Question type style (24/1.45, weight 400) with KaTeX math, not the mockups' 36/500 Display with Unicode math (owner's instruction). Display stays for page titles. Recorded in `docs/visual-design.md`.
+- 2026-10-27 — Settings is the eighth rail item, alone at the bottom (the mockups show only the seven learning screens).
+- 2026-10-27 — Errors use one muted tone (`--danger-text`, #E3A59B) for text only; there is no red fill anywhere, so nothing competes with the accent.
+- 2026-10-27 — The effort rating after an explanation became five chips (Easy · Fine · Took effort · Hard · Lost me), stored as 1–5 as before.
+- 2026-10-27 — Library layout: the selected source's ideas in the main column, the list of sources (with progress) in the right panel.
 
 - 2026-10-27 — The "Listening" indicator shows for 1.5 s after the answer field grows by four or more characters in one input event: dictation tools (Handy) deliver text in bursts, typing delivers one character at a time. There is no other way to tell dictated text from typed text in a plain textarea, and the field stays plain so pasting and simulated typing keep working.
 - 2026-10-27 — The answer-reading instructions (one field, empty = no idea, dictated speech) live in `prompts/answering.md` and are appended to the tutor, recall and prober prompts by `answerReadingPrompt()`; the M5 grader must use it too. Confidence reaches models as a word ("fairly sure"), never a number.

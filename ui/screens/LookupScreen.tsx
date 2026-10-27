@@ -1,9 +1,11 @@
-import { Empty, Page } from '../components/Page';
+import { Screen } from '../components/Shell';
+import { Empty } from '../components/controls';
 
 export function LookupScreen() {
   return (
-    <Page title="Lookup">
-      <Empty>Nothing here yet. This screen arrives in a later milestone.</Empty>
-    </Page>
+    <Screen>
+      <h1 className="t-display">Lookup</h1>
+      <Empty>Searching your own ideas, in your own words, arrives in a later version.</Empty>
+    </Screen>
   );
 }

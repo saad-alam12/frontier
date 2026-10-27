@@ -50,12 +50,13 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 
 ## 3. Typography
 
-- **Geist** (Google Fonts / Vercel, SIL OFL; check the license note and bundle the font files locally, the app must work offline) for everything. No serif, no monospace in the UI. Code blocks inside explanations may use Geist Mono.
+- **Geist** (Vercel, SIL OFL 1.1, bundled locally from the `@fontsource/geist` and `@fontsource/geist-mono` packages so the app works offline; OFL allows bundling the font with software that is sold, it only forbids selling the font on its own) for everything. No serif, no monospace in the UI. Code blocks inside explanations may use Geist Mono.
 - Weights: 300 (learner's own text, long secondary text), 400 (body), 500 (headings, emphasis, primary buttons), 600 (brand mark only).
 
 | Style | Size / line height | Weight | Letter spacing | Use |
 | --- | --- | --- | --- | --- |
-| Display | 36 / 1.22 | 500 | -0.025em | the current question, page titles |
+| Display | 36 / 1.22 | 500 | -0.025em | page titles (screen names, goal titles, "What do you want to achieve?") |
+| Question | 24 / 1.45 | 400 | -0.012em | every question the learner answers (session cards, probe), rendered as Markdown with KaTeX math |
 | Title | 24 / 1.3 | 500 | -0.02em | side panel titles |
 | Heading | 18 / 1.35 | 500 | -0.01em | section headings in the main column |
 | Learner text | 19 / 1.55 | 300 | 0 | the answer field and the learner's past answers |
@@ -65,7 +66,8 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 | Caption | 12 / 1.4 | 400 (500 when current) | 0 | step labels, nav labels, hints |
 | Map label | 11–12 | 400 | 0 | map node labels (current node: 15) |
 
-- Math renders with KaTeX inline in any of these styles; math in the question may use `accent-text`.
+- Math renders with KaTeX inline in any of these styles, at 1.1em of the surrounding text (KaTeX's default 1.21em is sized for serif text and looks oversized next to Geist). Math keeps the text colour; it is never set in accent.
+- **Owner change (R1):** the mockups set the question in Display (36/500) with hand-typed Unicode math. That was too big and too heavy, and the math was not real LaTeX. Questions use the Question style above instead, and all math goes through KaTeX, so questions, explanations, statements and answers share one look.
 - Sentence case everywhere; no exclamation marks.
 
 ## 4. Spacing, radius, layout
@@ -73,7 +75,7 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 - Spacing steps (px): 4, 6, 8, 10, 12, 14, 16, 18, 22, 24, 28, 32, 36, 40, 48, 56, 72. Do not invent in-between values.
 - Radius: 10 (nav items), 12 (inputs), 14 (small cards), 18 (answer surface, list cards), 999 (buttons, chips, pills), 50% (dots).
 - **App shell** (desktop, ≥ 1200 px wide):
-  - Left nav rail: 96 px, border-right `border`. Brand mark (28 px ring with an accent dot) then text items 72 px wide, 12 px, radius 10; selected = `surface-selected` + `text`.
+  - Left nav rail: 96 px, border-right `border`. Brand mark (28 px ring with an accent dot) then text items 72 px wide, 12 px, radius 10; selected = `surface-selected` + `text`. Settings sits alone at the bottom of the rail.
   - Main column: padding 56 top, 72 sides, 48 bottom; vertical gap 36 between blocks. Content max width **720 px**, left-aligned (not centred).
   - Right panel: 520–560 px, padding 48 / 40, `bg-panel`, border-left `border`, vertical gap 22–28.
   - Below 1200 px the right panel moves under the main column; below 700 px the nav becomes a top bar. No horizontal scrolling.
@@ -95,7 +97,7 @@ The six session steps (Predict, Explain, Check, Connect, Own words, Use). Each p
 Same point styles, connector running down. Used for the lecture timeline on the goal page and anywhere a sequence is shown. The final milestone (exam) is an accent ring.
 
 ### Question
-Display style. One sentence of framing ("Before I explain anything:") is part of the question, not a separate label.
+Question style (24/1.45, weight 400), Markdown with KaTeX. One sentence of framing ("Before I explain anything:") is part of the question, not a separate label.
 
 ### Answer surface
 `surface`, radius 18, inset 1px `border-strong`, padding 22/24/18. Learner text style, no visible field border inside. Footer row above a 1px divider: left a listening/hint area, right the confidence chips (A guess · Fairly sure · Sure; selected = `chip-selected` + `text`). Placeholder: "Say it or type it, however it comes. Leave it empty if you have no idea." When text is arriving from dictation, five 3 px accent bars animate (scaleY 0.45→1, staggered 0.9–1.3 s) with the word "Listening"; otherwise show the hint "Speak or type, however it comes".

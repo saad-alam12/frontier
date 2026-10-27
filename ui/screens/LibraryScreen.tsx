@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call, onEvent } from '../api';
 import type { DeltaClass, DeltaSummary, SourceSummary } from '../../backend/api/contract';
-import { Button, Empty, Page } from '../components/Page';
+import { Breadcrumb, Screen } from '../components/Shell';
+import { Button, Empty, Meter, Notice, Section } from '../components/controls';
+import { Markdown } from '../components/Markdown';
 
 const CLASS_LABEL: Record<DeltaClass, string> = {
   'new-fringe': 'New and learnable now',
@@ -11,12 +13,11 @@ const CLASS_LABEL: Record<DeltaClass, string> = {
   conflict: 'Conflicts with what you know',
 };
 
-const CLASS_STYLE: Record<DeltaClass, string> = {
-  'new-fringe': 'bg-green-50 text-green-800',
-  'new-beyond': 'bg-amber-50 text-amber-800',
-  deeper: 'bg-blue-50 text-blue-800',
-  known: 'bg-stone-100 text-stone-600',
-  conflict: 'bg-red-50 text-red-800',
+const STATUS_LABEL: Record<SourceSummary['status'], string> = {
+  pending: 'Waiting',
+  running: 'Reading',
+  done: 'Read',
+  failed: 'Some parts failed',
 };
 
 export function LibraryScreen() {
@@ -29,6 +30,7 @@ export function LibraryScreen() {
   const refresh = useCallback(async () => {
     const list = await call('library.list');
     setSources(list);
+    setSelected((current) => current ?? list[0]?.id ?? null);
   }, []);
 
   useEffect(() => {
@@ -44,8 +46,6 @@ export function LibraryScreen() {
       setDelta(null);
       return;
     }
-    const source = sources.find((s) => s.id === selected);
-    if (!source) return;
     void call('library.delta', { sourceId: selected }).then(setDelta);
   }, [selected, sources]);
 
@@ -64,136 +64,102 @@ export function LibraryScreen() {
 
   const remove = async (id: string) => {
     await call('library.remove', { sourceId: id });
-    if (selected === id) setSelected(null);
+    setSelected(null);
     await refresh();
   };
 
   const current = sources.find((s) => s.id === selected) ?? null;
-
-  return (
-    <Page
-      title="Library"
-      subtitle="Add lecture PDFs, notes or web pages. Each one is read into ideas and reasoning chains, then compared with what you already know."
-      actions={
-        <Button kind="primary" onClick={() => void addFiles()} disabled={busy}>
-          {busy ? 'Adding…' : 'Add files'}
-        </Button>
-      }
-    >
-      {notice && <pre className="mb-4 whitespace-pre-wrap rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{notice}</pre>}
-      {sources.length === 0 ? (
-        <Empty>No sources yet. Add a PDF, Markdown, text or HTML file to begin.</Empty>
-      ) : (
-        <div className="grid grid-cols-[minmax(260px,1fr)_2fr] gap-6">
-          <ul className="space-y-2">
-            {sources.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(s.id)}
-                  className={'w-full rounded-lg border p-3 text-left ' + (selected === s.id ? 'border-stone-900 bg-white' : 'border-stone-200 bg-white hover:border-stone-400')}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium">{s.title}</span>
-                    <StatusPill status={s.status} />
-                  </div>
-                  <div className="mt-1 text-xs text-stone-500">
-                    {s.kind} · {s.chunkCount} chunk{s.chunkCount === 1 ? '' : 's'} · {s.nodeCount} ideas
-                  </div>
-                  <Progress done={s.chunksDone} total={s.chunkCount} />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div>
-            {current ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-medium">{current.title}</h2>
-                  <div className="flex gap-2">
-                    {current.status !== 'running' && current.chunksDone < current.chunkCount && (
-                      <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>
-                    )}
-                    <Button kind="danger" onClick={() => void remove(current.id)}>
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-                {current.error && <p className="text-sm text-red-700">{current.error}</p>}
-                {delta && delta.total > 0 && (
-                  <div className="rounded-lg border border-stone-200 bg-white p-4">
-                    <p className="text-sm">{delta.sentence}</p>
-                    <div className="mt-3 space-y-3">
-                      {(Object.keys(CLASS_LABEL) as DeltaClass[])
-                        .filter((cls) => delta.counts[cls] > 0)
-                        .map((cls) => (
-                          <div key={cls}>
-                            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500">
-                              {CLASS_LABEL[cls]} · {delta.counts[cls]}
-                            </div>
-                            <ul className="space-y-1">
-                              {delta.items
-                                .filter((i) => i.cls === cls)
-                                .map((i) => (
-                                  <li key={i.nodeId} className="flex items-start gap-2 text-sm">
-                                    <span className={'mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase ' + CLASS_STYLE[cls]}>{i.kind}</span>
-                                    <span>
-                                      <span className="font-medium">{i.name}</span>
-                                      <span className="text-stone-600"> — {i.statement}</span>
-                                    </span>
-                                  </li>
-                                ))}
-                            </ul>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-lg border border-stone-200 bg-white p-4">
-                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-stone-500">Chunks</div>
-                  <ul className="divide-y divide-stone-100 text-sm">
-                    {current.chunks.map((c) => (
-                      <li key={c.idx} className="flex items-center justify-between gap-3 py-1.5">
-                        <span className="truncate text-stone-700">
-                          {c.idx + 1}. {c.locator}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2 text-xs text-stone-500">
-                          {c.nodeCount > 0 && <span>{c.nodeCount} ideas</span>}
-                          <StatusPill status={c.status} />
-                        </span>
-                        {c.error && <span className="w-full text-xs text-red-700">{c.error}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ) : (
-              <Empty>Select a source to see what it adds for you.</Empty>
-            )}
-          </div>
-        </div>
-      )}
-    </Page>
+  const addButton = (
+    <Button kind="primary" onClick={() => void addFiles()} disabled={busy}>
+      {busy ? 'Adding…' : 'Add files'}
+    </Button>
   );
-}
 
-function StatusPill({ status }: { status: string }) {
-  const style =
-    status === 'done'
-      ? 'bg-green-50 text-green-700'
-      : status === 'running'
-        ? 'bg-blue-50 text-blue-700'
-        : status === 'failed'
-          ? 'bg-red-50 text-red-700'
-          : 'bg-stone-100 text-stone-600';
-  return <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ' + style}>{status}</span>;
-}
+  if (sources.length === 0) {
+    return (
+      <Screen>
+        <h1 className="t-display">Library</h1>
+        {notice && <Notice error>{notice}</Notice>}
+        <Empty action={addButton}>Add a lecture PDF, notes or a web page. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+      </Screen>
+    );
+  }
 
-function Progress({ done, total }: { done: number; total: number }) {
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const aside = (
+    <>
+      <div className="section-head">
+        <h2 className="t-title">Sources</h2>
+        {addButton}
+      </div>
+      {notice && <Notice error>{notice}</Notice>}
+      <ul className="list-card">
+        {sources.map((s) => (
+          <li key={s.id}>
+            <button type="button" className="row" onClick={() => setSelected(s.id)} aria-current={s.id === selected ? 'true' : undefined}>
+              <span className="flex min-w-0 flex-col">
+                <span className={'truncate ' + (s.id === selected ? 'font-medium text-text' : 'text-soft')}>{s.title}</span>
+                <span className="t-small text-muted">
+                  {s.nodeCount} ideas · {STATUS_LABEL[s.status]}
+                </span>
+              </span>
+              <Meter value={s.chunkCount ? s.chunksDone / s.chunkCount : 0} accent={s.status === 'running'} />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+
   return (
-    <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-stone-100">
-      <div className="h-full bg-stone-700" style={{ width: `${pct}%` }} />
-    </div>
+    <Screen aside={aside} asideLabel="Sources">
+      <Breadcrumb items={[{ label: 'Library', onClick: () => setSelected(null) }, ...(current ? [{ label: current.title }] : [])]} />
+      {current ? (
+        <>
+          <div className="flex flex-col gap-[14px]">
+            <h1 className="t-display">{current.title}</h1>
+            {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
+            {current.error && <Notice error>{current.error}</Notice>}
+            <div className="button-row">
+              {current.status !== 'running' && current.chunksDone < current.chunkCount && <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>}
+              <Button kind="quiet" onClick={() => void remove(current.id)}>
+                Remove from library
+              </Button>
+            </div>
+          </div>
+          {delta &&
+            (Object.keys(CLASS_LABEL) as DeltaClass[])
+              .filter((cls) => delta.counts[cls] > 0)
+              .map((cls) => (
+                <Section key={cls} title={CLASS_LABEL[cls]} meta={`${delta.counts[cls]}`}>
+                  <ul className="list-card">
+                    {delta.items
+                      .filter((i) => i.cls === cls)
+                      .map((i) => (
+                        <li key={i.nodeId} className="flex flex-col gap-[4px]">
+                          <span className="font-medium">{i.name}</span>
+                          <Markdown text={i.statement} className="text-soft" />
+                        </li>
+                      ))}
+                  </ul>
+                </Section>
+              ))}
+          <Section title="Parts" meta={`${current.chunksDone} of ${current.chunkCount} read`}>
+            <ul className="list-card">
+              {current.chunks.map((c) => (
+                <li key={c.idx} className="row">
+                  <span className="truncate text-soft">{c.locator || `Part ${c.idx + 1}`}</span>
+                  <span className="t-small shrink-0 text-muted">
+                    {c.status === 'done' ? `${c.nodeCount} ideas` : STATUS_LABEL[c.status]}
+                    {c.error && <span className="block text-danger">{c.error}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </>
+      ) : (
+        <Empty>Choose a source to see what it adds for you.</Empty>
+      )}
+    </Screen>
   );
 }
