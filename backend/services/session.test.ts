@@ -43,6 +43,7 @@ function fakeTutor(scores: number[]) {
       use: { stage: 'use', task: 'Find the equilibrium of this game; and say why this other one has none in pure strategies.', answerKey: '(A,B)', rubric: ['finds it', 'explains the no case'] },
       index: { stage: 'index', gist: 'A profile is a list of strategies.', placement: 'It sits under Nash.', question: 'What is a profile?', answerKey: 'one strategy per player' },
       support: { stage: 'support', markdown: 'Worked example: ...' },
+      reteach: { stage: 'reteach', markdown: 'You have been reading it as the best outcome for all; it is about one player at a time.' },
     };
     return { grade, card: next ? cards[next] : null };
   };
@@ -59,7 +60,8 @@ async function setup(scores: number[] = []) {
     { statement: 'Can explain dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 2 }, { nodeId: ids.get('dominantNash') as string, depth: 3 }] },
   ]);
   refreshGoalFields(db);
-  const provider = new FakeProvider({ tutor: fakeTutor(scores) });
+  const tutor = fakeTutor(scores);
+  const provider = new FakeProvider({ tutor, tutorEscalation: tutor });
   provider.script('planner', (req: CompleteRequest<unknown>) => {
     const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
     const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
@@ -195,5 +197,26 @@ describe('teaching session', () => {
     expect(snap.current?.stage).toBe('compress');
     snap = await respond(deps, snap.id, answer('own words')); // 0.95 → skip ahead; compress is the last before use, so use follows
     expect(snap.current?.stage).toBe('use');
+  });
+
+  it('escalates to a fresh explanation from the escalation model when the learner fails after a worked example', async () => {
+    const { ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.2, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const nashId = ids.get('nash') as string;
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('x'));
+    snap = await respond(deps, snap.id, answer('wrong')); // predict 0.1
+    snap = await respond(deps, snap.id, answer('')); // explain read
+    snap = await respond(deps, snap.id, answer('wrong')); // check 0.1
+    snap = await respond(deps, snap.id, answer('wrong')); // derive 0.1 → worked example
+    expect(snap.current?.stage).toBe('support');
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('connect');
+    const before = deps.provider.calls.length;
+    snap = await respond(deps, snap.id, answer('still lost')); // connect 0.2 → escalate
+    expect(snap.current?.stage).toBe('reteach');
+    expect(deps.provider.calls.slice(before).map((c) => c.role)).toContain('tutorEscalation');
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('compress'); // resumes after the stage that failed
   });
 });

@@ -7,11 +7,12 @@ import { AbortError, createSdkMcpServer, query, tool } from '@anthropic-ai/claud
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { CompleteRequest, CompleteResult, HelperTool, LlmProvider, Role } from './provider';
+import type { ModelChoice } from '../settings/schema';
 import { NoSubmitError } from './provider';
 import { SubmitTracker, flattenMessages, runHelperTool } from './submitLoop';
 
 export interface AgentSdkProviderOptions {
-  modelForRole: (role: Role) => string;
+  modelForRole: (role: Role) => ModelChoice;
   /** Working directory for the agent process. Nothing is read from it; it keeps the SDK away from the source tree. */
   cwd: string;
   maxTurns?: number;
@@ -25,7 +26,7 @@ export class AgentSdkProvider implements LlmProvider {
   constructor(private readonly options: AgentSdkProviderOptions) {}
 
   async complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
-    const model = this.options.modelForRole(req.role);
+    const { model, effort } = this.options.modelForRole(req.role);
     const tracker = new SubmitTracker(req);
     const abort = new AbortController();
     if (req.signal) req.signal.addEventListener('abort', () => abort.abort(), { once: true });
@@ -70,6 +71,7 @@ export class AgentSdkProvider implements LlmProvider {
           abortController: abort,
           cwd: this.options.cwd,
           model,
+          effort,
           systemPrompt: system,
           tools: [],
           mcpServers: { [SERVER_NAME]: server },

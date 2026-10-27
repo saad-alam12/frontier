@@ -30,7 +30,20 @@ describe('session mechanics', () => {
 
   it('a middling score resets both counters', () => {
     const { edge } = applyGrade({ consecutiveFailures: 2, easyStreak: 0 }, 0.6);
-    expect(edge).toEqual({ consecutiveFailures: 0, easyStreak: 0 });
+    expect(edge).toMatchObject({ consecutiveFailures: 0, easyStreak: 0 });
+  });
+
+  it('escalates once when the learner still fails after a worked example', () => {
+    let edge = emptyEdge();
+    let action;
+    for (const score of [0.1, 0.1, 0.1]) ({ edge, action } = applyGrade(edge, score));
+    expect(action).toBe('support');
+    ({ edge, action } = applyGrade(edge, 0.2));
+    expect(action).toBe('escalate');
+    ({ edge, action } = applyGrade(edge, 0.2));
+    expect(action).toBe('none'); // the escalation is used once per idea
+    ({ edge, action } = applyGrade(edge, 0.8));
+    expect(edge).toMatchObject({ supported: true, escalated: true });
   });
 
   it('two easy successes skip ahead to compress', () => {

@@ -2,7 +2,7 @@ import { dialog, ipcMain } from 'electron';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
-import { SettingsPatchSchema } from '../settings/schema';
+import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
@@ -26,6 +26,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       ctx.onSettingsChanged();
       return next;
     },
+    'settings.modelOptions': () => modelOptions(),
     'settings.testConnection': () => runConnectionTest(ctx.provider()),
     'settings.chooseFolder': async () => {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });

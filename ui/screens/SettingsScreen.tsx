@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
 import { call } from '../api';
-import type { AppInfo, ConnectionTestResult, Role, Settings } from '../../backend/api/contract';
+import type { AppInfo, ConnectionTestResult, Effort, ModelOptions, Role, Settings, SettingsPatch } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
 import { Button, Field, Notice, Section } from '../components/controls';
 
-const ROLE_LABELS: { role: Role; label: string }[] = [
-  { role: 'tutor', label: 'Tutor' },
-  { role: 'goalCompiler', label: 'Goal compiler' },
-  { role: 'prober', label: 'Prober' },
-  { role: 'planner', label: 'Planner' },
-  { role: 'extractor', label: 'Extractor' },
-  { role: 'matcher', label: 'Matcher' },
-  { role: 'problemGenerator', label: 'Problem generator' },
-  { role: 'grader', label: 'Grader' },
-  { role: 'librarian', label: 'Librarian' },
-  { role: 'connectionTest', label: 'Connection test' },
+const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
+  { role: 'goalCompiler', label: 'Goal compiler', does: 'Turns a goal into skills and the ideas each needs' },
+  { role: 'tutor', label: 'Tutor', does: 'Teaches each step and grades your answers' },
+  { role: 'tutorEscalation', label: 'Second opinion', does: 'Explains afresh when a worked example did not help' },
+  { role: 'prober', label: 'Prober', does: 'Writes and judges the probe questions' },
+  { role: 'planner', label: 'Planner', does: "Picks each session's ideas" },
+  { role: 'extractor', label: 'Extractor', does: 'Reads sources into ideas and chains' },
+  { role: 'matcher', label: 'Matcher', does: 'Decides which ideas are the same' },
+  { role: 'problemGenerator', label: 'Problem generator', does: 'Writes practice problems (with practice)' },
+  { role: 'grader', label: 'Grader', does: 'Grades practice (with practice)' },
+  { role: 'librarian', label: 'Librarian', does: 'Answers lookups (with lookup)' },
+  { role: 'connectionTest', label: 'Connection test', does: 'The test button above' },
 ];
+
+const EFFORT_LABEL: Record<Effort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+const CUSTOM = '__custom__';
 
 export function SettingsScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -23,15 +27,17 @@ export function SettingsScreen() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [saved, setSaved] = useState(false);
+  const [options, setOptions] = useState<ModelOptions | null>(null);
 
   useEffect(() => {
     void call('settings.get').then(setSettings);
+    void call('settings.modelOptions').then(setOptions);
     void call('app.info').then(setInfo);
   }, []);
 
-  if (!settings) return <Screen>{null}</Screen>;
+  if (!settings || !options) return <Screen>{null}</Screen>;
 
-  const update = async (patch: Partial<Settings>) => {
+  const update = async (patch: SettingsPatch) => {
     const next = await call('settings.update', patch);
     setSettings(next);
     setSaved(true);
@@ -97,22 +103,13 @@ export function SettingsScreen() {
         </div>
       </Section>
 
-      <Section title="Model per role" gap={22}>
-        <p className="m-0 text-[13px] text-muted">Leave a field empty to use the default.</p>
-        <div className="grid grid-cols-2 gap-x-[16px] gap-y-[22px]">
-          {ROLE_LABELS.map(({ role, label }) => (
-            <Field key={role} label={label} htmlFor={`model-${role}`}>
-              <input
-                id={`model-${role}`}
-                className="input"
-                value={settings.models[role] ?? ''}
-                placeholder="default"
-                onChange={(e) => setSettings({ ...settings, models: { ...settings.models, [role]: e.target.value } })}
-                onBlur={(e) => void update({ models: { [role]: e.target.value } as Settings['models'] })}
-              />
-            </Field>
+      <Section title="Models" gap={14}>
+        <p className="m-0 text-[13px] text-muted">Which model does each job, and how hard it thinks. Higher effort is slower and uses more of your plan.</p>
+        <ul className="list-card">
+          {ROLE_LABELS.map(({ role, label, does }) => (
+            <RoleRow key={role} role={role} label={label} does={does} settings={settings} options={options} onChange={(patch) => void update(patch)} />
           ))}
-        </div>
+        </ul>
       </Section>
 
       <Section title="Data folder" gap={14}>
@@ -124,5 +121,97 @@ export function SettingsScreen() {
         {info && <p className="m-0 text-[12px] text-muted">Frontier {info.version}. Settings file: {info.settingsFile}</p>}
       </Section>
     </Screen>
+  );
+}
+
+function RoleRow({
+  role,
+  label,
+  does,
+  settings,
+  options,
+  onChange,
+}: {
+  role: Role;
+  label: string;
+  does: string;
+  settings: Settings;
+  options: ModelOptions;
+  onChange: (patch: SettingsPatch) => void;
+}) {
+  const fallback = options.defaults[role];
+  const name = (id: string) => options.models.find((m) => m.id === id)?.name ?? id;
+  const model = settings.models[role]?.trim() || fallback.model;
+  const known = options.models.find((m) => m.id === model);
+  const [custom, setCustom] = useState(known ? '' : model);
+  const [editingCustom, setEditingCustom] = useState(!known);
+  const efforts = known?.efforts ?? options.efforts;
+  const effort = settings.efforts[role] ?? (model === fallback.model ? fallback.effort : 'high');
+  const overridden = Boolean(settings.models[role]?.trim()) || settings.efforts[role] !== undefined;
+  const setModel = (id: string) => onChange({ models: { [role]: id === fallback.model ? '' : id } });
+
+  return (
+    <li className="flex flex-col gap-[10px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_180px_140px] items-center gap-[12px]">
+        <div className="flex min-w-0 flex-col">
+          <span>{label}</span>
+          <span className="t-small truncate text-muted">{does}</span>
+        </div>
+        <select
+          className="input"
+          aria-label={`${label} model`}
+          value={editingCustom ? CUSTOM : model}
+          onChange={(e) => {
+            if (e.target.value === CUSTOM) setEditingCustom(true);
+            else {
+              setEditingCustom(false);
+              setModel(e.target.value);
+            }
+          }}
+        >
+          {options.models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+          <option value={CUSTOM}>Custom…</option>
+        </select>
+        <select className="input" aria-label={`${label} effort`} value={effort} onChange={(e) => onChange({ efforts: { [role]: e.target.value as Effort } })}>
+          {efforts.map((e) => (
+            <option key={e} value={e}>
+              {EFFORT_LABEL[e]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {editingCustom && (
+        <input
+          className="input"
+          aria-label={`${label} custom model id`}
+          placeholder="Model id, e.g. claude-opus-5"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onBlur={() => custom.trim() && setModel(custom.trim())}
+        />
+      )}
+      {overridden && (
+        <div className="t-small flex gap-[12px] text-muted">
+          <span>
+            Default: {name(fallback.model)}, {EFFORT_LABEL[fallback.effort].toLowerCase()}
+          </span>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setEditingCustom(false);
+              setCustom('');
+              onChange({ models: { [role]: '' }, efforts: { [role]: null } });
+            }}
+          >
+            Use the default
+          </button>
+        </div>
+      )}
+    </li>
   );
 }

@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
+import type { ModelChoice } from '../settings/schema';
 import { NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
 
 export interface AnthropicApiProviderOptions {
   apiKey: string;
-  modelForRole: (role: Role) => string;
+  modelForRole: (role: Role) => ModelChoice;
   maxTokens?: number;
 }
 
@@ -20,7 +21,7 @@ export class AnthropicApiProvider implements LlmProvider {
   }
 
   async complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
-    const model = this.options.modelForRole(req.role);
+    const { model, effort } = this.options.modelForRole(req.role);
     const tracker = new SubmitTracker(req);
     const helperTools = req.tools ?? [];
     const tools: Anthropic.Tool[] = [
@@ -44,7 +45,9 @@ export class AnthropicApiProvider implements LlmProvider {
         .stream(
           {
             model,
-            max_tokens: this.options.maxTokens ?? 16000,
+            // thinking counts toward max_tokens, so the higher levels get more room
+            max_tokens: this.options.maxTokens ?? (effort === 'xhigh' || effort === 'max' ? 64000 : 32000),
+            output_config: { effort },
             system: `${req.system}\n\nWhen you are done, call the ${req.submit.name} tool exactly once with your final answer.`,
             tools,
             messages,

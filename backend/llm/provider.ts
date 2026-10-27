@@ -6,6 +6,7 @@ export const ROLES = [
   'prober',
   'planner',
   'tutor',
+  'tutorEscalation',
   'extractor',
   'matcher',
   'problemGenerator',

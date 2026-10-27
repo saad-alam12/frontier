@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isGraded } from '../core/session';
 import type { Stage } from '../core/session';
 import type { LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
@@ -17,6 +18,7 @@ export const CardSchemas = {
   use: z.object({ stage: z.literal('use'), task: md(2500), answerKey: md(3000), rubric: Rubric }),
   index: z.object({ stage: z.literal('index'), gist: md(2000), placement: md(600), question: md(800), answerKey: md(1000) }),
   support: z.object({ stage: z.literal('support'), markdown: md(6000) }),
+  reteach: z.object({ stage: z.literal('reteach'), markdown: md(6000) }),
 } as const;
 
 export type TutorCard = z.infer<(typeof CardSchemas)[keyof typeof CardSchemas]>;
@@ -68,7 +70,7 @@ export interface TutorStepResult {
 }
 
 export async function runTutorStep(provider: LlmProvider, input: TutorStepInput): Promise<TutorStepResult> {
-  const expectGrade = input.previous !== null && input.previous.stage !== 'explain' && input.previous.stage !== 'support';
+  const expectGrade = input.previous !== null && isGraded(input.previous.stage);
   const sections: string[] = [];
   sections.push(`## Goal\n${input.goalText}\n\nWhy this node today: ${input.why}`);
   sections.push(`## Node (for you only; do not reveal it before the learner has tried)\n[${input.node.id}] ${input.node.name} (${input.node.kind})\n${input.node.statement}`);
@@ -100,8 +102,14 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
       ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
       : '## Task\nGrade the response. No card is needed; this node is finished.',
   );
+  if (input.nextStage === 'reteach') {
+    sections.push(
+      'The learner has failed this idea again after a worked example. Read everything above about this idea, work out the one misunderstanding that best explains all of their answers, and write a fresh explanation that starts from it.',
+    );
+  }
   const result = await provider.complete({
-    role: 'tutor',
+    // the fresh explanation after a worked example goes to the escalation model
+    role: input.nextStage === 'reteach' ? 'tutorEscalation' : 'tutor',
     system: answerReadingPrompt('tutor'),
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade) },
@@ -117,6 +125,7 @@ export function cardText(card: TutorCard): string {
       return card.prompt;
     case 'explain':
     case 'support':
+    case 'reteach':
       return card.markdown;
     case 'check':
       return `${card.question}\n(answer key: ${card.answerKey}; rubric: ${card.rubric.join(' / ')})`;

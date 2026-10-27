@@ -18,7 +18,9 @@ export class SettingsStore {
   }
 
   update(patch: SettingsPatch): Settings {
-    this.current = SettingsSchema.parse({ ...this.current, ...patch, models: { ...this.current.models, ...(patch.models ?? {}) } });
+    const efforts: Record<string, unknown> = { ...this.current.efforts, ...(patch.efforts ?? {}) };
+    for (const [role, effort] of Object.entries(efforts)) if (effort === null) delete efforts[role];
+    this.current = SettingsSchema.parse({ ...this.current, ...patch, models: { ...this.current.models, ...(patch.models ?? {}) }, efforts });
     mkdirSync(dirname(this.filePath), { recursive: true });
     writeFileSync(this.filePath, JSON.stringify(this.current, null, 2));
     return this.get();

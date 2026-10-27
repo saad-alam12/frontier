@@ -12,6 +12,7 @@ Everything you write is for a learner who thinks, not for a reader who skims: pl
 - **compress** — Ask the learner to write the node in their own words, at most two sentences, and optionally pick a handle (a one-line compression, image or mnemonic).
 - **use** — One small goal-shaped task that needs the node (when the sources' worked examples are given, model the task on their style without copying one), and one case where the node does not apply, so the learner has to tell them apart. Give `answerKey` and `rubric`.
 - **index** — For index-tier nodes: a 30-second pass. `gist` (two or three sentences, Markdown), `placement` (one sentence on where it sits among the ideas the learner knows), one recognition `question` with its `answerKey`.
+- **reteach** — When the learner still fails after a worked example: re-diagnose. Read the whole history of this idea, name the one misunderstanding that best explains all of their answers (say it plainly, without blame), and explain the idea afresh from a different angle than before, starting where their thinking went wrong. Markdown, short.
 - **support** — After repeated failures: a fully worked example at the easiest level (start from one of the sources' worked examples when one fits, so the learner sees the course's own notation), in Markdown, that shows the node in action step by step, then one sentence on what to look for next time.
 
 ## Grading

@@ -124,7 +124,7 @@ Index-tier nodes get a 30-second **index pass** instead: gist, where it sits on 
 
 ### 4.3 Session rules
 
-- **Stay at the edge.** Three failures in a row → drop a level (worked example, or a prerequisite node). Repeated easy successes → remove support or skip ahead.
+- **Stay at the edge.** Three failures in a row → drop a level (worked example, or a prerequisite node). A failure after that worked example → escalate once: a stronger model re-diagnoses the misconception from the idea's whole history and explains afresh. Repeated easy successes → remove support or skip ahead.
 - **One goal per session.** Interleaving happens across sessions.
 - **Pause, don't lose.** Leaving a session pauses it; it resumes at the same card with nothing regenerated. Ending a session early is a separate, deliberate action. Unsent answers are kept as drafts.
 - **Passive reading is never the default.** Reading is raw material for the step loop.
@@ -287,7 +287,7 @@ Rules:
 - **One writer per store.** Only the merger writes the world layer. Only the evidence service writes evidence. NodeState is derived from evidence.
 - **Append-only evidence.** Never edit evidence; correct by appending.
 - **Structured outputs via submit tools.** Each agent ends by calling a `submit_*` tool whose input is validated with zod; validation errors go back to the model for a retry (max 3).
-- **Provider interface.** Every model call goes through `llm/` with a role name; the role-to-model mapping lives in settings (strong model for tutor, generator, grader; cheaper model allowed for matcher, chunk extraction on easy sources).
+- **Provider interface.** Every model call goes through `llm/` with a role name; settings map each role to a model and an effort level (`low` … `max`, passed as the Agent SDK `effort` option or the API's `output_config.effort`). Defaults: goal compiler and the escalation tutor Opus 5.5 at extra high; tutor and prober Opus 5.5 at medium; problem generator and grader Sonnet 5.5 at high; extractor, matcher and planner Haiku 5.5 at max; librarian and connection test Haiku 5.5 at medium.
 
 ### 11.3 Agent roles
 
@@ -297,6 +297,7 @@ Rules:
 | Prober | target subgraph, you-layer state | probe questions; then assessment updates |
 | Planner | owned nodes, targets, fringe | lesson map (DAG of nodes for this session) |
 | Tutor | lesson map, node, learner's neighbourhood, bugs, sources | the next step card (predict / explain / check / connect / compress / use) |
+| Tutor escalation | the whole history of one idea after a worked example did not help | a re-diagnosis and a fresh explanation (once per idea) |
 | Extractor | chunk + graph-so-far digest | nodes and chains with citations |
 | Matcher | extracted node + candidates | identity links |
 | Problem Generator | target nodes and chains, rung, cue, presentation, recent problems | statement, solution, rubric |

@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history, §5 library and extraction done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history, §5 library and extraction, §6 settings done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -66,6 +66,7 @@ Full list with acceptance checks: `docs/feedback-round-1.md`. In short:
 - `npm run seed [path]` loads the 36-node example graph into a database (default `~/Frontier/frontier.db`).
 - `npm run live:session [-- maxCards]` seeds the example graph into a temporary database and walks a few teaching cards with the real model and canned answers; prints every card and grade.
 - `npm run live:ingest -- path/to/lecture.pdf [db path]` ingests one real file with the real model and the local embedding model (downloads bge-small-en-v1.5, about 130 MB, on first use), then prints the delta sentence.
+- `npm run live:compare -- <file> --a <model>:<effort> --b <model>:<effort> [--role extractor|matcher]` ingests one file twice into temporary databases, once per setting for that role (other roles stay at their defaults), and prints nodes, chains, samples, tokens and cost side by side. Never touches `~/Frontier/frontier.db`; reuses `~/Frontier/models-cache` for the embedding model.
 - `npm run live:connection` runs the connection test against the real model (uses the Claude login on this machine; set `FRONTIER_PROVIDER=anthropicApi` and `ANTHROPIC_API_KEY` for the API provider).
 
 ## Owner checkpoints to review
@@ -108,6 +109,11 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Effort per role: checked the current effort documentation (platform.claude.com/docs/en/build-with-claude/effort) and the installed SDK types. Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5 all accept low, medium, high, xhigh and max, so no combination is hidden; a custom model id is offered every level. The API provider sets `output_config.effort` and raises `max_tokens` to 64k at xhigh/max (32k otherwise) because thinking counts toward it. One live connection test at Haiku 5.5 medium passed through the Agent SDK from the cloud session.
+- 2026-10-27 — Escalation: a new `reteach` stage. After a worked example (support), the next failure on that idea calls the `tutorEscalation` role once, with the idea's full history, for a re-diagnosis and fresh explanation; then the loop resumes after the stage that failed. Edge flags `supported`/`escalated` persist per idea. Shown to the learner as "Another way in"; the role is labelled "Second opinion" in Settings.
+- 2026-10-27 — `live:compare` covers the roles that run during ingestion (extractor, matcher). Other roles would need recorded prompts with their submit schemas; not built, noted as an open question.
+- 2026-10-27 — Settings stores model and effort overrides per role; an effort patch of `null` returns that role to its default. The "Default: …" line shows only for roles that differ from their default.
 
 - 2026-10-27 — Fringe rule changed (owner, R1 §4.4): every unowned root is learnable now, goal or not; the `goalNeeded` input is gone. Planning drops unverified roots from the fringe so a compile's guesses are never taught (§5.4, completed with the goal materials rule in Goals v2).
 - 2026-10-27 — Worked examples live in an `examples` table written by the merger (part of the merge plan, one writer for the world layer), deleted with their source or node. The tutor receives them for the node it teaches.
@@ -170,6 +176,8 @@ Record choices the design did not settle, newest first: date, decision, reason.
 - 2026-10-26 — The IPC transport is one `invoke` channel carrying a method name plus input, typed by `backend/api/contract.ts`; the UI imports only types from the backend. Events flow back over one event channel.
 
 ## Open questions for the owner
+
+- Model comparison: run `npm run live:compare -- <lecture.pdf> --a claude-haiku-5-5:max --b claude-sonnet-5-5:high` on a lecture to settle the extractor default (the cloud session could not, because the embedding model download is blocked there). Comparing other roles (tutor, prober, planner) would need a set of recorded prompts; say if you want that built.
 
 - The embedding model download (Hugging Face hub) was blocked from the cloud container, so the live embedder is untested here; it follows the documented transformers.js API. If the first ingest fails on the model download, tell me the error.
 

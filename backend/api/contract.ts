@@ -2,7 +2,7 @@
  * The IPC contract between the renderer and the backend. The UI imports only types from here.
  * Each method has an input and an output type; handlers live in ./handlers.ts.
  */
-import type { Settings, SettingsPatch } from '../settings/schema';
+import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
 import type { ConnectionTestResult } from '../agents/connectionTest';
 import type { DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../services/library';
 import type { IngestProgress } from '../services/ingestion';
@@ -12,7 +12,7 @@ import type { LessonPlan } from '../services/planner';
 import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot } from '../services/session';
 import type { Grade, LearnerResponse } from '../agents/tutor';
 
-export type { DeltaItem, IdeaRef };
+export type { DeltaItem, IdeaRef, Effort, ModelOptions };
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
 export type { Stage } from '../core/session';
@@ -30,6 +30,8 @@ export interface ApiMethods {
   'app.info': { input: undefined; output: AppInfo };
   'settings.get': { input: undefined; output: Settings };
   'settings.update': { input: SettingsPatch; output: Settings };
+  /** Known models, their efforts and the default per role, for the Settings dropdowns. */
+  'settings.modelOptions': { input: undefined; output: ModelOptions };
   'settings.testConnection': { input: undefined; output: ConnectionTestResult };
   'settings.chooseFolder': { input: undefined; output: string | null };
   'library.list': { input: undefined; output: SourceSummary[] };

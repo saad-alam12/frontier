@@ -20,6 +20,7 @@ const STAGE_LABEL: Record<Stage, string> = {
   use: 'Use',
   index: 'Index pass',
   support: 'Worked example',
+  reteach: 'Another way in',
 };
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
@@ -261,7 +262,7 @@ function HistoryNodeView({ node, open, onToggle }: { node: HistoryNode; open: bo
 
 /** One past step: the card as shown, the learner's answer exactly as given, then the rating. */
 function Exchange({ id, item, thinking }: { id: string; item: HistoryItem; thinking?: boolean }) {
-  const read = item.card.stage === 'explain' || item.card.stage === 'support';
+  const read = isReading(item.card.stage);
   const effort = item.response?.effort;
   const meta = item.response
     ? [item.response.confidence !== undefined ? capitalize(confidenceLabel(item.response.confidence)) : null, item.response.handle ? `Handle: ${item.response.handle}` : null].filter(Boolean).join(' · ')
@@ -292,6 +293,11 @@ function Exchange({ id, item, thinking }: { id: string; item: HistoryItem; think
   );
 }
 
+/** Cards the learner reads and rates, rather than answers. */
+function isReading(stage: Stage): boolean {
+  return stage === 'explain' || stage === 'support' || stage === 'reteach';
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -312,6 +318,7 @@ function CardText({ card, past }: { card: PublicCard; past?: boolean }) {
       return <Markdown text={card.task} className={question} />;
     case 'explain':
     case 'support':
+    case 'reteach':
       return <Markdown text={card.markdown} className={prose} />;
     case 'index':
       return (
@@ -429,7 +436,7 @@ function TeachStep({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
     onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined });
   };
 
-  if (card.stage === 'explain' || card.stage === 'support') {
+  if (isReading(card.stage)) {
     return (
       <section className="flex flex-col gap-[32px]">
         <CardText card={card} />

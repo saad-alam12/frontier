@@ -108,7 +108,7 @@ const FRONTIER_SIZE = 12;
 
 export type PublicCard =
   | { stage: 'predict' | 'connect' | 'compress'; prompt: string }
-  | { stage: 'explain' | 'support'; markdown: string }
+  | { stage: 'explain' | 'support' | 'reteach'; markdown: string }
   | { stage: 'check'; question: string }
   | { stage: 'derive'; prompt: string }
   | { stage: 'use'; task: string }
@@ -272,7 +272,7 @@ async function produceCard(
   state.stage = stage;
   state.card = result.card;
   pushHistory(state, step.nodeId, { stage, card: result.card, response: null, grade: null });
-  if (result.card.stage === 'explain' || result.card.stage === 'support') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: result.card.markdown });
+  if (result.card.stage === 'explain' || result.card.stage === 'support' || result.card.stage === 'reteach') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: result.card.markdown });
   if (result.card.stage === 'index') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: `${result.card.gist}\n\n${result.card.placement}` });
   appendSessionEvent(deps.db, sessionId, 'card', { nodeId: step.nodeId, stage, card: result.card });
   return result.grade;
@@ -287,11 +287,11 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   const stages = stagesFor(step.mode);
 
   if (!isGraded(stage)) {
-    // explain / support: the learner read it; an effort rating may ride along to the next evidence
+    // explain / support / reteach: the learner read it; an effort rating may ride along to the next evidence
     if (response.effort !== undefined) state.pendingEffort = response.effort;
     finishHistory(state, step.nodeId, stage, response, null);
     appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response });
-    const resumeFrom = stage === 'support' ? (state.supportAfter ?? stage) : stage;
+    const resumeFrom = stage === 'support' || stage === 'reteach' ? (state.supportAfter ?? stage) : stage;
     state.supportAfter = null;
     const next = nextStage(stages, resumeFrom, 'none');
     await advance(deps, sessionId, state, step, next, null, goalText);
@@ -314,9 +314,9 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
 
   const { edge, action } = applyGrade(state.edge, grade.score);
   state.edge = edge;
-  if (action === 'support') {
+  if (action === 'support' || action === 'escalate') {
     state.supportAfter = stage;
-    await produceCard(deps, sessionId, state, step, 'support', null, goalText);
+    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goalText);
     return;
   }
   const next = nextStage(stages, stage, action);
@@ -435,6 +435,7 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
       return { stage: card.stage, prompt: card.prompt };
     case 'explain':
     case 'support':
+    case 'reteach':
       return { stage: card.stage, markdown: card.markdown };
     case 'check':
       return { stage: 'check', question: card.question };
