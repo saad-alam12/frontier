@@ -203,6 +203,17 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Unsent answers (probe questions, session cards), so leaving a screen or quitting loses nothing.
+      CREATE TABLE drafts (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

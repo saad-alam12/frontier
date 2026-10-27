@@ -16,7 +16,7 @@ const STAGE_LABEL: Record<Stage, string> = {
   support: 'Worked example',
 };
 
-export function SessionScreen() {
+export function SessionScreen({ onLeave }: { onLeave: () => void }) {
   const [snap, setSnap] = useState<SessionSnapshot | null | undefined>(undefined);
   const [goals, setGoals] = useState<GoalDetail[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -50,10 +50,18 @@ export function SessionScreen() {
       if (!snap) return;
       setSnap(await call('session.respond', { sessionId: snap.id, response }));
     });
-  const abandon = () =>
-    run('abandon', async () => {
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const pause = () =>
+    run('pause', async () => {
       if (!snap) return;
-      await call('session.abandon', { sessionId: snap.id });
+      await call('session.pause', { sessionId: snap.id });
+      onLeave();
+    });
+  const end = () =>
+    run('end', async () => {
+      if (!snap) return;
+      await call('session.end', { sessionId: snap.id });
+      setConfirmEnd(false);
       await refresh();
     });
 
@@ -95,9 +103,24 @@ export function SessionScreen() {
               <h1 className="text-2xl font-semibold tracking-tight">{snap.plan.title}</h1>
             </div>
             {snap.status === 'active' && (
-              <Button onClick={() => void abandon()} disabled={busy !== null}>
-                Leave session
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button onClick={() => void pause()} disabled={busy !== null}>
+                  Pause
+                </Button>
+                {confirmEnd ? (
+                  <span className="flex items-center gap-2 text-xs text-stone-600">
+                    End for good? What you learned so far is kept.
+                    <Button kind="danger" onClick={() => void end()} disabled={busy !== null}>
+                      End session
+                    </Button>
+                    <Button onClick={() => setConfirmEnd(false)}>Keep going</Button>
+                  </span>
+                ) : (
+                  <button type="button" className="text-xs text-stone-500 underline" onClick={() => setConfirmEnd(true)} disabled={busy !== null}>
+                    End session
+                  </button>
+                )}
+              </div>
             )}
           </header>
           {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { call } from '../api';
 import type { GoalDetail, LessonPlan, ProbeOutcome, ProbeView } from '../../backend/api/contract';
 import { Button, Empty, Field, Page, inputClass } from '../components/Page';
+import { useDrafts } from '../hooks/useDrafts';
+
+type ProbeDraft = { answer: string; confidence: number; thinkAloud: string };
+const EMPTY_DRAFT: ProbeDraft = { answer: '', confidence: 0.5, thinkAloud: '' };
 
 export function GoalsScreen() {
   const [goals, setGoals] = useState<GoalDetail[]>([]);
@@ -11,7 +15,6 @@ export function GoalsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [probe, setProbe] = useState<ProbeView | null>(null);
-  const [answers, setAnswers] = useState<Record<string, { answer: string; confidence: number; thinkAloud: string }>>({});
   const [outcomes, setOutcomes] = useState<ProbeOutcome[] | null>(null);
   const [plan, setPlan] = useState<LessonPlan | null>(null);
 
@@ -42,6 +45,20 @@ export function GoalsScreen() {
     });
 
   const current = goals.find((g) => g.goal.id === selected) ?? null;
+  const drafts = useDrafts<ProbeDraft>(probe ? probe.questions.map((q) => `probe:${q.problemId}`) : [], EMPTY_DRAFT);
+  const draftFor = (problemId: string) => drafts.values[`probe:${problemId}`] ?? EMPTY_DRAFT;
+
+  // An unsubmitted probe comes back whenever its goal is opened again.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    void call('probe.open', { goalId: selected }).then((open) => {
+      if (!cancelled) setProbe(open);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   const compile = () =>
     run('compile', async () => {
@@ -57,7 +74,6 @@ export function GoalsScreen() {
       const view = await call('probe.create', { goalId: current.goal.id });
       setProbe(view);
       setOutcomes(null);
-      setAnswers({});
     });
 
   const submitProbe = () =>
@@ -65,12 +81,7 @@ export function GoalsScreen() {
       if (!probe) return;
       const result = await call('probe.submit', {
         probeId: probe.id,
-        answers: probe.questions.map((q) => ({
-          problemId: q.problemId,
-          answer: answers[q.problemId]?.answer ?? '',
-          confidence: answers[q.problemId]?.confidence ?? 0.5,
-          thinkAloud: answers[q.problemId]?.thinkAloud ?? '',
-        })),
+        answers: probe.questions.map((q) => ({ problemId: q.problemId, ...draftFor(q.problemId) })),
       });
       setOutcomes(result);
       setProbe(null);
@@ -114,7 +125,6 @@ export function GoalsScreen() {
                     type="button"
                     onClick={() => {
                       setSelected(g.goal.id);
-                      setProbe(null);
                       setOutcomes(null);
                       setPlan(null);
                     }}
@@ -201,8 +211,8 @@ export function GoalsScreen() {
                   <p className="mb-3 text-xs text-stone-500">A few questions place you across the topic. Answer in your own words; guessing is fine, say how sure you are.</p>
                   <ol className="space-y-4">
                     {probe.questions.map((q, i) => {
-                      const a = answers[q.problemId] ?? { answer: '', confidence: 0.5, thinkAloud: '' };
-                      const set = (patch: Partial<typeof a>) => setAnswers({ ...answers, [q.problemId]: { ...a, ...patch } });
+                      const a = draftFor(q.problemId);
+                      const set = (patch: Partial<ProbeDraft>) => drafts.set(`probe:${q.problemId}`, { ...a, ...patch });
                       return (
                         <li key={q.problemId} className="space-y-2">
                           <div className="text-sm">
@@ -225,7 +235,7 @@ export function GoalsScreen() {
                     <Button kind="primary" onClick={() => void submitProbe()} disabled={busy !== null}>
                       {busy === 'submitProbe' ? 'Judging…' : 'Submit answers'}
                     </Button>
-                    <Button onClick={() => setProbe(null)}>Cancel</Button>
+                    <span className="self-center text-xs text-stone-500">Answers are kept until you submit.</span>
                   </div>
                 </section>
               )}

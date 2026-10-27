@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | Not started | `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -108,6 +108,10 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Drafts (unsent probe and session answers) live in a `drafts` table in the database rather than browser storage, so they survive quitting the app and a dev-server port change. The UI saves them debounced (400 ms) and flushes on leaving the screen; submitting deletes them.
+- 2026-10-27 — Pause records a `pause` session event and returns to Today; the session stays `active`, so reopening Session shows the same card from the saved state with no model call. End session (with a one-line confirmation) sets it to `abandoned` as before.
+- 2026-10-27 — Probe SQL moved from the probe service into `backend/store/probes.ts` (only the store touches the database).
 
 - 2026-10-26 — One tutor call per transition: the call that grades the learner's response also produces the next card. When the edge rules then change the next stage (worked example after three failures, skip ahead after two easy successes), a second call produces the right card. Node boundaries cost two calls.
 - 2026-10-26 — Evidence per stage: predict → `predict`, check → `check`, derive → `derive`, use → `use`, compress (own words) → `explain`, index pass recognition → `predict` (depth 1). Connect writes no evidence; a confirmed link goes into the session transcript so extraction can turn it into a chain. The effort rating given after an explanation rides on the next evidence row.

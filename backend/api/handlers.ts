@@ -7,12 +7,13 @@ import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
 import { compileGoal, goalDetail, listGoalDetails } from '../services/goals';
-import { createProbe, submitProbe } from '../services/probe';
+import { createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
-import { abandonSession, currentSession, respond, startSession } from '../services/session';
+import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
 import { createGoal, deleteGoal, updateGoal } from '../store/goals';
 import { deleteSource } from '../store/sources';
+import { getDrafts, setDraft } from '../store/drafts';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
@@ -81,13 +82,23 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'goals.compile': ({ goalId }) => compileGoal({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder() }, goalId),
     'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
+    'probe.open': ({ goalId }) => openProbe(ctx.db(), goalId),
     'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db()),
     'session.start': ({ goalId }) => startSession({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, goalId),
     'session.respond': ({ sessionId, response }) => respond({ db: ctx.db(), provider: ctx.provider(), ingestion: ctx.ingestion() }, sessionId, response),
-    'session.abandon': ({ sessionId }) => {
+    'session.pause': ({ sessionId }) => {
+      pauseSession(ctx.db(), sessionId);
+      return undefined;
+    },
+    'session.end': ({ sessionId }) => {
       abandonSession(ctx.db(), sessionId);
+      return undefined;
+    },
+    'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
+    'drafts.set': ({ key, value }) => {
+      setDraft(ctx.db(), key, value);
       return undefined;
     },
   };

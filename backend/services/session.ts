@@ -119,6 +119,14 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
   return snapshot(db, session);
 }
 
+/** Pause keeps the session active: reopening resumes at the same card with nothing regenerated. */
+export function pauseSession(db: Database, sessionId: string): void {
+  const session = getSession<SessionState>(db, sessionId);
+  if (!session || session.status !== 'active') return;
+  appendSessionEvent(db, sessionId, 'pause', {});
+}
+
+/** End a session early for good; what was learned so far stays as evidence. */
 export function abandonSession(db: Database, sessionId: string): void {
   const session = getSession<SessionState>(db, sessionId);
   if (!session || session.status !== 'active') return;

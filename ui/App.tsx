@@ -16,7 +16,7 @@ export function App() {
       <Sidebar current={screen} onSelect={setScreen} />
       <main className="min-w-0 flex-1 overflow-y-auto">
         {screen === 'today' && <TodayScreen />}
-        {screen === 'session' && <SessionScreen />}
+        {screen === 'session' && <SessionScreen onLeave={() => setScreen('today')} />}
         {screen === 'map' && <MapScreen />}
         {screen === 'goals' && <GoalsScreen />}
         {screen === 'lookup' && <LookupScreen />}

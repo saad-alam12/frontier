@@ -15,7 +15,7 @@ import { listSources } from '../store/sources';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { recordEvidence } from './evidence';
-import { abandonSession, currentSession, respond, startSession } from './session';
+import { abandonSession, currentSession, pauseSession, respond, startSession } from './session';
 import type { SessionState } from './session';
 
 /** A tutor that answers any stage with a plausible card and grades from a queue of scores. */
@@ -120,10 +120,15 @@ describe('teaching session', () => {
     const { db, goal, deps } = await setup([0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]);
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, answer(''));
+    const callsBefore = deps.provider.calls.length;
+    pauseSession(db, snap.id);
     const before = currentSession(db);
     expect(before?.id).toBe(snap.id);
+    expect(before?.status).toBe('active');
     expect(before?.card).toEqual(snap.card);
     expect(before?.current?.stage).toBe(snap.current?.stage);
+    expect(await startSession(deps, goal.id)).toEqual(before); // resuming regenerates nothing
+    expect(deps.provider.calls.length).toBe(callsBefore);
 
     let guard = 0;
     while (snap.phase === 'teach' && guard++ < 40) snap = await respond(deps, snap.id, answer('an answer', 0.7));

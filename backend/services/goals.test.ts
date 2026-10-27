@@ -10,7 +10,8 @@ import { listNodes } from '../store/world';
 import { compileGoal, goalDetail } from './goals';
 import { recordEvidence } from './evidence';
 import { loadKnowledge } from './knowledge';
-import { createProbe, submitProbe } from './probe';
+import { createProbe, openProbe, probeDraftKey, submitProbe } from './probe';
+import { getDrafts, setDraft } from '../store/drafts';
 import { candidatesForGoal, planSession } from './planner';
 
 function setup() {
@@ -107,6 +108,12 @@ describe('probe', () => {
     expect(probe.questions.map((q) => q.nodeId)).toEqual([ids.get('nashMutualBr'), ids.get('nash')]);
     expect(JSON.stringify(probe)).not.toContain('answerKey');
 
+    // the open probe and its drafts survive leaving the screen (a fresh read from the database)
+    const firstKey = probeDraftKey(probe.questions[0]?.problemId as string);
+    setDraft(db, firstKey, JSON.stringify({ answer: 'half typed' }));
+    expect(openProbe(db, goal.id)).toEqual(probe);
+    expect(getDrafts(db, [firstKey])[firstKey]).toContain('half typed');
+
     const outcomes = await submitProbe(
       db,
       provider,
@@ -114,6 +121,8 @@ describe('probe', () => {
       probe.questions.map((q) => ({ problemId: q.problemId, answer: 'an answer', confidence: 0.6, thinkAloud: 'hmm' })),
     );
     expect(outcomes).toHaveLength(2);
+    expect(openProbe(db, goal.id)).toBeNull();
+    expect(getDrafts(db, [firstKey])).toEqual({});
     const derived = outcomes.find((o) => o.nodeId === ids.get('nashMutualBr'));
     expect(derived?.impliedPremises.map((p) => p.nodeId).sort()).toEqual([ids.get('bestResponse'), ids.get('nash')].sort());
     expect(getState(db, ids.get('nashMutualBr') as string)?.depth).toBe(3);

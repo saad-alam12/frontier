@@ -44,13 +44,21 @@ export interface ApiMethods {
   /** Runs the Goal Compiler; replaces the goal's capabilities and targets. */
   'goals.compile': { input: { goalId: string }; output: GoalDetail };
   'probe.create': { input: { goalId: string }; output: ProbeView };
+  /** The goal's unsubmitted probe, if any. */
+  'probe.open': { input: { goalId: string }; output: ProbeView | null };
   'probe.submit': { input: { probeId: string; answers: ProbeAnswerInput[] }; output: ProbeOutcome[] };
   'plan.preview': { input: { goalId: string }; output: LessonPlan };
   'session.current': { input: undefined; output: SessionSnapshot | null };
   /** Plans and opens a session for the goal, or returns the active one. */
   'session.start': { input: { goalId: string }; output: SessionSnapshot };
   'session.respond': { input: { sessionId: string; response: LearnerResponse }; output: SessionSnapshot };
-  'session.abandon': { input: { sessionId: string }; output: undefined };
+  /** Leave the session for now; it stays active and resumes at the same card. */
+  'session.pause': { input: { sessionId: string }; output: undefined };
+  /** End the session for good. */
+  'session.end': { input: { sessionId: string }; output: undefined };
+  /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
+  'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
+  'drafts.set': { input: { key: string; value: string }; output: undefined };
 }
 
 export type ApiName = keyof ApiMethods;
