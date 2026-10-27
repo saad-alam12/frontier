@@ -4,7 +4,7 @@
  */
 import { runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorStepInput } from '../agents/tutor';
-import { dependents } from '../core/graph';
+import { dependents, neighbourhood } from '../core/graph';
 import { applyGrade, emptyEdge, evidenceKindFor, isGraded, nextStage, stagesFor } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
 import type { LlmProvider } from '../llm/provider';
@@ -13,14 +13,14 @@ import { nowIso } from '../store/db';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
 import { getState } from '../store/evidence';
 import { getGoal } from '../store/goals';
-import { activeSession, appendSessionEvent, createSession, endSession, getSession, listSessions, saveSessionState } from '../store/sessions';
+import { activeSession, appendSessionEvent, createSession, endSession, getSession, listSessionEvents, listSessions, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { chunksCoveringNode } from '../store/sources';
 import { recordEvidence, setOwnStatement } from './evidence';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge } from './knowledge';
 import type { KnowledgeView } from './knowledge';
-import { planSession } from './planner';
+import { candidatesForGoal, planSession } from './planner';
 import type { LessonPlan, LessonStep } from './planner';
 
 export type Phase = 'reconstruct' | 'orient' | 'teach' | 'close' | 'preview' | 'done';
@@ -46,7 +46,6 @@ export interface SessionState {
   nodeStatus: Record<string, NodeStatus>;
   history: Record<string, NodeHistoryEntry[]>;
   transcript: { nodeId: string; nodeName: string; stage: Stage; text: string }[];
-  lastGrade: Grade | null;
   previousNodes: { id: string; name: string }[];
   closing: { canDo: string; previewQuestion: string; recall: { nodeId: string; name: string; score: number; note: string }[] } | null;
   pendingEffort: number | null;
@@ -61,12 +60,50 @@ export interface SessionSnapshot {
   status: SessionRecord['status'];
   phase: Phase;
   plan: { title: string; orientation: string; steps: (LessonStep & { status: NodeStatus })[] };
-  current: { nodeId: string; name: string; why: string; mode: LessonStep['mode']; stage: Stage; stageIndex: number; stageCount: number } | null;
+  current: { nodeId: string; name: string; why: string; mode: LessonStep['mode']; stage: Stage; stages: Stage[]; stageIndex: number; stageCount: number } | null;
   card: PublicCard | null;
-  lastGrade: Grade | null;
   previousNodes: { id: string; name: string }[];
   closing: SessionState['closing'];
+  /** Everything already said in this session, oldest first, rebuilt from session events. */
+  history: SessionHistory;
+  /** The ideas around the current one, for the side panel map. */
+  frontier: FrontierMap | null;
 }
+
+/** One answered step: the card as shown, the learner's answer exactly as given, the rating. */
+export interface HistoryItem {
+  id: string;
+  stage: Stage;
+  card: PublicCard;
+  response: LearnerResponse | null;
+  grade: Grade | null;
+}
+
+export interface HistoryNode {
+  nodeId: string;
+  name: string;
+  status: NodeStatus;
+  /** Mean score of the graded steps, or null when nothing was graded yet. */
+  score: number | null;
+  items: HistoryItem[];
+}
+
+export interface SessionHistory {
+  /** The free recall at the start of the session, when there was one. */
+  reconstruct: { text: string; recalled: { nodeId: string; name: string; score: number; note: string }[] } | null;
+  nodes: HistoryNode[];
+}
+
+export type FrontierState = 'owned' | 'learnable' | 'current' | 'beyond';
+
+export interface FrontierMap {
+  nodes: { id: string; name: string; state: FrontierState }[];
+  edges: [string, string][];
+  /** How many ideas the goal has on the learner's edge right now. */
+  edgeCount: number;
+}
+
+const FRONTIER_SIZE = 12;
 
 export type PublicCard =
   | { stage: 'predict' | 'connect' | 'compress'; prompt: string }
@@ -109,7 +146,6 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
     nodeStatus: Object.fromEntries(plan.steps.map((s) => [s.nodeId, 'pending' as NodeStatus])),
     history: {},
     transcript: [],
-    lastGrade: null,
     previousNodes,
     closing: null,
     pendingEffort: null,
@@ -271,7 +307,6 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     grade = result.grade;
   }
   if (!grade) throw new Error('the tutor returned no grade');
-  state.lastGrade = grade;
   finishHistory(state, step.nodeId, stage, response, grade);
   appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade });
   writeOutcome(db, sessionId, state, step, stage, response, grade);
@@ -424,12 +459,83 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
     plan: { title: s.plan.title, orientation: s.plan.orientation, steps: s.plan.steps.map((st) => ({ ...st, status: s.nodeStatus[st.nodeId] ?? 'pending' })) },
     current:
       step && s.stage
-        ? { nodeId: step.nodeId, name: step.name, why: step.why, mode: step.mode, stage: s.stage, stageIndex: Math.max(0, stages.indexOf(s.supportAfter ?? s.stage)), stageCount: stages.length }
+        ? {
+            nodeId: step.nodeId,
+            name: step.name,
+            why: step.why,
+            mode: step.mode,
+            stage: s.stage,
+            stages,
+            stageIndex: Math.max(0, stages.indexOf(s.supportAfter ?? s.stage)),
+            stageCount: stages.length,
+          }
         : null,
     card: publicCard(s.card),
-    lastGrade: s.lastGrade,
     previousNodes: s.previousNodes,
     closing: s.closing,
+    history: sessionHistory(db, session),
+    frontier: step ? frontierMap(db, s, step.nodeId) : null,
+  };
+}
+
+/** Rebuild the conversation from session events, so it survives restarts. The open card is not history. */
+export function sessionHistory(db: Database, session: SessionRecord<SessionState>): SessionHistory {
+  const s = session.state;
+  const names = new Map(s.plan.steps.map((st) => [st.nodeId, st.name]));
+  const items = new Map<string, HistoryItem[]>();
+  let reconstruct: SessionHistory['reconstruct'] = null;
+  const previousNames = new Map(s.previousNodes.map((n) => [n.id, n.name]));
+  for (const event of listSessionEvents(db, session.id)) {
+    const p = event.payload as { nodeId?: string; stage?: Stage; card?: TutorCard; response?: LearnerResponse; grade?: Grade; text?: string; recalled?: { nodeId: string; score: number; note: string }[] };
+    if (event.kind === 'reconstruct') {
+      reconstruct = { text: p.text ?? '', recalled: (p.recalled ?? []).map((r) => ({ ...r, name: previousNames.get(r.nodeId) ?? r.nodeId })) };
+      continue;
+    }
+    if (!p.nodeId || !p.stage) continue;
+    const list = items.get(p.nodeId) ?? [];
+    items.set(p.nodeId, list);
+    if (event.kind === 'card' && p.card) {
+      const card = publicCard(p.card);
+      if (card) list.push({ id: event.id, stage: p.stage, card, response: null, grade: null });
+    } else if (event.kind === 'response' && p.response) {
+      const open = [...list].reverse().find((h) => h.stage === p.stage && h.response === null);
+      if (open) {
+        open.response = p.response;
+        open.grade = p.grade ?? null;
+      }
+    }
+  }
+  const order = [...s.plan.steps.map((st) => st.nodeId)].filter((id) => items.has(id));
+  const nodes = order.map((nodeId) => {
+    const answered = (items.get(nodeId) ?? []).filter((h) => h.response !== null);
+    const graded = answered.map((h) => h.grade?.score).filter((x): x is number => typeof x === 'number');
+    return {
+      nodeId,
+      name: names.get(nodeId) ?? nodeId,
+      status: s.nodeStatus[nodeId] ?? 'pending',
+      score: graded.length ? graded.reduce((a, b) => a + b, 0) / graded.length : null,
+      items: answered,
+    };
+  });
+  return { reconstruct, nodes: nodes.filter((n) => n.items.length > 0 || n.status === 'active') };
+}
+
+function frontierMap(db: Database, s: SessionState, centerId: string): FrontierMap {
+  const view = loadKnowledge(db);
+  const planIds = s.plan.steps.map((st) => st.nodeId).filter((id) => id !== centerId);
+  const near = neighbourhood(centerId, view.index, FRONTIER_SIZE, planIds.slice(0, 4));
+  const planned = new Set(s.plan.steps.filter((st) => s.nodeStatus[st.nodeId] !== 'done').map((st) => st.nodeId));
+  const stateOf = (id: string): FrontierState => {
+    if (id === centerId) return 'current';
+    if (view.owned.has(id)) return 'owned';
+    if (view.fringe.has(id) || planned.has(id)) return 'learnable';
+    return 'beyond';
+  };
+  const { candidates } = candidatesForGoal(db, s.goalId, view);
+  return {
+    nodes: near.nodeIds.filter((id) => view.nodes.has(id)).map((id) => ({ id, name: view.nodes.get(id)?.name ?? id, state: stateOf(id) })),
+    edges: near.edges,
+    edgeCount: candidates.filter((c) => c.onFringe).length,
   };
 }
 

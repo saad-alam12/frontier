@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ancestors, dependents, indexChains } from './graph';
+import { ancestors, dependents, indexChains, neighbourhood } from './graph';
 import { implicitCreditWeights } from './implicitCredit';
 import { computeFringe } from './ownership';
 import type { Chain, KnowledgeNode } from './types';
@@ -15,6 +15,15 @@ describe('graph helpers', () => {
   it('finds ancestors transitively', () => {
     expect([...ancestors('f', index)].sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect([...ancestors('a', index)]).toEqual([]);
+  });
+
+  it('picks the nearest neighbourhood deterministically, premises and dependents hop by hop', () => {
+    const near = neighbourhood('e', index, 4);
+    expect(near.nodeIds).toEqual(['e', 'c', 'd', 'f']);
+    expect(near.edges.sort()).toEqual([['c', 'e'], ['d', 'e'], ['e', 'f']].sort());
+    const wide = neighbourhood('e', index, 10, ['g']);
+    expect(wide.nodeIds.sort()).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+    expect(wide.edges).toHaveLength(5);
   });
 
   it('finds dependents with decay', () => {

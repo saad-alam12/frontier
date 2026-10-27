@@ -9,11 +9,11 @@ import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
 import type { LessonPlan } from '../services/planner';
-import type { PublicCard, SessionSnapshot } from '../services/session';
+import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot } from '../services/session';
 import type { Grade, LearnerResponse } from '../agents/tutor';
 
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
-export type { PublicCard, SessionSnapshot, Grade, LearnerResponse };
+export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
 export type { Stage } from '../core/session';
 export type { Role } from '../llm/provider';
 export type { DeltaClass } from '../core/delta';

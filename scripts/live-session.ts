@@ -51,7 +51,8 @@ while (snap.phase === 'teach' && snap.card && cards < maxCards) {
   console.log(JSON.stringify(snap.card, null, 2).slice(0, 1200));
   const response = stage === 'explain' || stage === 'support' ? { answer: '', effort: 3 } : { answer: answers[stage] ?? 'I am not sure.', confidence: 0.66 };
   snap = await respond(deps, snap.id, response);
-  if (snap.lastGrade) console.log(`grade: ${snap.lastGrade.score} — ${snap.lastGrade.feedback.slice(0, 300)}`);
+  const graded = snap.history.nodes.flatMap((n) => n.items).at(-1)?.grade;
+  if (graded) console.log(`grade: ${graded.score} — ${graded.feedback.slice(0, 300)}`);
 }
 console.log(`\nphase after ${cards} cards: ${snap.phase}`);
 console.log(`evidence rows: ${listEvidenceForSession(db, snap.id).length}; own statement on Nash: ${getState(db, ids.get('nash') as string)?.ownStatement ?? '(none)'}`);

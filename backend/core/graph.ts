@@ -66,3 +66,59 @@ export function dependents(start: string, index: GraphIndex, decay: number, maxH
   }
   return best;
 }
+
+/** Room kept for dependents; premises (what the idea is built on) get the rest first. */
+const MAX_DOWN = 4;
+
+/**
+ * The ideas around `center`, nearest first: premises (upward) hop by hop, then dependents (downward),
+ * with up to a third of the room (at most four) kept for dependents so both sides of the edge show. `include` nodes
+ * (e.g. the rest of the lesson plan) come first. Ties break by id, so the same graph always gives the
+ * same neighbourhood. Edges are the premise → conclusion links among the chosen nodes.
+ */
+export function neighbourhood(center: string, index: GraphIndex, limit: number, include: Iterable<string> = []): { nodeIds: string[]; edges: [string, string][] } {
+  const chosen = new Set<string>([center]);
+  for (const id of include) if (chosen.size < limit) chosen.add(id);
+  const up = layers(center, (id) => (index.into.get(id) ?? []).flatMap((c) => c.premises));
+  const down = layers(center, (id) => (index.outOf.get(id) ?? []).map((c) => c.conclusion));
+  const downQuota = Math.min(down.filter((id) => !chosen.has(id)).length, Math.min(MAX_DOWN, Math.round(limit / 3)));
+  for (const id of up) if (chosen.size < limit - downQuota) chosen.add(id);
+  let downAdded = 0;
+  for (const id of down) {
+    if (downAdded >= downQuota || chosen.has(id)) continue;
+    chosen.add(id);
+    downAdded += 1;
+  }
+  for (const id of up) if (chosen.size < limit) chosen.add(id);
+  const edges: [string, string][] = [];
+  const seen = new Set<string>();
+  for (const id of chosen) {
+    for (const chain of index.into.get(id) ?? []) {
+      for (const p of chain.premises) {
+        const key = `${p}>${id}`;
+        if (chosen.has(p) && !seen.has(key)) {
+          seen.add(key);
+          edges.push([p, id]);
+        }
+      }
+    }
+  }
+  return { nodeIds: [...chosen], edges };
+}
+
+/** Breadth-first from `start` (excluded), each hop sorted by id. */
+function layers(start: string, next: (id: string) => string[]): string[] {
+  const seen = new Set<string>([start]);
+  const out: string[] = [];
+  let frontier = [start];
+  while (frontier.length) {
+    const layer = new Set<string>();
+    for (const id of frontier) for (const n of next(id)) if (!seen.has(n)) layer.add(n);
+    frontier = [...layer].sort();
+    for (const id of frontier) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}

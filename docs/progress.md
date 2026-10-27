@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field, §3 visual foundation, §4 session history done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -108,6 +108,11 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — Session history is rebuilt from session events on every snapshot (`sessionHistory`): each `card` event is paired with the next `response` event for the same idea and stage; the open card is not history. Answer keys never reach it (cards go through `publicCard`).
+- 2026-10-27 — The side-panel map shows up to 12 ideas around the current one (`neighbourhood` in core: premises first, at most four dependents, other plan steps included) laid out deterministically in the UI: x by state band (yours, current on the dashed edge line, learnable, beyond), y by neighbour averaging seeded from an id hash. "Learnable" = on the fringe or still on today's plan. "N ideas on your edge" counts the goal's fringe candidates.
+- 2026-10-27 — Pause and End session sit in a quiet row at the bottom of the session column, not next to the breadcrumb, so the breadcrumb keeps the full width.
+- 2026-10-27 — The "why this now" sentence moved from the card header to the side panel ("Why this now" card); cards show only learner-facing text.
 
 - 2026-10-27 — Atlas is implemented as CSS variables in `ui/styles.css` (exposed to Tailwind through `@theme inline`) plus a small set of component classes (`.btn`, `.chip`, `.answer-surface`, `.list-card`, `.def-grid`, `.step-path`, `.v-path`, `.markdown`); screens compose them from `ui/components/` (`Shell`, `controls`, `paths`, `AnswerSurface`, `Markdown`). Spacing in screens uses the token steps only.
 - 2026-10-27 — Questions use a new Question type style (24/1.45, weight 400) with KaTeX math, not the mockups' 36/500 Display with Unicode math (owner's instruction). Display stays for page titles. Recorded in `docs/visual-design.md`.

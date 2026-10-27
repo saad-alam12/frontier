@@ -95,7 +95,7 @@ describe('teaching session', () => {
     expect(JSON.stringify(snap.card)).not.toContain('answerKey');
     await walk('the move that pays best given the others');
     expect(snap.current?.stage).toBe('explain');
-    expect(snap.lastGrade?.score).toBe(0.9);
+    expect(snap.history.nodes.find((n) => n.nodeId === brId)?.items.at(-1)?.grade?.score).toBe(0.9);
     snap = await respond(deps, snap.id, { answer: '', effort: 2 });
     expect(snap.current?.stage).toBe('check');
     await walk('no idea'); // 0.2 → misconception recorded
@@ -110,6 +110,16 @@ describe('teaching session', () => {
     expect(getState(db, brId)?.ownStatement).toBe('The reply that pays most given what the others do.');
     expect(getState(db, brId)?.handle).toBe('best reply');
     await walk('(A,B); the other game has a cycle'); // 0.85 → node done
+    // the conversation so far: every earlier card, the answer exactly as given and its rating, rebuilt from events
+    const restored = currentSession(db);
+    expect(restored?.history.nodes.map((n) => n.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
+    expect(restored?.history.nodes.slice(0, 2).every((n) => n.status === 'done' && n.score !== null)).toBe(true);
+    const nashItems = restored?.history.nodes[2]?.items ?? [];
+    expect(nashItems.map((h) => h.stage)).toEqual(['predict', 'explain', 'check', 'derive', 'connect', 'compress', 'use']);
+    expect(nashItems[0]?.response?.answer).toBe('the move that pays best given the others');
+    expect(nashItems[0]?.grade?.feedback).toBe('Scored 0.9.');
+    expect(nashItems[2]?.card).toEqual({ stage: 'check', question: 'Is (A,B) stable here?' });
+    expect(JSON.stringify(restored?.history)).not.toContain('answerKey');
     const evidence = listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === brId);
     expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'derive', 'explain', 'predict', 'use'].sort());
     expect(evidence.find((e) => e.kind === 'check')?.effort).toBe(2);

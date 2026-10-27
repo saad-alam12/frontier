@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call } from '../api';
-import type { GoalDetail, LessonPlan, ProbeOutcome, ProbeView } from '../../backend/api/contract';
+import type { GoalDetail, LessonPlan, ProbeAnswerInput, ProbeOutcome, ProbeView } from '../../backend/api/contract';
 import { Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Field, Notice, Section } from '../components/controls';
-import { Markdown } from '../components/Markdown';
-import { useDrafts } from '../hooks/useDrafts';
-import { AnswerSurface } from '../components/AnswerSurface';
-
-type ProbeDraft = { answer: string; confidence: number | null };
-const EMPTY_DRAFT: ProbeDraft = { answer: '', confidence: null };
+import { ProbeFlow, ProbeResults } from '../components/ProbeFlow';
 
 export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => void }) {
   const [goals, setGoals] = useState<GoalDetail[]>([]);
@@ -48,8 +43,6 @@ export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => voi
     });
 
   const current = goals.find((g) => g.goal.id === selected) ?? null;
-  const drafts = useDrafts<ProbeDraft>(probe ? probe.questions.map((q) => `probe:${q.problemId}`) : [], EMPTY_DRAFT);
-  const draftFor = (problemId: string) => drafts.values[`probe:${problemId}`] ?? EMPTY_DRAFT;
 
   // An unsubmitted probe comes back whenever its goal is opened again.
   useEffect(() => {
@@ -79,13 +72,10 @@ export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => voi
       setOutcomes(null);
     });
 
-  const submitProbe = () =>
+  const submitProbe = (answers: ProbeAnswerInput[]) =>
     run('submitProbe', async () => {
       if (!probe) return;
-      const result = await call('probe.submit', {
-        probeId: probe.id,
-        answers: probe.questions.map((q) => ({ problemId: q.problemId, ...draftFor(q.problemId) })),
-      });
+      const result = await call('probe.submit', { probeId: probe.id, answers });
       setOutcomes(result);
       setProbe(null);
       await refresh();
@@ -172,44 +162,13 @@ export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => voi
           {probe && (
             <Section title="Quick probe" meta="Answers are kept until you submit">
               <p className="m-0 text-secondary">A few questions place you across the topic. Guessing is fine; say how sure you are.</p>
-              <ol className="m-0 flex list-none flex-col gap-[28px] p-0">
-                {probe.questions.map((q, i) => {
-                  const a = draftFor(q.problemId);
-                  const set = (patch: Partial<ProbeDraft>) => drafts.set(`probe:${q.problemId}`, { ...a, ...patch });
-                  return (
-                    <li key={q.problemId} className="flex flex-col gap-[18px]">
-                      <div className="t-question">
-                        <span className="text-muted">{i + 1}. </span>
-                        <Markdown text={q.question} inline />
-                      </div>
-                      <AnswerSurface value={a.answer} onChange={(answer) => set({ answer })} onSubmit={() => void submitProbe()} confidence={a.confidence} onConfidence={(confidence) => set({ confidence })} rows={3} />
-                    </li>
-                  );
-                })}
-              </ol>
-              <div className="button-row">
-                <Button kind="primary" onClick={() => void submitProbe()} disabled={busy !== null}>
-                  {busy === 'submitProbe' ? 'Judging…' : 'Submit answers'}
-                </Button>
-              </div>
+              <ProbeFlow probe={probe} busy={busy === 'submitProbe'} onSubmit={(answers) => void submitProbe(answers)} />
             </Section>
           )}
 
           {outcomes && (
             <Section title="Probe results">
-              <ul className="list-card">
-                {outcomes.map((o) => (
-                  <li key={o.nodeId} className="flex flex-col gap-[4px]">
-                    <div className="row">
-                      <span className="font-medium">{o.nodeName}</span>
-                      <span className="shrink-0">{Math.round(o.score * 10)}/10</span>
-                    </div>
-                    <Markdown text={o.reasoning} className="text-soft" />
-                    {o.misconception && <p className="t-small m-0 text-secondary">Noted to repair: {o.misconception}</p>}
-                    {o.impliedPremises.length > 0 && <p className="t-small m-0 text-muted">Also credits: {o.impliedPremises.map((p) => p.nodeName).join(', ')}</p>}
-                  </li>
-                ))}
-              </ul>
+              <ProbeResults outcomes={outcomes} />
             </Section>
           )}
 

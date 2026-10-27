@@ -32,14 +32,27 @@ export function NavRail({ current, onSelect }: { current: ScreenName; onSelect: 
 }
 
 /** A screen: the main column (content max 720 px, left-aligned) and an optional right panel. */
-export function Screen({ children, aside, asideLabel, mainRef }: { children: ReactNode; aside?: ReactNode; asideLabel?: string; mainRef?: React.Ref<HTMLElement> }) {
+export function Screen({
+  children,
+  aside,
+  asideLabel,
+  asideGap = 28,
+  mainRef,
+}: {
+  children: ReactNode;
+  aside?: ReactNode;
+  asideLabel?: string;
+  /** 22 for the session's map panel, 28 elsewhere (visual-design §4). */
+  asideGap?: 22 | 28;
+  mainRef?: React.Ref<HTMLElement>;
+}) {
   return (
     <div className="screen">
       <main className="main-column" ref={mainRef}>
         {children}
       </main>
       {aside && (
-        <aside className="side-panel" aria-label={asideLabel}>
+        <aside className="side-panel" aria-label={asideLabel} style={{ gap: asideGap }}>
           {aside}
         </aside>
       )}
