@@ -73,7 +73,7 @@ async function setup(scores: number[] = []) {
   return { db, ids, goal, provider, deps: { db, provider, ingestion } };
 }
 
-const answer = (text: string, confidence = 0.6) => ({ answer: text, confidence, thinkAloud: '' });
+const answer = (text: string, confidence = 0.66) => ({ answer: text, confidence });
 
 describe('teaching session', () => {
   it('runs a node through the step loop, writing evidence, own words and bugs', async () => {

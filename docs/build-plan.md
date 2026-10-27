@@ -83,7 +83,7 @@ M5 builds on Goals v2: the scheduler uses the goal's date and `hoursPerWeek`, pr
 
 - Scheduler: due nodes from FSRS, grouping into compound sets, choosing build / deepen / consolidate.
 - Problem Generator agent (rung, cue distance, presentation; never names the node; solution + rubric committed first; avoids repeating recent problems).
-- Practice UI: one attempt with think-aloud, instant solution reveal, grade arrives async.
+- Practice UI: one attempt in the one answer field, instant solution reveal, grade arrives async.
 - Grader agent → evidence with implicit credit.
 - Today screen: start session, goal progress, due count, preview question.
 

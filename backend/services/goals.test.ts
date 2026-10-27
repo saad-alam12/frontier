@@ -118,7 +118,7 @@ describe('probe', () => {
       db,
       provider,
       probe.id,
-      probe.questions.map((q) => ({ problemId: q.problemId, answer: 'an answer', confidence: 0.6, thinkAloud: 'hmm' })),
+      probe.questions.map((q) => ({ problemId: q.problemId, answer: 'an answer', confidence: 0.66 })),
     );
     expect(outcomes).toHaveLength(2);
     expect(openProbe(db, goal.id)).toBeNull();

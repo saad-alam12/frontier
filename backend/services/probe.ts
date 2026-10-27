@@ -86,9 +86,9 @@ export function probeDraftKey(problemId: string): string {
 
 export interface ProbeAnswerInput {
   problemId: string;
+  /** One field: answer and reasoning mixed; empty means no idea. */
   answer: string;
-  confidence: number;
-  thinkAloud: string;
+  confidence: number | null;
 }
 
 export async function submitProbe(db: Database, provider: LlmProvider, probeId: string, answers: ProbeAnswerInput[]): Promise<ProbeOutcome[]> {
@@ -116,7 +116,6 @@ export async function submitProbe(db: Database, provider: LlmProvider, probeId: 
       rubric: p.problem.rubric,
       answer: p.input.answer,
       confidence: p.input.confidence,
-      thinkAloud: p.input.thinkAloud,
     })),
   );
   const byNode = new Map<string, Assessment>(assessments.map((a) => [a.nodeId, a]));
@@ -126,7 +125,7 @@ export async function submitProbe(db: Database, provider: LlmProvider, probeId: 
     for (const { problem, input } of prepared) {
       const a = byNode.get(problem.nodeId);
       if (!a) continue;
-      recordProbeAnswer(db, { problemId: problem.id, answer: input.answer, thinkAloud: input.thinkAloud, confidence: input.confidence, score: a.score, feedback: a.reasoning, submittedAt });
+      recordProbeAnswer(db, { problemId: problem.id, answer: input.answer, confidence: input.confidence, score: a.score, feedback: a.reasoning, submittedAt });
       recordEvidence(db, {
         nodeId: problem.nodeId,
         kind: problem.kind,

@@ -3,6 +3,8 @@ import { call } from '../api';
 import type { GoalDetail, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
 import { Button, Empty, Page, inputClass } from '../components/Page';
 import { Markdown } from '../components/Markdown';
+import { AnswerActions, AnswerSurface } from '../components/AnswerSurface';
+import { useDrafts } from '../hooks/useDrafts';
 
 const STAGE_LABEL: Record<Stage, string> = {
   predict: 'Predict',
@@ -216,28 +218,31 @@ function PhaseView({ snap, busy, onSend, onLeave }: { snap: SessionSnapshot; bus
   }
 }
 
+type CardDraft = { answer: string; confidence: number | null; handle: string };
+const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' };
+
 function TeachView({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolean; onSend: (r: LearnerResponse) => void }) {
   const card = snap.card;
   const current = snap.current;
-  const [answer, setAnswer] = useState('');
-  const [confidence, setConfidence] = useState(0.5);
-  const [thinkAloud, setThinkAloud] = useState('');
-  const [handle, setHandle] = useState('');
   const [effort, setEffort] = useState<number | null>(null);
-  const cardKey = `${current?.nodeId}:${current?.stage}:${current?.stageIndex}`;
-  const [lastKey, setLastKey] = useState(cardKey);
-  if (cardKey !== lastKey) {
-    setLastKey(cardKey);
-    setAnswer('');
-    setConfidence(0.5);
-    setThinkAloud('');
-    setHandle('');
+  const draftKey = `session:${snap.id}:${current?.nodeId}:${current?.stage}:${current?.stageIndex}`;
+  const drafts = useDrafts<CardDraft>([draftKey], EMPTY_CARD_DRAFT);
+  const draft = drafts.values[draftKey] ?? EMPTY_CARD_DRAFT;
+  const [lastKey, setLastKey] = useState(draftKey);
+  if (draftKey !== lastKey) {
+    setLastKey(draftKey);
     setEffort(null);
   }
   if (!card || !current) return <Empty>Preparing the next card…</Empty>;
 
-  const submit = () => onSend({ answer, confidence, thinkAloud, handle: handle || undefined });
+  const set = (patch: Partial<CardDraft>) => drafts.set(draftKey, { ...draft, ...patch });
+  const send = (answer: string) => {
+    if (busy) return;
+    drafts.set(draftKey, EMPTY_CARD_DRAFT);
+    onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined });
+  };
   const grade = snap.lastGrade;
+  const asksConfidence = card.stage !== 'compress' && card.stage !== 'connect';
 
   return (
     <section className="space-y-4">
@@ -251,7 +256,7 @@ function TeachView({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
           {grade.misconception && <p className="mt-1 text-xs text-red-700">Noted as a misconception to repair: {grade.misconception}</p>}
         </div>
       )}
-      <Card title={STAGE_LABEL[card.stage]} subtitle={current.why}>
+      <Card title={STAGE_LABEL[card.stage]}>
         <CardBody card={card} />
       </Card>
       {busy ? (
@@ -275,27 +280,17 @@ function TeachView({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
         </div>
       ) : (
         <div className="space-y-3">
-          <textarea
-            className={inputClass}
-            rows={card.stage === 'compress' ? 3 : 5}
-            placeholder={card.stage === 'compress' ? 'In your own words, at most two sentences' : 'Your answer'}
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+          <AnswerSurface
+            value={draft.answer}
+            onChange={(answer) => set({ answer })}
+            onSubmit={() => send(draft.answer)}
+            confidence={asksConfidence ? draft.confidence : undefined}
+            onConfidence={asksConfidence ? (confidence) => set({ confidence }) : undefined}
+            placeholder={card.stage === 'compress' ? 'In your own words, at most two sentences.' : undefined}
+            rows={card.stage === 'compress' ? 3 : 4}
           />
-          {card.stage === 'compress' && <input className={inputClass} placeholder="Handle (optional): a one-line compression, image or mnemonic" value={handle} onChange={(e) => setHandle(e.target.value)} />}
-          {card.stage !== 'compress' && card.stage !== 'connect' && (
-            <>
-              <label className="flex items-center gap-3 text-sm text-stone-600">
-                Confidence
-                <input type="range" min={0} max={1} step={0.1} value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} />
-                {Math.round(confidence * 100)}%
-              </label>
-              <textarea className={inputClass} rows={2} placeholder="Think aloud (optional): how are you getting there?" value={thinkAloud} onChange={(e) => setThinkAloud(e.target.value)} />
-            </>
-          )}
-          <Button kind="primary" onClick={submit} disabled={!answer.trim()}>
-            Submit
-          </Button>
+          {card.stage === 'compress' && <input className={inputClass} placeholder="Handle (optional): a one-line compression, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />}
+          <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} />
         </div>
       )}
     </section>
@@ -331,15 +326,19 @@ function CardBody({ card }: { card: PublicCard }) {
 
 function RecallForm({ title, intro, busy, onSend, submitLabel }: { title: string; intro: string; busy: boolean; onSend: (r: LearnerResponse) => void; submitLabel: string }) {
   const [text, setText] = useState('');
+  const submit = () => !busy && onSend({ answer: text });
   return (
     <section className="space-y-4">
       <Card title={title}>
         <p className="text-[15px]">{intro}</p>
       </Card>
-      <textarea className={inputClass} rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="From memory…" disabled={busy} />
-      <Button kind="primary" onClick={() => onSend({ answer: text })} disabled={busy}>
-        {busy ? 'Comparing…' : submitLabel}
-      </Button>
+      <AnswerSurface value={text} onChange={setText} onSubmit={submit} placeholder="From memory, however it comes." rows={8} disabled={busy} />
+      <div className="flex items-center gap-3">
+        <Button kind="primary" onClick={submit} disabled={busy}>
+          {busy ? 'Comparing…' : submitLabel}
+        </Button>
+        <span className="text-xs text-stone-500">⌘↵ to submit</span>
+      </div>
     </section>
   );
 }

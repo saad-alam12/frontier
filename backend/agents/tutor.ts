@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { Stage } from '../core/session';
 import type { LlmProvider } from '../llm/provider';
-import { loadPrompt } from './prompts';
+import { confidenceLabel } from '../core/types';
+import { answerReadingPrompt } from './prompts';
 
 const md = (max: number) => z.string().trim().min(1).max(max);
 const Rubric = z.array(z.string().trim().min(2).max(300)).min(1).max(6);
@@ -34,11 +35,14 @@ export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean) {
   return z.object({ grade, card });
 }
 
+/** One answer field (answer and reasoning mixed, or empty for "no idea"), optional confidence, and extras some cards ask for. */
 export interface LearnerResponse {
   answer: string;
+  /** One of CONFIDENCE_LEVELS' values; absent when not given. */
   confidence?: number;
-  thinkAloud?: string;
+  /** 1–5 rating after an explanation. */
   effort?: number;
+  /** Optional handle on the compress card. */
   handle?: string;
 }
 
@@ -95,7 +99,7 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   );
   const result = await provider.complete({
     role: 'tutor',
-    system: loadPrompt('tutor'),
+    system: answerReadingPrompt('tutor'),
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade) },
   });
@@ -122,10 +126,9 @@ export function cardText(card: TutorCard): string {
   }
 }
 
-function responseText(r: LearnerResponse): string {
-  const parts = [r.answer || '(no answer)'];
-  if (r.confidence !== undefined) parts.push(`confidence ${r.confidence.toFixed(2)}`);
-  if (r.thinkAloud) parts.push(`think-aloud: ${r.thinkAloud}`);
+export function responseText(r: LearnerResponse): string {
+  const parts = [r.answer.trim() ? r.answer : '(empty: the learner has no idea)'];
+  if (r.confidence !== undefined) parts.push(`confidence: ${confidenceLabel(r.confidence)}`);
   if (r.handle) parts.push(`handle: ${r.handle}`);
   if (r.effort !== undefined) parts.push(`effort ${r.effort}/5`);
   return parts.join('\n');
@@ -162,7 +165,7 @@ export async function runRecall(
   ].join('\n\n');
   const result = await provider.complete({
     role: 'tutor',
-    system: loadPrompt('recall'),
+    system: answerReadingPrompt('recall'),
     messages: [{ role: 'user', content: message }],
     submit: { name: 'submit_recall', description: 'Submit recall scores per idea and, when asked, the closing summary.', schema },
   });

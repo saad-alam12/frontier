@@ -56,13 +56,12 @@ export function openProbeId(db: Database, goalId: string): string | null {
   return row?.id ?? null;
 }
 
-export function recordProbeAnswer(db: Database, input: { problemId: string; answer: string; thinkAloud: string; confidence: number | null; score: number; feedback: string; submittedAt: string }): void {
-  db.prepare('INSERT INTO answers (id, problem_id, submitted_at, answer, think_aloud, confidence, score, feedback, graded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+export function recordProbeAnswer(db: Database, input: { problemId: string; answer: string; confidence: number | null; score: number; feedback: string; submittedAt: string }): void {
+  db.prepare('INSERT INTO answers (id, problem_id, submitted_at, answer, confidence, score, feedback, graded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     newId('ans'),
     input.problemId,
     input.submittedAt,
     input.answer,
-    input.thinkAloud,
     input.confidence,
     input.score,
     input.feedback,

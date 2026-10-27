@@ -12,3 +12,8 @@ export function loadPrompt(name: string): string {
   cache.set(name, text);
   return text;
 }
+
+/** System prompt for every role that reads learner answers: the role's prompt plus how answers arrive. */
+export function answerReadingPrompt(name: string): string {
+  return `${loadPrompt(name)}\n\n${loadPrompt('answering')}`;
+}

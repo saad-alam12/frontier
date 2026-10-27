@@ -85,7 +85,7 @@ The learner never picks topics; they state goals.
 1. **Goal to capabilities.** The Goal Compiler turns a goal ("pass the Game Theory exam with a 1.3", "build a retrieval system for my notes") into 3–15 can-do statements, each testable by a task.
 2. **Capabilities to target nodes.** Each capability maps to the nodes it needs and the depth each needs. Nodes missing from the world layer are created as `unverified` candidates and get grounded later (from a source the learner adds, or a fetched reference).
 3. **Gap analysis.** Target nodes are diffed against the you layer.
-4. **Diagnostic probe.** A short probe tests the highest-information nodes (most dependents). A correct derivation of a node implies its premises at lower depth, so a few questions place the learner across a whole topic. The learner gives raw reasoning in a think-aloud field, not only an answer.
+4. **Diagnostic probe.** A short probe tests the highest-information nodes (most dependents). A correct derivation of a node implies its premises at lower depth, so a few questions place the learner across a whole topic. Questions come one at a time; the learner answers in the one answer field (section 4.4), so any reasoning they give is there to diagnose.
 5. **Task ladder.** Each capability gets a ladder of authentic tasks from easy to hard (practice rungs, section 5).
 6. **Mastery** of a capability = an unaided fresh task at the required rung and cue distance, scored at least 8/10.
 
@@ -111,9 +111,9 @@ A session serves one goal. The learner presses "Start session"; the system has a
 
 Teach **one reasoning step at a time**, aiming for each step to feel obviously true, not merely familiar.
 
-1. **Predict.** Before any explanation, pose the problem this node solves or the next move in the derivation. The learner answers with a confidence slider and an optional think-aloud field (typed or dictated). Records `predict` evidence. Rationale: pretesting effect, prediction error.
+1. **Predict.** Before any explanation, pose the problem this node solves or the next move in the derivation. The learner answers in the one answer field with an optional confidence (section 4.4). Records `predict` evidence. Rationale: pretesting effect, prediction error.
 2. **Explain (anchored).** Explain the step as the answer to the gap the learner just felt. Anchor it in the learner's own graph: an analogy from a domain they own, premises they already hold. One diagram where useful, minimal text, math in LaTeX. If the learner was confidently wrong, say so explicitly (hypercorrection effect).
-3. **Check.** One question that tests the step. The answer key and rubric are written **before** the question is shown (commit-before-pose). Wrong answers are diagnosed from the think-aloud text; a misconception becomes a Bug and is repaired before anything builds on it.
+3. **Check.** One question that tests the step. The answer key and rubric are written **before** the question is shown (commit-before-pose). Wrong answers are diagnosed from whatever reasoning the answer contains; a misconception becomes a Bug and is repaired before anything builds on it.
 4. **Connect.** The learner states at least one link: "this requires…", "this is like … because…", "this differs from … in…". The tutor checks it. Valid links may become chains (via extraction, never written directly).
 5. **Compress.** The learner writes the node in their own words (at most two sentences) and optionally picks a handle. The tutor critiques precision but does not replace the wording.
 6. **Use.** One small goal-shaped task, including one case where the node does *not* apply. Records `use` evidence.
@@ -127,6 +127,12 @@ Index-tier nodes get a 30-second **index pass** instead: gist, where it sits on 
 - **Pause, don't lose.** Leaving a session pauses it; it resumes at the same card with nothing regenerated. Ending a session early is a separate, deliberate action. Unsent answers are kept as drafts.
 - **Passive reading is never the default.** Reading is raw material for the step loop.
 - **Grounding.** Every taught claim cites a source the learner added, a fetched reference, or is marked `unverified` until checked.
+
+### 4.4 Answering
+
+Every answer (probe, session card, practice) goes into **one field**. The learner answers naturally: a bare answer, an answer with reasoning, reasoning without a conclusion, or nothing. An empty field (or the "No idea" button) means "I don't know" and is graded as such, never as an error. Confidence is optional and has three choices: a guess · fairly sure · sure (stored as 0.33 / 0.66 / 0.9). ⌘↵ submits.
+
+Answers are often dictated by a speech-to-text tool that types into the focused field. The field is a plain text input so this works; every model that reads answers is told to read spoken math ("d a i by d x j"), fix obvious transcription slips from context ("Jack's" = JAX) and never penalize notation or spelling. A bare answer means the reasoning is unknown, not absent.
 
 ---
 
@@ -145,7 +151,7 @@ Every practice problem is specified on three discrete axes:
 Rules:
 - **Never announce** which node a problem needs. Retrieval must happen without the cue.
 - **Commit before pose.** Solution and rubric are generated together with the problem, before it is shown.
-- **One attempt.** The learner submits once (with think-aloud). Then the solution is revealed immediately; grading follows.
+- **One attempt.** The learner submits once, in the one answer field. Then the solution is revealed immediately; grading follows.
 - **Grading.** Score 0–10 plus one or two sentences naming which rubric points were met or missed and which idea failed to come to mind. The grade becomes `practice` evidence on each node the problem targets (normalized), with implicit credit to premises.
 
 ### 5.2 Retention without flashcards
@@ -220,7 +226,7 @@ A desktop app (macOS first, then Windows/Linux) with seven screens:
 | Screen | Purpose |
 | --- | --- |
 | Today | Start session, goal progress, what's fading, tonight's preview question |
-| Session | The teaching UI: structured cards (predict with confidence slider and think-aloud, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use) and the lesson map side panel |
+| Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel |
 | Map | The knowledge graph view |
 | Goals | Add and edit goals, see capabilities and progress |
 | Lookup | Search, node cards, derivation path |

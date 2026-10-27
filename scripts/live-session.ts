@@ -49,7 +49,7 @@ while (snap.phase === 'teach' && snap.card && cards < maxCards) {
   const stage = snap.card.stage;
   console.log(`\n--- ${snap.current?.name} · ${stage} ---`);
   console.log(JSON.stringify(snap.card, null, 2).slice(0, 1200));
-  const response = stage === 'explain' || stage === 'support' ? { answer: '', effort: 3 } : { answer: answers[stage] ?? 'I am not sure.', confidence: 0.7, thinkAloud: 'canned answer from the live check' };
+  const response = stage === 'explain' || stage === 'support' ? { answer: '', effort: 3 } : { answer: answers[stage] ?? 'I am not sure.', confidence: 0.66 };
   snap = await respond(deps, snap.id, response);
   if (snap.lastGrade) console.log(`grade: ${snap.lastGrade.score} — ${snap.lastGrade.feedback.slice(0, 300)}`);
 }

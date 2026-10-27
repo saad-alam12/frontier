@@ -3,9 +3,10 @@ import { call } from '../api';
 import type { GoalDetail, LessonPlan, ProbeOutcome, ProbeView } from '../../backend/api/contract';
 import { Button, Empty, Field, Page, inputClass } from '../components/Page';
 import { useDrafts } from '../hooks/useDrafts';
+import { AnswerSurface } from '../components/AnswerSurface';
 
-type ProbeDraft = { answer: string; confidence: number; thinkAloud: string };
-const EMPTY_DRAFT: ProbeDraft = { answer: '', confidence: 0.5, thinkAloud: '' };
+type ProbeDraft = { answer: string; confidence: number | null };
+const EMPTY_DRAFT: ProbeDraft = { answer: '', confidence: null };
 
 export function GoalsScreen() {
   const [goals, setGoals] = useState<GoalDetail[]>([]);
@@ -218,15 +219,7 @@ export function GoalsScreen() {
                           <div className="text-sm">
                             <span className="text-stone-400">{i + 1}.</span> {q.question}
                           </div>
-                          <textarea className={inputClass} rows={3} placeholder="Your answer" value={a.answer} onChange={(e) => set({ answer: e.target.value })} />
-                          <div className="flex items-center gap-3 text-xs text-stone-600">
-                            <label className="flex items-center gap-2">
-                              Confidence
-                              <input type="range" min={0} max={1} step={0.1} value={a.confidence} onChange={(e) => set({ confidence: Number(e.target.value) })} />
-                              {Math.round(a.confidence * 100)}%
-                            </label>
-                          </div>
-                          <textarea className={inputClass} rows={2} placeholder="Think aloud (optional): how did you get there?" value={a.thinkAloud} onChange={(e) => set({ thinkAloud: e.target.value })} />
+                          <AnswerSurface value={a.answer} onChange={(answer) => set({ answer })} onSubmit={() => void submitProbe()} confidence={a.confidence} onConfidence={(confidence) => set({ confidence })} rows={3} />
                         </li>
                       );
                     })}

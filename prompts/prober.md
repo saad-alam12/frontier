@@ -12,14 +12,14 @@ For each question:
 - `answerKey`: what a correct answer contains, written before the question is shown.
 - `rubric`: two to four short points that a full answer hits.
 
-The learner answers in their own words with a confidence from 0 to 1 and an optional think-aloud.
+The learner answers in one field, in their own words, and may say how sure they are.
 
 ## Judging answers
 
-You receive each question with its key and rubric, and the learner's answer, confidence and think-aloud. For each, submit:
+You receive each question with its key and rubric, and the learner's answer (with their confidence when given). For each, submit:
 
 - `score` from 0 to 1: the fraction of the rubric that is genuinely met. Partial credit is fine. A confident wrong answer scores low; do not reward confidence.
-- `reasoning`: one or two sentences naming what was met and what was missed. If the think-aloud shows a specific misconception, say what it is.
+- `reasoning`: one or two sentences naming what was met and what was missed. If the reasoning shows a specific misconception, say what it is.
 - `misconception`: a one-sentence description of a wrong belief, if the answer shows one; otherwise null.
 
 Call the submit tool once.

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { LlmProvider } from '../llm/provider';
-import { loadPrompt } from './prompts';
+import { confidenceLabel } from '../core/types';
+import { answerReadingPrompt, loadPrompt } from './prompts';
 
 export interface ProbeCandidate {
   nodeId: string;
@@ -57,8 +58,7 @@ export interface ProbeAnswer {
   answerKey: string;
   rubric: string[];
   answer: string;
-  confidence: number;
-  thinkAloud: string;
+  confidence: number | null;
 }
 
 export const AssessmentSchema = z.object({
@@ -84,12 +84,12 @@ export async function assessProbeAnswers(provider: LlmProvider, answers: ProbeAn
   const body = answers
     .map(
       (a) =>
-        `### ${a.nodeId}\nQuestion: ${a.question}\nAnswer key: ${a.answerKey}\nRubric:\n${a.rubric.map((r) => `- ${r}`).join('\n')}\n\nLearner answer (confidence ${a.confidence.toFixed(2)}): ${a.answer || '(no answer)'}\nThink-aloud: ${a.thinkAloud || '(none)'}`,
+        `### ${a.nodeId}\nQuestion: ${a.question}\nAnswer key: ${a.answerKey}\nRubric:\n${a.rubric.map((r) => `- ${r}`).join('\n')}\n\nLearner answer${a.confidence === null ? '' : ` (confidence: ${confidenceLabel(a.confidence)})`}: ${a.answer.trim() ? a.answer : '(empty: the learner has no idea)'}`,
     )
     .join('\n\n');
   const result = await provider.complete({
     role: 'prober',
-    system: loadPrompt('prober'),
+    system: answerReadingPrompt('prober'),
     messages: [{ role: 'user', content: `Judge these answers.\n\n${body}` }],
     submit: { name: 'submit_assessments', description: 'Submit one assessment per question.', schema: buildAssessmentSchema(new Set(answers.map((a) => a.nodeId))) },
   });

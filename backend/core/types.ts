@@ -135,6 +135,20 @@ export interface Source {
   error: string | null;
 }
 
+/** The three confidence choices next to every answer (optional; none means not given). */
+export const CONFIDENCE_LEVELS = [
+  { label: 'A guess', value: 0.33 },
+  { label: 'Fairly sure', value: 0.66 },
+  { label: 'Sure', value: 0.9 },
+] as const;
+
+/** How a stored confidence reads to a model and in history: the nearest of the three choices. */
+export function confidenceLabel(value: number): string {
+  let best: (typeof CONFIDENCE_LEVELS)[number] = CONFIDENCE_LEVELS[0];
+  for (const level of CONFIDENCE_LEVELS) if (Math.abs(level.value - value) < Math.abs(best.value - value)) best = level;
+  return best.label.toLowerCase();
+}
+
 export const PASS_SCORE = 0.7;
 export const OWNED_RECALL = 0.8;
 export const OWNED_DEPTH: Depth = 2;

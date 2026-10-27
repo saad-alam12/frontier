@@ -23,7 +23,7 @@
 | M2 Ingestion and Library | Done | Pipeline tested with fake provider and fake embedder; live run is the owner's checkpoint |
 | M3 Goals, probe and plan | Done | Compiler, prober, planner on the fake provider; 80 tests |
 | M4 Teaching session | Done | Full loop on the fake provider; five cards run live against the real model |
-| R1 Feedback round 1 and visual design | In progress | §1 bugs done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
+| R1 Feedback round 1 and visual design | In progress | §1 bugs, §2 one answer field done; `docs/feedback-round-1.md`, `docs/visual-design.md`; owner checkpoint after |
 | M5 Practice, scheduler and Today | Not started | Starts after the owner's R1 feedback |
 | M6 Map, Lookup, Trails, packaging | Not started | Owner checkpoint after |
 
@@ -108,6 +108,10 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-10-27 — The "Listening" indicator shows for 1.5 s after the answer field grows by four or more characters in one input event: dictation tools (Handy) deliver text in bursts, typing delivers one character at a time. There is no other way to tell dictated text from typed text in a plain textarea, and the field stays plain so pasting and simulated typing keep working.
+- 2026-10-27 — The answer-reading instructions (one field, empty = no idea, dictated speech) live in `prompts/answering.md` and are appended to the tutor, recall and prober prompts by `answerReadingPrompt()`; the M5 grader must use it too. Confidence reaches models as a word ("fairly sure"), never a number.
+- 2026-10-27 — Session cards also keep drafts (key: session, node, stage, step), so a paused session keeps a half-written answer.
 
 - 2026-10-27 — Drafts (unsent probe and session answers) live in a `drafts` table in the database rather than browser storage, so they survive quitting the app and a dev-server port change. The UI saves them debounced (400 ms) and flushes on leaving the screen; submitting deletes them.
 - 2026-10-27 — Pause records a `pause` session event and returns to Today; the session stays `active`, so reopening Session shows the same card from the saved state with no model call. End session (with a one-line confirmation) sets it to `abandoned` as before.
