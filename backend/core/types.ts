@@ -143,11 +143,20 @@ export interface Goal {
   targetGrade: string | null;
   /** Exam or deadline, ISO date (YYYY-MM-DD). */
   date: string | null;
-  hoursPerWeek: number | null;
+  /** The time the learner gives the goal, as they entered it; null when not set. */
+  budget: GoalBudget | null;
+  /** What kind of understanding the learner wants; empty means a balanced mix. */
+  focus: GoalFocus[];
+  /** Whether the goal's first material covers the whole goal, judged at compile; null before. */
+  coverage: Coverage | null;
+  /** Depth of each targeted idea when the goal started (or when the idea joined it), for pace. */
+  baseline: Record<string, Depth>;
   /** Higher means more important; 1 is the default. */
   priority: number;
-  status: 'active' | 'paused' | 'done';
+  /** A draft is being set up and previewed; it becomes active when the learner approves its plan. */
+  status: 'draft' | 'active' | 'paused' | 'done';
   createdAt: string;
+  approvedAt: string | null;
   compiledAt: string | null;
   /** Teaching and reference sources the last compile covered (incremental compile adds the rest). */
   compiledSources: string[];
@@ -176,8 +185,28 @@ export interface Capability {
 export interface Target {
   capabilityId: string;
   nodeId: string;
+  /** The depth the plan holds for it: the ideal depth trimmed to the time budget. */
   depth: Depth;
+  /** The depth the compiler asked for. */
+  idealDepth: Depth;
 }
+
+/**
+ * Time for a goal as the learner gives it (design §3.4). It always resolves to a true total:
+ * a total; a rate for a length ("10 h a week for 6 months"); or hours per teaching resource
+ * ("2 h per lecture"), which grows as lectures arrive.
+ */
+export type GoalBudget =
+  | { mode: 'total'; hours: number }
+  | { mode: 'rate'; hours: number; per: 'day' | 'week'; length: number; lengthUnit: 'days' | 'weeks' | 'months' }
+  | { mode: 'resource'; hours: number };
+
+export const GOAL_FOCUS = ['concepts', 'math', 'practice'] as const;
+/** Conceptual understanding, mathematical rigour, practical application (code, real tasks). */
+export type GoalFocus = (typeof GOAL_FOCUS)[number];
+
+/** Does the goal's material cover the whole goal, part of it, or only a fragment (design §3.2)? */
+export type Coverage = 'complete' | 'partial' | 'fragment';
 
 export type SourceKind = 'pdf' | 'markdown' | 'text' | 'html' | 'session';
 

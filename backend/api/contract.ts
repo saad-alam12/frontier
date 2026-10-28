@@ -17,13 +17,20 @@ import type { TodayGoal, TodayView } from '../services/today';
 import type { MapNodeView, MapState, MapView, NodeCard } from '../services/map';
 import type { LookupAnswer, LookupHit } from '../services/lookup';
 import type { Trail, TrailItem, TrailSummary } from '../services/trails';
+import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget';
+import type { TickInput } from '../services/activity';
+import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
+import type { GoalBudget } from '../core/types';
+
+export type { GoalProgress, PlanPreview, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
+export type { GoalPlan, Pace, PaceKind } from '../core/budget';
 
 export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailSummary };
 
 export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, TodayGoal, TodayView };
 
 export type { DeltaItem, IdeaRef, Effort, ModelOptions, GoalForm, GoalWorkState, MaterialView };
-export type { Assessment, ExamProfile, GoalKind, MaterialRole, UpcomingUnit } from '../core/types';
+export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind, MaterialRole, UpcomingUnit } from '../core/types';
 export type { SkillStatus } from '../core/goals';
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
@@ -63,8 +70,15 @@ export interface ApiMethods {
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
   'goals.list': { input: undefined; output: GoalDetail[] };
   'goals.get': { input: { goalId: string }; output: GoalDetail };
-  /** Creates the goal with its material; reading, profiling and compiling continue in the background. */
-  'goals.create': { input: { form: GoalForm }; output: GoalDetail };
+  /**
+   * Creates the goal with its material; reading, profiling and compiling continue in the background.
+   * A draft is compiled and previewed; it joins the plan when approved.
+   */
+  'goals.create': { input: { form: GoalForm; draft?: boolean }; output: GoalDetail };
+  /** The plan a draft (or any goal) would get with this budget, without saving: for the live preview. */
+  'goals.preview': { input: { goalId: string; budget: GoalBudget | null }; output: PlanPreview | null };
+  /** Approve a draft's plan: it becomes active and its clock starts. */
+  'goals.approve': { input: { goalId: string }; output: GoalDetail };
   /** Saves edits; the compile that follows is incremental and keeps progress. */
   'goals.update': { input: { goalId: string; form: Partial<GoalForm> & { status?: 'active' | 'paused' | 'done' } }; output: GoalDetail };
   'goals.remove': { input: { goalId: string }; output: undefined };
@@ -106,6 +120,9 @@ export interface ApiMethods {
   'lookup.open': { input: { nodeId: string }; output: NodeCard };
   'trails.list': { input: { nodeId?: string }; output: TrailSummary[] };
   'trails.get': { input: { sessionId: string }; output: Trail };
+  /** Active time from the renderer, attributed to what the learner is doing. */
+  'activity.tick': { input: TickInput; output: undefined };
+  'stats.view': { input: StatsFilter; output: StatsView };
   /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
   'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
   'drafts.set': { input: { key: string; value: string }; output: undefined };

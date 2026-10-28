@@ -7,6 +7,7 @@ import { generateProblems } from '../agents/problemGenerator';
 import type { GeneratorSpec } from '../agents/problemGenerator';
 import { gradePractice } from '../agents/grader';
 import { ancestors } from '../core/graph';
+import { weeklyMinutes } from '../core/budget';
 import { leverageOf } from '../core/leverage';
 import { chooseMode, dailyMinutes, daysUntil, dueForecast, dueNodes, groupForPractice, mockExamSpecs, mockExamsOpen, specifyProblem } from '../core/scheduler';
 import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, ScheduleInput } from '../core/scheduler';
@@ -14,13 +15,15 @@ import type { Depth } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
+import { logEvent } from '../store/activity';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
 import { getGoal, listMaterials, listTargets } from '../store/goals';
 import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
 import type { AnswerRecord, PracticeKind } from '../store/practice';
 import { getSource, listChunks } from '../store/sources';
+import { goalBudgetMinutes } from './budget';
 import { normalizeGrade, recordEvidence } from './evidence';
-import { loadKnowledge } from './knowledge';
+import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 import { candidatesForGoal } from './planner';
 
@@ -119,7 +122,7 @@ export function goalSchedule(db: Database, goalId: string, now = new Date()): Go
     mode: choice.mode,
     modeReason,
     modeValues: choice.value,
-    dailyMinutes: dailyMinutes(goal.hoursPerWeek),
+    dailyMinutes: dailyMinutes(weeklyMinutes(goal.budget, goalBudgetMinutes(db, goal), goal.approvedAt ?? goal.createdAt, goal.date)),
     daysToExam,
     mockOpen: mockExamsOpen(goal.assessment, examDate, now),
   };
@@ -326,7 +329,11 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
       if (open) touchBug(db, open.id);
       else recordBug(db, nodeId, description);
     }
-    if (set && listProblems(db, set.id).every((p) => answerFor(db, p.id)?.score !== null && answerFor(db, p.id) !== undefined)) closePracticeSet(db, set.id);
+    if (set && listProblems(db, set.id).every((p) => answerFor(db, p.id)?.score !== null && answerFor(db, p.id) !== undefined)) {
+      closePracticeSet(db, set.id);
+      logEvent(db, 'practice.done', { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId }, { kind: set.kind });
+      refreshGoalFields(db);
+    }
   });
   deps.onGraded?.({ setId: problem.setId, problemId: problem.id });
 }

@@ -25,7 +25,7 @@ function setup() {
 
 /** A goal whose teaching material is the seed graph's source. */
 function seedGoal(db: Database, text: string, priority = 1) {
-  const goal = createGoal(db, text, priority);
+  const goal = createGoal(db, text, { priority });
   setMaterials(db, goal.id, [{ sourceId: listSources(db)[0]?.id as string, role: 'teaching' }]);
   return goal;
 }
@@ -38,6 +38,7 @@ describe('goal compile', () => {
       expect(req.messages[0]?.content).toContain(`[${ids.get('nash')}] Nash equilibrium`);
       return {
         title: 'Game theory',
+        coverage: 'complete',
         capabilities: [
           { statement: 'Can find all pure Nash equilibria of a small matrix game', targets: [{ ref: ids.get('nash'), depth: 4 }, { ref: ids.get('findPureNash'), depth: 4 }] },
           { statement: 'Can explain why dominated strategies are never played', targets: [{ ref: ids.get('dominatedNeverPlayed'), depth: 3 }, { ref: ids.get('nash'), depth: 2 }] },
@@ -63,6 +64,7 @@ describe('goal compile', () => {
     const goal = seedGoal(db, 'learn');
     const good = {
       title: 'Game theory',
+      coverage: 'complete',
       capabilities: [
         { statement: 'Can explain Nash equilibrium', targets: [{ ref: ids.get('nash'), depth: 2 }] },
         { statement: 'Can explain best responses', targets: [{ ref: ids.get('bestResponse'), depth: 2 }] },
@@ -81,6 +83,7 @@ async function compiledGoal() {
   const goal = seedGoal(db, 'Pass the game theory exam', 2);
   provider.script('goalCompiler', {
     title: 'Game theory',
+    coverage: 'complete',
     capabilities: [
       { statement: 'Can find pure Nash equilibria', targets: [{ ref: ids.get('nash'), depth: 4 }, { ref: ids.get('findPureNash'), depth: 4 }, { ref: ids.get('nashMutualBr'), depth: 3 }] },
       { statement: 'Can explain dominance results', targets: [{ ref: ids.get('dominantNash'), depth: 3 }, { ref: ids.get('dominant'), depth: 2 }] },
@@ -185,6 +188,7 @@ describe('planner', () => {
     const goal = seedGoal(db, 'exam');
     provider.script('goalCompiler', {
       title: 'Exam',
+      coverage: 'complete',
       capabilities: [
         { statement: 'Can explain a ghost idea', targets: [{ ref: 'm1', depth: 2 }] },
         { statement: 'Can explain Nash', targets: [{ ref: ids.get('nash'), depth: 2 }] },

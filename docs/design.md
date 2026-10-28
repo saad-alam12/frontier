@@ -90,7 +90,11 @@ A goal has the learner's sentence, a short `title` (set by the compiler), and:
 
 - `kind`: `course` (lectures arriving over a term, plus scripts, exercise sheets, past exams) or `personal` (own resources, or none at all).
 - `assessment`: `written_exam` | `oral_exam` | `presentation_or_project` | `outcome` | `none`.
-- `targetGrade` (free text, e.g. "1.0"), `date` (exam or deadline) and `hoursPerWeek`, all optional.
+- `targetGrade` (free text, e.g. "1.0") and `date` (exam or deadline), both optional.
+- `budget`: the time the learner gives the goal (section 3.4).
+- `focus`: what kind of understanding they want: conceptual understanding, mathematical rigour, practical application (including code), any mix; none means balanced.
+- `coverage`: whether the goal's material covers the goal (`complete`, `partial`, `fragment`), judged by the compiler on the first compile with material.
+- `status`: `draft` while it is set up and its plan previewed, then `active` once the learner approves the plan (or `paused`, `done`).
 - `materials`: sources linked to the goal, each with a **role**:
 
 | Role | Examples | Used for |
@@ -105,9 +109,9 @@ Only `teaching` and `reference` material is read into ideas; the rest is kept as
 
 ### 3.2 From goal to plan
 
-1. **Goal to capabilities.** The Goal Compiler turns the goal into can-do statements, each testable by a task, shaped by the assessment (below).
+1. **Goal to capabilities.** The Goal Compiler turns the goal into can-do statements, each testable by a task, shaped by the assessment (below), the focus and the time budget (about one idea per twenty minutes of budget, plus a third more so the plan can choose). It sees the goal's material, the premises it builds on, and the ideas the learner already knows or another goal holds, so overlap is targeted rather than re-created.
 2. **Capabilities to target nodes.** Each capability maps to the nodes it needs and the depth each needs. Most targets are depth 1–2 (roughly 50% at 1–2, 35% at 3, 15% at 4–5 for an exam goal); code logs a warning when more than half are at 3 or more. The compiler sees only the goal's own material (plus the premises its ideas are built on), never the whole library.
-3. **Unverified ideas.** Ideas the goal needs but no material covers are created as `unverified` and shown as **expected** ("not in your material yet"). They are not taught unless the goal has no material at all (a goal from scratch) or the learner starts one explicitly. When a later source covers one (the matcher links them), it becomes verified.
+3. **Unverified ideas.** Ideas the goal needs but no material covers are created as `unverified` and shown as **expected** ("not in your material yet"). They are not taught unless the goal has no material at all (a goal from scratch), the goal is a personal one whose material covers only part of it (`partial` or `fragment` coverage: the compiler built the rest of the map, and the material grounds the parts it covers), or the learner starts one explicitly. A course's expected ideas wait for its lectures. When a later source covers one (the matcher links them), it becomes verified.
 4. **Incremental compile.** Adding material or editing the goal recompiles incrementally: existing capabilities keep their ids and mastery; the compiler adds capabilities and targets for what is new, extends existing ones, and retires one only when a new one clearly supersedes it. Reading new material, summarizing assessment and scope material, and recompiling run in the background as material arrives.
 5. **Exam profile.** Assessment material is summarized once into an exam profile stored on the goal and given to the compiler, prober, planner and (M5) problem generator. Scope material yields the upcoming lectures.
 6. **Gap analysis.** Target nodes are diffed against the you layer.
@@ -117,6 +121,8 @@ Only `teaching` and `reference` material is read into ideas; the rest is kept as
 
 Goals have priority weights and can change anytime; recompiling reuses everything already learned.
 
+A new goal is set up in four steps, one decision each: the goal (sentence, kind, assessment, date and grade, focus), its material (optional), its time, and the plan that time buys. After the time step the goal exists as a draft and is compiled in the background; the plan step shows how many sessions and ideas the plan comes to, the ideas as a field of dots (in depth, overview, already yours, left out, shared with another goal), and the time control, which re-plans live. The learner approves the plan, or maps more ideas when the time holds more than the map.
+
 ### 3.3 How the assessment changes behaviour
 
 - **Written exam:** capabilities are what the exam asks on paper; practice is shaped by the exam profile; readiness per lecture; mock exams in the last four weeks (M5).
@@ -124,9 +130,35 @@ Goals have priority weights and can change anytime; recompiling reuses everythin
 - **Presentation or project:** practice is producing the thing (outline, argument, Q&A rehearsal).
 - **Outcome:** capabilities are the tasks themselves.
 - **None (open-ended):** no endpoint; the planner keeps proposing the next frontier; milestones are checkpoints; it periodically asks where to go next.
-- **Date:** the scheduler (M5) plans backwards from it so recall peaks on the date; without a date it paces by `hoursPerWeek`.
+- **Date:** the scheduler (M5) plans backwards from it so recall peaks on the date; the daily minutes come from the budget's weekly rhythm (section 3.4).
 
 The assessment shapes the compiler (capabilities, depth distribution), the prober and planner (exam style), the problem generator (exam style and the goal's exercise sheets) and the scheduler (the exam date pulls reviews forward so recall peaks on the day; mock exams open four weeks before a written exam).
+
+### 3.4 Time budgets
+
+The time a goal gets decides its plan. 80/20 is the rule: with little time, the most useful ideas at overview depth; with more, more ideas and deeper.
+
+**Giving time.** Three forms, each resolving to one true total:
+
+| Form | Example | Total |
+| --- | --- | --- |
+| Total | "20 hours" | 20 h |
+| Rate for a length | "10 h a week for 6 months", "6 h a day for 2 weeks" | rate × length (a rate needs a length: 2 h a week for a month and for a year are different plans) |
+| Per teaching resource | "2 h per lecture" | hours × teaching resources (at least one), growing as lectures arrive |
+
+A rate (or a total with a date) also gives a weekly rhythm, which sets the scheduler's daily minutes and the "this week" target. The budget can change at any time (a course that turns into cramming: 6 h a day for two weeks); the plan follows at once.
+
+**Cost of an idea.** Minutes to raise an idea one level: 4, 8, 14, 18, 22 for depths 1–5 (terms cost half), including a share of the practice that keeps it, plus a first-level surcharge for premises no plan holds that have to be learned first. A learner speed factor (time studied ÷ the model's estimate for what was learned, within 0.6–2.5, after an hour of study) scales every cost, so plans adapt to how fast this learner learns.
+
+**Spending the budgets** (`core/budget.ts`, deterministic). Every active goal's remaining budget (total minus time already spent on it) is spent on idea levels, best value per minute first. A level's value is the sum over the goals that want it of goal priority × part weight, × (1 + log(1 + centrality)), × the level's value (1, 0.55, 0.4, 0.25, 0.15 for depths 1–5). So recognizing many ideas comes before deriving a few, and foundations many ideas build on come first. An idea several goals want is paid once, its cost split between the goals that can afford their share; a goal with no time left still gets an idea another goal pays for. What the learner already knows is free. Each target's **planned depth** (its ideal depth trimmed to what the time buys; 0 when left out) is stored with the target, and everything downstream (planner, probe, scheduler, tiers) works from planned depths. The compiler's ideal depths are kept, so more time later restores them. Goals without a budget get every target at its full depth. A part the learner keeps adding material on weighs more (1 + 0.15 per extra source covering an idea, up to 1.6), so the plan drifts toward the learner's interest without a rebuild.
+
+**Shared ideas.** One idea is one idea everywhere. Calculus needed by a physics course and a deep learning goal is learned once, in whichever session gets to it first, and costs each goal half. Once owned, other goals assume it: the planner never re-teaches it and the probe does not ask it again; sessions and problems for those goals build on it as known. If the learner clearly fails it anywhere, its depth drops for every goal that uses it, and it is drilled again.
+
+**Re-planning.** The plan is recomputed after compiles, merges, goal edits, finished sessions and practice sets. It always fits the time that is left, so time spent slower than planned trims the plan; faster learning grows it.
+
+**Progress and pace.** Each goal shows ideas ready against its plan, time spent against its total, this week against its rhythm, time per lecture against a per-lecture budget, and sessions left (planned minutes ÷ 45). Time on an idea held by several goals is split between them. The pace verdict says something only when it is clear: behind on hours (two weeks in, under half of what the rhythm asked), slow (after an hour and a fifth of the budget, learning takes more than twice the estimate), fast (under half), otherwise on track or nothing. When the plan is trimmed, the goal says how much more time would cover it fully.
+
+**Activity log.** Time is logged as the learner works: the renderer ticks every 15 seconds while the window has focus and there was input in the last three minutes (60 seconds at most per tick), and each tick is booked to what they are doing (the session's goal and current idea, the practice set, the probe's goal, or a screen that is not study). Continuous ticks become one span. Events go into the same log: goals created and approved, budget changes, material added, sessions started and ended, practice sets done, lookups, and every change of an idea's depth. Stats (section 10) is built from this log and the evidence.
 
 ---
 
@@ -224,6 +256,8 @@ leverage(n) = goalRelevance(n) × centrality(n) × depthGap(n) / expectedEffort(
 
 Each session the scheduler chooses between **build** (new fringe nodes), **deepen** (raise depth), and **consolidate** (compound practice) by expected leverage per minute.
 
+`targetDepth` is the deepest planned depth any active goal holds for a node: the time budgets (section 3.4) decide it, not the compiler alone.
+
 ---
 
 ## 7. Ingestion and delta reading
@@ -258,14 +292,15 @@ Measured: depth gained per session (verified by later unaided performance), minu
 
 ## 10. The app
 
-A desktop app (macOS first, then Windows/Linux) with seven screens:
+A desktop app (macOS first, then Windows/Linux). The rail has the four places you work in (Today, Goals, Map, Stats), then the three you look things up in (Lookup, Trails, Library), and Settings; Session appears at the top while a session is open. An empty app opens on a welcome that explains the three steps (say what you want, give it time, learn at your edge) and offers one action: set your first goal.
 
 | Screen | Purpose |
 | --- | --- |
-| Today | Start session, goal progress, what's fading, tonight's preview question |
+| Today | One next action (session, practice, or a draft plan to approve), goals with their time bars and pace, what's fading (three shown, the rest on request), the preview question, the two-week forecast and the last seven days against the goals' rhythm |
 | Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel |
 | Map | The knowledge graph view |
-| Goals | New goal as a short guided flow (sentence, kind, assessment, date, grade, pace, material with roles) with a live summary; a goal page with the lecture timeline, the skills the assessment asks for, expected ideas, the probe, this week's plan, the exam style and the material by role; Edit goal reopens the flow |
+| Goals | New goal as a four-step flow (goal, material, time, plan to approve; section 3.2); a goal page that leads with where it stands (ideas ready, time against budget, this week, sessions left, a time bar with a marker where the rhythm puts you, pace) and one action, then the probe, the lecture timeline with time per lecture, the skills (each opening to its ideas with depth pips: known, planned, asked beyond the time), skills left out for this time and expected ideas behind disclosures; the time can be changed in place with the plan re-computed live; Edit goal has every field on one page |
+| Stats | How you learn, filtered by time range, goal and topic (ideas clustered by chains): a few plain sentences on what stands out, then time per week by goal against the budgets' rhythm, every day for twelve weeks, what you know over time, what you keep (projected recall), how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions, replay |
 | Library | Add sources, see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
@@ -345,7 +380,7 @@ Rules:
 
 ```
 ~/Frontier/            (configurable)
-  frontier.db          SQLite: world layer, you layer, evidence, sessions, goals, sources, practice
+  frontier.db          SQLite: world layer, you layer, evidence, sessions, goals, sources, practice, activity log
   sources/             original files the learner added
   exports/             optional Markdown export of nodes (Obsidian-readable)
 ```

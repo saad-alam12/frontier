@@ -213,10 +213,10 @@ export function chooseMode(input: ModeInput): ModeChoice {
   return { mode, value };
 }
 
-/** Minutes for one day's work from the goal's pace (a five-day week); 40 when no pace is set. */
-export function dailyMinutes(hoursPerWeek: number | null): number {
-  if (!hoursPerWeek || hoursPerWeek <= 0) return 40;
-  return Math.max(15, Math.min(120, Math.round((hoursPerWeek * 60) / 5)));
+/** Minutes for one day's work from the budget's weekly rhythm (a five-day week); 40 without one. */
+export function dailyMinutes(minutesPerWeek: number | null): number {
+  if (!minutesPerWeek || minutesPerWeek <= 0) return 40;
+  return Math.max(15, Math.min(360, Math.round(minutesPerWeek / 5)));
 }
 
 export function daysUntil(date: Date | null, now: Date): number | null {

@@ -42,11 +42,13 @@ export interface LessonPlan {
 
 export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeView = loadKnowledge(db)) {
   const targetIds = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
-  // Unverified ideas (a compile's guesses no source covers yet) are taught only for goals with no
-  // material at all, or when the learner chose to start one.
+  // Unverified ideas (a compile's guesses no source covers yet) are taught for goals with no material
+  // at all, for personal goals whose material covers only part of the goal (the compile built the
+  // rest), or when the learner chose to start one. A course's expected ideas wait for its lectures.
   const goal = getGoal(db, goalId);
   const fromScratch = listMaterials(db, goalId).length === 0;
-  const teachable = (id: string) => view.nodes.get(id)?.status !== 'unverified' || fromScratch || (goal?.startedUnverified.includes(id) ?? false);
+  const selfBuilt = goal?.kind === 'personal' && (goal.coverage === 'partial' || goal.coverage === 'fragment');
+  const teachable = (id: string) => view.nodes.get(id)?.status !== 'unverified' || fromScratch || selfBuilt || (goal?.startedUnverified.includes(id) ?? false);
   const fringe = new Set([...view.fringe].filter(teachable));
   const candidates = planCandidates(targetIds, view.owned, fringe, view.index);
   const candidateSet = new Set(candidates.map((c) => c.nodeId));

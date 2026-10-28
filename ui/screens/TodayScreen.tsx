@@ -3,14 +3,18 @@ import type { TodayGoal, TodayView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
 import type { ScreenName } from '../components/Shell';
 import { Screen } from '../components/Shell';
-import { Button, DefGrid, Empty, Meter, MetaLine, Notice, Section } from '../components/controls';
+import { Button, Meter, MetaLine, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { BudgetBar, paceSentence } from '../components/budget';
+import { formatHours } from '../../backend/core/budget';
 import { ASSESSMENT_LABEL } from './goals/labels';
+import type { GoalsView } from './GoalsScreen';
 
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
 
 /** Today: what to do now, how each goal stands, what is fading, and the days ahead. */
-export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: ScreenName) => void; onOpenPractice: (setId: string) => void }) {
+export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNavigate: (s: ScreenName) => void; onOpenGoals: (view: GoalsView) => void; onOpenPractice: (setId: string) => void }) {
+  const [showAllFading, setShowAllFading] = useState(false);
   const [today, setToday] = useState<TodayView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +50,7 @@ export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: Sc
     });
 
   if (!today) return <Screen>{null}</Screen>;
+  if (!today.anyGoals) return <Welcome onStart={() => onOpenGoals({ name: 'new' })} />;
 
   const date = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const lead = today.goals[0];
@@ -70,14 +75,21 @@ export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: Sc
       </div>
       <div className="divider" />
       <div className="flex flex-col gap-[14px]">
-        <h2 className="t-title">This week</h2>
-        <DefGrid
-          rows={[
-            { label: 'Sessions', value: String(today.week.sessions) },
-            { label: 'Ideas practised', value: String(today.week.practised) },
-            { label: 'Your pace', value: today.week.minutesTarget ? `${Math.round(today.week.minutesTarget / 60)} hours a week` : 'Not set' },
-          ]}
-        />
+        <div className="section-head">
+          <h2 className="t-title">The last seven days</h2>
+          <button type="button" className="link-button" onClick={() => onNavigate('stats')}>
+            All stats
+          </button>
+        </div>
+        <div className="week-figure">
+          <span className="figure-number">
+            {formatHours(today.week.minutesStudied)}
+            {today.week.minutesTarget > 0 && <span className="figure-of"> / {formatHours(today.week.minutesTarget)}</span>}
+          </span>
+          <span className="figure-label">{today.week.minutesTarget > 0 ? 'of the week your goals ask for' : 'studied'}</span>
+          {today.week.minutesTarget > 0 && <Meter value={today.week.minutesStudied / today.week.minutesTarget} accent />}
+        </div>
+        <MetaLine small items={[`${today.week.sessions} ${today.week.sessions === 1 ? 'session' : 'sessions'}`, `${today.week.practised} ${today.week.practised === 1 ? 'idea' : 'ideas'} practised`]} />
       </div>
     </>
   );
@@ -90,16 +102,27 @@ export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: Sc
       </div>
       {error && <Notice error>{error}</Notice>}
 
-      {today.goals.length === 0 && !today.session ? (
-        <Empty action={<Button onClick={() => onNavigate('goals')}>Go to goals</Button>}>Add a goal and its material. Today then says what to do each day.</Empty>
-      ) : (
-        <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} />
-      )}
+      <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} />
+      {today.drafts.map((d) => (
+        <div key={d.goalId} className="next-card is-quiet">
+          <div className="mode">
+            <span className="mode-dot" aria-hidden="true" />
+            {d.mapped ? 'Plan ready' : 'Being mapped'}
+          </div>
+          <span className="t-heading">{d.title}</span>
+          <p className="t-lead m-0">{d.mapped ? 'Its plan is ready. Look it over, adjust the time if you like, and start.' : 'Frontier is mapping it now. The plan will be ready in a minute or two.'}</p>
+          <div className="button-row">
+            <Button kind={today.goals.length ? 'secondary' : 'primary'} onClick={() => onOpenGoals({ name: 'draft', goalId: d.goalId })}>
+              {d.mapped ? 'Review the plan' : 'See progress'}
+            </Button>
+          </div>
+        </div>
+      ))}
 
       {today.fading.length > 0 && (
         <Section title="What is fading" meta={`${today.fading.length} ${today.fading.length === 1 ? 'idea' : 'ideas'}`}>
           <ul className="list-card">
-            {today.fading.slice(0, 8).map((f) => (
+            {today.fading.slice(0, showAllFading ? 30 : 3).map((f) => (
               <li key={f.nodeId} className="fading-row">
                 <div className="flex min-w-0 flex-col">
                   <Markdown text={f.name} inline />
@@ -110,6 +133,11 @@ export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: Sc
               </li>
             ))}
           </ul>
+          {today.fading.length > 3 && (
+            <button type="button" className="link-button" onClick={() => setShowAllFading(!showAllFading)}>
+              {showAllFading ? 'Fewer' : `Show all ${today.fading.length}`}
+            </button>
+          )}
           {mostFading && mostFading.schedule.due.length > 0 && !today.practice && (
             <div className="button-row">
               <Button onClick={() => void startPractice(mostFading.goalId, 'compound')} disabled={busy !== null}>
@@ -122,10 +150,17 @@ export function TodayScreen({ onNavigate, onOpenPractice }: { onNavigate: (s: Sc
       )}
 
       {today.goals.length > 0 && (
-        <Section title="Your goals">
-          <ul className="list-card">
+        <Section
+          title="Your goals"
+          meta={
+            <button type="button" className="link-button" onClick={() => onOpenGoals({ name: 'new' })}>
+              New goal
+            </button>
+          }
+        >
+          <ul className="goal-cards">
             {today.goals.map((g) => (
-              <GoalRow key={g.goalId} goal={g} busy={busy} onMock={() => void startPractice(g.goalId, 'mock')} />
+              <GoalRow key={g.goalId} goal={g} busy={busy} onOpen={() => onOpenGoals({ name: 'goal', goalId: g.goalId })} onMock={() => void startPractice(g.goalId, 'mock')} />
             ))}
           </ul>
         </Section>
@@ -222,28 +257,33 @@ function NextUp({
   );
 }
 
-function GoalRow({ goal, busy, onMock }: { goal: TodayGoal; busy: string | null; onMock: () => void }) {
+function GoalRow({ goal, busy, onOpen, onMock }: { goal: TodayGoal; busy: string | null; onOpen: () => void; onMock: () => void }) {
   const s = goal.schedule;
+  const p = goal.progress;
   const when = s.daysToExam !== null ? (s.daysToExam <= 0 ? 'today' : s.daysToExam === 1 ? 'tomorrow' : `in ${s.daysToExam} days`) : null;
+  const pace = p ? paceSentence(p) : null;
+  const inPlan = p ? p.plan.ideas.total - p.plan.ideas.cut : goal.ideas.total;
   return (
-    <li className="flex flex-col gap-[12px]">
-      <div className="row">
-        <span className="font-medium">{goal.title}</span>
-        <span className="t-small shrink-0 text-muted">
-          {goal.ideas.atDepth} of {goal.ideas.total} ideas ready
+    <li className="flex flex-col gap-[10px]">
+      <button type="button" className="goal-card" onClick={onOpen}>
+        <span className="flex items-baseline justify-between gap-[16px]">
+          <span className="text-[17px] font-medium">{goal.title}</span>
+          <span className="t-small shrink-0 text-muted">
+            {p ? p.plan.ideas.ready : goal.ideas.atDepth} of {inPlan} ideas ready
+          </span>
         </span>
-      </div>
-      <Meter value={goal.ideas.total ? goal.ideas.atDepth / goal.ideas.total : 0} />
-      <MetaLine
-        small
-        items={[
-          goal.assessment !== 'none' ? `${ASSESSMENT_LABEL[goal.assessment]}${when ? ` ${when}` : ''}` : null,
-          `${goal.skills.ready} ready`,
-          `${goal.skills.learning} learning`,
-          `${goal.skills.notStarted} not started`,
-          s.due.length ? `${s.due.length} fading` : null,
-        ]}
-      />
+        {p && <BudgetBar compact progress={{ ...p, plannedMinutes: p.plan.plannedMinutes }} />}
+        <MetaLine
+          small
+          items={[
+            goal.assessment !== 'none' ? `${ASSESSMENT_LABEL[goal.assessment]}${when ? ` ${when}` : ''}` : null,
+            p ? `${formatHours(p.spentMinutes)}${p.totalMinutes ? ` of ${formatHours(p.totalMinutes)}` : ''}` : null,
+            p && p.weeklyTarget ? `${formatHours(p.weekMinutes)} of ${formatHours(p.weeklyTarget)} this week` : null,
+            s.due.length ? `${s.due.length} fading` : null,
+            pace && pace.tone !== 'calm' ? <span className={`pace-${pace.tone}`}>{pace.tone === 'warn' ? 'Needs attention' : 'Ahead'}</span> : null,
+          ]}
+        />
+      </button>
       {s.mockOpen && (
         <div className="button-row">
           <Button onClick={onMock} disabled={busy !== null}>
@@ -253,6 +293,45 @@ function GoalRow({ goal, busy, onMock }: { goal: TodayGoal; busy: string | null;
         </div>
       )}
     </li>
+  );
+}
+
+/** The first screen of an empty app: what Frontier does in three steps, and one thing to do. */
+function Welcome({ onStart }: { onStart: () => void }) {
+  return (
+    <Screen>
+      <div className="welcome">
+        <div className="welcome-mark" aria-hidden="true">
+          <span />
+        </div>
+        <h1 className="welcome-title">Learn what matters, in the time you have.</h1>
+        <p className="t-lead m-0 max-w-[560px]">
+          Tell Frontier what you want to learn and how much time you can give it. It maps the ideas, finds where you stand, and teaches at the edge of what you know, the most useful ideas first.
+        </p>
+        <ol className="welcome-steps">
+          <li>
+            <span className="welcome-step-n">1</span>
+            <span className="font-medium">Say what you want</span>
+            <span className="t-small text-secondary">A course to pass, a book to work through, a paper to understand.</span>
+          </li>
+          <li>
+            <span className="welcome-step-n">2</span>
+            <span className="font-medium">Give it time</span>
+            <span className="t-small text-secondary">Two hours or a semester. The time decides how deep the plan goes.</span>
+          </li>
+          <li>
+            <span className="welcome-step-n">3</span>
+            <span className="font-medium">Learn at your edge</span>
+            <span className="t-small text-secondary">Short sessions that build on what you know, and practice that keeps it.</span>
+          </li>
+        </ol>
+        <div className="button-row">
+          <button type="button" className="btn btn-primary btn-large" onClick={onStart}>
+            Set your first goal
+          </button>
+        </div>
+      </div>
+    </Screen>
   );
 }
 

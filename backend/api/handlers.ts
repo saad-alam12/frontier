@@ -6,7 +6,10 @@ import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
-import { createGoalFromForm, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
+import { approveGoalPlan, createGoalFromForm, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
+import { previewPlan } from '../services/budget';
+import { tick } from '../services/activity';
+import { statsView } from '../services/stats';
 import { createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
@@ -86,14 +89,19 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
     'goals.list': () => listGoals(ctx.db()).map((g) => detail(g.id)),
     'goals.get': ({ goalId }) => detail(goalId),
-    'goals.create': ({ form }) => {
-      const goal = createGoalFromForm(ctx.db(), { ...form, text: form.text.trim() });
+    'goals.create': ({ form, draft }) => {
+      const goal = createGoalFromForm(ctx.db(), { ...form, text: form.text.trim() }, { draft });
       ctx.goalWorker().refresh(goal.id);
       return detail(goal.id);
     },
     'goals.update': ({ goalId, form }) => {
       updateGoalFromForm(ctx.db(), goalId, form);
       ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
+    },
+    'goals.preview': ({ goalId, budget }) => previewPlan(ctx.db(), goalId, budget),
+    'goals.approve': ({ goalId }) => {
+      approveGoalPlan(ctx.db(), goalId);
       return detail(goalId);
     },
     'goals.remove': ({ goalId }) => {
@@ -140,6 +148,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
     'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),
+    'activity.tick': (input) => {
+      tick(ctx.db(), input);
+      return undefined;
+    },
+    'stats.view': (filter) => statsView(ctx.db(), filter),
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
     'drafts.set': ({ key, value }) => {
       setDraft(ctx.db(), key, value);

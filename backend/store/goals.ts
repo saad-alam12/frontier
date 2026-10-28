@@ -1,7 +1,7 @@
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
-import type { Assessment, Capability, Depth, ExamProfile, Goal, GoalKind, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
+import type { Assessment, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
@@ -11,10 +11,14 @@ interface GoalRow {
   assessment: Assessment;
   target_grade: string | null;
   date: string | null;
-  hours_per_week: number | null;
+  budget: string | null;
+  focus: string;
+  coverage: Coverage | null;
+  baseline: string;
   priority: number;
   status: Goal['status'];
   created_at: string;
+  approved_at: string | null;
   compiled_at: string | null;
   compiled_sources: string;
   exam_profile: string | null;
@@ -33,6 +37,7 @@ interface TargetRow {
   capability_id: string;
   node_id: string;
   depth: number;
+  planned_depth: number | null;
 }
 
 const toGoal = (r: GoalRow): Goal => ({
@@ -43,10 +48,14 @@ const toGoal = (r: GoalRow): Goal => ({
   assessment: r.assessment,
   targetGrade: r.target_grade,
   date: r.date,
-  hoursPerWeek: r.hours_per_week,
+  budget: parseJson<GoalBudget | null>(r.budget, null),
+  focus: parseJson<GoalFocus[]>(r.focus, []),
+  coverage: r.coverage,
+  baseline: parseJson<Record<string, Depth>>(r.baseline, {}),
   priority: r.priority,
   status: r.status,
   createdAt: r.created_at,
+  approvedAt: r.approved_at,
   compiledAt: r.compiled_at,
   compiledSources: parseJson<string[]>(r.compiled_sources, []),
   examProfile: parseJson<ExamProfile | null>(r.exam_profile, null),
@@ -55,7 +64,7 @@ const toGoal = (r: GoalRow): Goal => ({
   startedUnverified: parseJson<string[]>(r.started_unverified, []),
 });
 const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
-const toTarget = (r: TargetRow): Target => ({ capabilityId: r.capability_id, nodeId: r.node_id, depth: r.depth as Depth });
+const toTarget = (r: TargetRow): Target => ({ capabilityId: r.capability_id, nodeId: r.node_id, depth: (r.planned_depth ?? r.depth) as Depth, idealDepth: r.depth as Depth });
 
 /** What the learner states about a goal; everything else is derived. */
 export interface GoalInput {
@@ -64,16 +73,32 @@ export interface GoalInput {
   assessment?: Assessment;
   targetGrade?: string | null;
   date?: string | null;
-  hoursPerWeek?: number | null;
+  budget?: GoalBudget | null;
+  focus?: GoalFocus[];
   priority?: number;
 }
 
-export function createGoal(db: Database, input: GoalInput | string, priority = 1): Goal {
-  const g: GoalInput = typeof input === 'string' ? { text: input, priority } : input;
+/** A new goal is active unless created as a draft to preview its plan first. */
+export function createGoal(db: Database, input: GoalInput | string, options: { priority?: number; draft?: boolean } = {}): Goal {
+  const g: GoalInput = typeof input === 'string' ? { text: input, priority: options.priority ?? 1 } : input;
   const id = newId('goal');
+  const now = nowIso();
   db.prepare(
-    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, hours_per_week, priority, status, created_at, compiled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
-  ).run(id, g.text, g.kind ?? 'personal', g.assessment ?? 'none', g.targetGrade ?? null, g.date ?? null, g.hoursPerWeek ?? null, g.priority ?? 1, 'active', nowIso());
+    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+  ).run(
+    id,
+    g.text,
+    g.kind ?? 'personal',
+    g.assessment ?? 'none',
+    g.targetGrade ?? null,
+    g.date ?? null,
+    g.budget ? JSON.stringify(g.budget) : null,
+    JSON.stringify(g.focus ?? []),
+    g.priority ?? 1,
+    options.draft ? 'draft' : 'active',
+    now,
+    options.draft ? null : now,
+  );
   return getGoal(db, id) as Goal;
 }
 
@@ -81,17 +106,45 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
   const current = getGoal(db, id);
   if (!current) return;
   const next = { ...current, ...patch };
-  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, hours_per_week = ?, priority = ?, status = ? WHERE id = ?').run(
+  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ? WHERE id = ?').run(
     next.text,
     next.kind,
     next.assessment,
     next.targetGrade,
     next.date,
-    next.hoursPerWeek,
+    next.budget ? JSON.stringify(next.budget) : null,
+    JSON.stringify(next.focus),
     next.priority,
     next.status,
     id,
   );
+}
+
+/** The learner approved the plan: the draft becomes active and its clock starts. */
+export function approveGoal(db: Database, id: string): void {
+  db.prepare("UPDATE goals SET status = 'active', approved_at = COALESCE(approved_at, ?) WHERE id = ?").run(nowIso(), id);
+}
+
+export function saveCoverage(db: Database, id: string, coverage: Coverage): void {
+  db.prepare('UPDATE goals SET coverage = ? WHERE id = ?').run(coverage, id);
+}
+
+/** Record the depth of ideas that just joined the goal; ideas already in the baseline keep theirs. */
+export function extendBaseline(db: Database, id: string, depths: Record<string, Depth>): void {
+  const goal = getGoal(db, id);
+  if (!goal) return;
+  const next = { ...depths, ...goal.baseline };
+  if (Object.keys(next).length === Object.keys(goal.baseline).length) return;
+  db.prepare('UPDATE goals SET baseline = ? WHERE id = ?').run(JSON.stringify(next), id);
+}
+
+/** Write the plan's depth for each target, keyed `${capabilityId}|${nodeId}`. */
+export function savePlannedDepths(db: Database, planned: Map<string, Depth>): void {
+  const stmt = db.prepare('UPDATE targets SET planned_depth = ? WHERE capability_id = ? AND node_id = ? AND (planned_depth IS NOT ? )');
+  for (const [key, depth] of planned) {
+    const [capabilityId, nodeId] = key.split('|');
+    stmt.run(depth, capabilityId as string, nodeId as string, depth);
+  }
 }
 
 export function deleteGoal(db: Database, id: string): void {
@@ -176,11 +229,16 @@ export function listCapabilities(db: Database, goalId?: string): Capability[] {
   return rows.map(toCapability);
 }
 
-export function listTargets(db: Database, goalId?: string): Target[] {
+/**
+ * The targets the plan holds: depth is the planned depth, and targets the budget leaves out are
+ * skipped. `all` lists every target at its planned depth, left-out ones included (depth 0).
+ */
+export function listTargets(db: Database, goalId?: string, options: { all?: boolean } = {}): Target[] {
   const rows = goalId
     ? (db.prepare('SELECT t.* FROM targets t JOIN capabilities c ON c.id = t.capability_id WHERE c.goal_id = ?').all(goalId) as unknown as TargetRow[])
     : (db.prepare('SELECT * FROM targets').all() as unknown as TargetRow[]);
-  return rows.map(toTarget);
+  const targets = rows.map(toTarget);
+  return options.all ? targets : targets.filter((t) => t.depth > 0);
 }
 
 export function markCapabilityMastered(db: Database, capabilityId: string): void {

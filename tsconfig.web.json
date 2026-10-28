@@ -16,5 +16,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["ui/**/*.ts", "ui/**/*.tsx", "backend/api/contract.ts", "backend/api/preload-types.d.ts", "backend/core/types.ts"]
+  "include": ["ui/**/*.ts", "ui/**/*.tsx", "backend/api/contract.ts", "backend/api/preload-types.d.ts", "backend/core/types.ts", "backend/core/budget.ts"]
 }

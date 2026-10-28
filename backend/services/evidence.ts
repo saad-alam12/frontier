@@ -2,6 +2,7 @@
  * The evidence service: the only code that appends evidence, and the only code that writes
  * node_states (which are derived from evidence plus the learner's own text).
  */
+import { logEvent } from '../store/activity';
 import { implicitCreditWeights } from '../core/implicitCredit';
 import { indexChains } from '../core/graph';
 import { deriveState } from '../core/nodeState';
@@ -94,6 +95,7 @@ export function recomputeState(db: Database, nodeId: string): NodeState {
   const derived = deriveState(listEvidenceForNode(db, nodeId));
   const next: NodeState = { ...current, depth: derived.depth, fsrs: derived.fsrs, firstSessionId: current.firstSessionId ?? derived.firstSessionId };
   upsertState(db, next);
+  if (next.depth !== current.depth) logEvent(db, 'depth.changed', { nodeId }, { from: current.depth, to: next.depth });
   return next;
 }
 

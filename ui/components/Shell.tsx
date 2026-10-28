@@ -1,22 +1,28 @@
 import type { ReactNode } from 'react';
 import { Markdown } from './Markdown';
 
-export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'lookup' | 'trails' | 'library' | 'settings';
+export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
 
-const ITEMS: { name: ScreenName; label: string }[] = [
+/** Where you work, then the places you go to look things up. */
+const PRIMARY: { name: ScreenName; label: string }[] = [
   { name: 'today', label: 'Today' },
-  { name: 'session', label: 'Session' },
-  { name: 'map', label: 'Map' },
   { name: 'goals', label: 'Goals' },
+  { name: 'map', label: 'Map' },
+  { name: 'stats', label: 'Stats' },
+];
+const SECONDARY: { name: ScreenName; label: string }[] = [
   { name: 'lookup', label: 'Lookup' },
   { name: 'trails', label: 'Trails' },
   { name: 'library', label: 'Library' },
 ];
 
-/** The 96 px left rail: brand mark, the seven screens, Settings at the bottom. */
-export function NavRail({ current, onSelect }: { current: ScreenName; onSelect: (s: ScreenName) => void }) {
-  const item = (name: ScreenName, label: string) => (
-    <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)}>
+/**
+ * The 96 px left rail: brand mark, a live Session entry while a session is open, the four places
+ * you work in, the three you look things up in, and Settings at the bottom.
+ */
+export function NavRail({ current, onSelect, sessionActive }: { current: ScreenName; onSelect: (s: ScreenName) => void; sessionActive: boolean }) {
+  const item = (name: ScreenName, label: string, small?: boolean) => (
+    <button key={name} type="button" className={small ? 'nav-item is-small' : 'nav-item'} aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)}>
       {label}
     </button>
   );
@@ -25,9 +31,17 @@ export function NavRail({ current, onSelect }: { current: ScreenName; onSelect: 
       <div className="brand-mark" aria-hidden="true">
         <span />
       </div>
-      {ITEMS.map((i) => item(i.name, i.label))}
+      {(sessionActive || current === 'session') && (
+        <button type="button" className="nav-live" aria-current={current === 'session' ? 'page' : undefined} onClick={() => onSelect('session')} title="Your session is open">
+          <span className="live-dot" aria-hidden="true" />
+          Session
+        </button>
+      )}
+      {PRIMARY.map((i) => item(i.name, i.label))}
+      <div className="nav-divider" aria-hidden="true" />
+      {SECONDARY.map((i) => item(i.name, i.label, true))}
       <div className="nav-spacer" />
-      {item('settings', 'Settings')}
+      {item('settings', 'Settings', true)}
     </nav>
   );
 }
@@ -39,6 +53,7 @@ export function Screen({
   asideLabel,
   asideGap = 28,
   asideNarrow,
+  wide,
   mainRef,
 }: {
   children: ReactNode;
@@ -48,11 +63,13 @@ export function Screen({
   asideGap?: 22 | 28;
   /** The Map gives the canvas the room: a 400 px panel. */
   asideNarrow?: boolean;
+  /** Stats and the goal wizard use the full width. */
+  wide?: boolean;
   mainRef?: React.Ref<HTMLElement>;
 }) {
   return (
     <div className="screen">
-      <main className="main-column" ref={mainRef}>
+      <main className={wide ? 'main-column is-wide' : 'main-column'} ref={mainRef}>
         {children}
       </main>
       {aside && (

@@ -3,15 +3,17 @@ import { call, onEvent } from '../api';
 import type { GoalDetail } from '../../backend/api/contract';
 import { Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, MetaLine } from '../components/controls';
+import { BudgetBar } from '../components/budget';
 import { GoalFormScreen } from './goals/GoalForm';
 import { GoalPage } from './goals/GoalPage';
-import { ASSESSMENT_LABEL, SKILL_LABEL, formatDate, goalName } from './goals/labels';
+import { GoalWizard } from './goals/GoalWizard';
+import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
 
-type View = { name: 'list' } | { name: 'new' } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string };
+export type GoalsView = { name: 'list' } | { name: 'new' } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
 
-export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => void }) {
+export function GoalsScreen({ onNavigate, initial }: { onNavigate: (s: ScreenName) => void; initial?: GoalsView }) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
-  const [view, setView] = useState<View>({ name: 'list' });
+  const [view, setView] = useState<GoalsView>(initial ?? { name: 'list' });
 
   const refresh = useCallback(async () => setGoals(await call('goals.list')), []);
   useEffect(() => {
@@ -27,18 +29,32 @@ export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => voi
 
   if (goals === null) return <Screen>{null}</Screen>;
   const find = (goalId: string) => goals.find((g) => g.goal.id === goalId) ?? null;
+  const open = (g: GoalDetail) => setView(g.goal.status === 'draft' ? { name: 'draft', goalId: g.goal.id } : { name: 'goal', goalId: g.goal.id });
 
-  if (view.name === 'new' || view.name === 'edit') {
-    const existing = view.name === 'edit' ? find(view.goalId) : null;
+  if (view.name === 'new' || view.name === 'draft') {
     return (
-      <GoalFormScreen
-        key={view.name === 'edit' ? view.goalId : 'new'}
-        existing={existing}
-        onCancel={() => setView(existing ? { name: 'goal', goalId: existing.goal.id } : { name: 'list' })}
+      <GoalWizard
+        key={view.name === 'draft' ? view.goalId : 'new'}
+        draft={view.name === 'draft' ? find(view.goalId) : null}
+        onCancel={() => void refresh().then(() => setView({ name: 'list' }))}
         onDone={(goalId) => void refresh().then(() => setView({ name: 'goal', goalId }))}
-        onRemoved={() => void refresh().then(() => setView({ name: 'list' }))}
       />
     );
+  }
+
+  if (view.name === 'edit') {
+    const existing = find(view.goalId);
+    if (existing) {
+      return (
+        <GoalFormScreen
+          key={view.goalId}
+          existing={existing}
+          onCancel={() => setView({ name: 'goal', goalId: existing.goal.id })}
+          onDone={(goalId) => void refresh().then(() => setView({ name: 'goal', goalId }))}
+          onRemoved={() => void refresh().then(() => setView({ name: 'list' }))}
+        />
+      );
+    }
   }
 
   if (view.name === 'goal') {
@@ -69,34 +85,40 @@ export function GoalsScreen({ onNavigate }: { onNavigate: (s: ScreenName) => voi
         </Button>
       </div>
       {goals.length === 0 ? (
-        <Empty>State what you want to be able to do: a course to pass, a project to finish, something to understand. Frontier works out the rest.</Empty>
+        <Empty action={<Button onClick={() => setView({ name: 'new' })}>Set your first goal</Button>}>
+          State what you want to learn: a course to pass, a book to work through, a paper to understand. Give it time, and Frontier plans the rest.
+        </Empty>
       ) : (
-        <ul className="list-card">
-          {goals.map((g) => {
-            const ready = g.capabilities.filter((c) => c.status === 'ready').length;
-            return (
-              <li key={g.goal.id}>
-                <button type="button" className="row items-center" onClick={() => setView({ name: 'goal', goalId: g.goal.id })}>
-                  <span className="flex min-w-0 flex-col gap-[2px]">
-                    <span className="text-[15px]">{goalName(g)}</span>
-                    <MetaLine
-                      small
-                      items={[
-                        g.goal.kind === 'course' ? 'Course' : 'On your own',
-                        g.goal.assessment !== 'none' ? ASSESSMENT_LABEL[g.goal.assessment] : null,
-                        g.goal.date ? formatDate(g.goal.date) : null,
-                      ]}
-                    />
-                  </span>
-                  <span className="t-small shrink-0 text-muted">
-                    {g.capabilities.length ? `${ready} of ${g.capabilities.length} skills ${SKILL_LABEL.ready.toLowerCase()}` : g.work.state === 'idle' ? 'Not mapped yet' : 'Mapping…'}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+        <ul className="goal-cards">
+          {goals.map((g) => (
+            <li key={g.goal.id}>
+              <button type="button" className="goal-card" onClick={() => open(g)}>
+                <span className="flex items-baseline justify-between gap-[16px]">
+                  <span className="text-[17px] font-medium">{goalName(g)}</span>
+                  <span className="t-small shrink-0 text-muted">{cardStatus(g)}</span>
+                </span>
+                <MetaLine
+                  small
+                  items={[
+                    g.goal.kind === 'course' ? 'Course' : 'On your own',
+                    g.goal.assessment !== 'none' ? ASSESSMENT_LABEL[g.goal.assessment] : null,
+                    g.goal.date ? formatDate(g.goal.date) : null,
+                    g.goal.status === 'paused' ? 'Paused' : null,
+                  ]}
+                />
+                {g.progress && g.goal.status !== 'draft' && <BudgetBar compact caption progress={{ ...g.progress, plannedMinutes: g.progress.plan.plannedMinutes }} />}
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </Screen>
   );
+}
+
+function cardStatus(g: GoalDetail): string {
+  if (g.goal.status === 'draft') return g.capabilities.length ? 'Plan ready to approve' : 'Setting up';
+  if (!g.capabilities.length) return g.work.state === 'idle' ? 'Not mapped yet' : 'Mapping…';
+  const p = g.progress?.plan;
+  return p ? `${p.ideas.ready} of ${p.ideas.total - p.ideas.cut} ideas ready` : '';
 }

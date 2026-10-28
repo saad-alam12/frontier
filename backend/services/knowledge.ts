@@ -13,6 +13,7 @@ import { transaction } from '../store/db';
 import { listStates } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listChains, listNodes } from '../store/world';
+import { replan } from './budget';
 import { setGoalFields } from './evidence';
 
 export interface KnowledgeView {
@@ -47,8 +48,12 @@ export function leverageScores(view: KnowledgeView): LeverageScore[] {
   return scores.sort((a, b) => b.leverage - a.leverage || a.nodeId.localeCompare(b.nodeId));
 }
 
-/** Recompute targetDepth and tier for every node from the active goals. Call after compiles and merges. */
+/**
+ * Re-plan the time budgets, then recompute targetDepth and tier for every node from the active goals'
+ * planned depths. Call after compiles, merges, goal edits and sessions.
+ */
 export function refreshGoalFields(db: Database): Map<string, Tier> {
+  replan(db);
   const view = loadKnowledge(db);
   const scores = leverageScores(view);
   const kinds = new Map([...view.nodes.values()].map((n) => [n.id, n.kind]));

@@ -270,6 +270,46 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX answers_problem ON answers(problem_id);
     `,
   },
+  {
+    version: 6,
+    sql: `
+      -- Time budgets: the time given to a goal decides its plan; drafts are previewed before approval.
+      ALTER TABLE goals ADD COLUMN budget TEXT;
+      ALTER TABLE goals ADD COLUMN focus TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE goals ADD COLUMN coverage TEXT;
+      ALTER TABLE goals ADD COLUMN baseline TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE goals ADD COLUMN approved_at TEXT;
+      UPDATE goals SET approved_at = created_at;
+      -- An hours-per-week pace becomes a weekly rate that runs to the goal's date, or for twelve weeks.
+      UPDATE goals SET budget = json_object('mode', 'rate', 'hours', hours_per_week, 'per', 'week', 'length',
+          CASE WHEN date IS NOT NULL AND julianday(date) > julianday('now') THEN MAX(1, CAST(ROUND((julianday(date) - julianday('now')) / 7) AS INTEGER)) ELSE 12 END,
+          'lengthUnit', 'weeks')
+        WHERE hours_per_week IS NOT NULL AND hours_per_week > 0;
+      ALTER TABLE goals DROP COLUMN hours_per_week;
+
+      -- The depth the plan holds for each target (the compiler's depth trimmed to the budget); NULL until planned.
+      ALTER TABLE targets ADD COLUMN planned_depth INTEGER;
+
+      -- Everything the learner does, for time tracking, pace and Stats. Time is logged as spans that grow
+      -- while the same activity continues.
+      CREATE TABLE activity (
+        id TEXT PRIMARY KEY,
+        at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        seconds REAL NOT NULL DEFAULT 0,
+        goal_id TEXT,
+        session_id TEXT,
+        practice_set_id TEXT,
+        node_id TEXT,
+        source_id TEXT,
+        data TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX activity_at ON activity(at);
+      CREATE INDEX activity_kind ON activity(kind, at);
+      CREATE INDEX activity_goal ON activity(goal_id, at);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

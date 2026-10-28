@@ -90,6 +90,7 @@ function compiler(req: CompleteRequest<unknown>) {
   }
   return {
     title: 'Deep Learning in Physics',
+    coverage: existing ? undefined : 'partial',
     capabilities: existing ? capabilities : [...capabilities, { statement: 'Can explain an expected idea', targets: [{ ref: 'm1', depth: 1 }] }],
     extend: firstExisting && fresh[0] ? [{ capabilityId: firstExisting, targets: [{ ref: fresh[0].id, depth: 1 }] }] : [],
     retire: [],

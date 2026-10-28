@@ -3,12 +3,15 @@
  * progress and what the scheduler suggests for it, what is fading, the coming days, and the
  * question the last session left for today.
  */
+import { weeklyMinutes } from '../core/budget';
 import { skillStatus } from '../core/goals';
 import type { Assessment } from '../core/types';
 import type { Database } from '../store/db';
 import { getState, listEvidenceSince } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { activeSession, listSessions } from '../store/sessions';
+import { attributeTime, goalBudgetMinutes, goalProgress } from './budget';
+import type { GoalProgress } from './budget';
 import { loadKnowledge } from './knowledge';
 import { currentPractice, forecastAcross, goalSchedule } from './practice';
 import type { FadingIdea, GoalSchedule, PracticeView } from './practice';
@@ -23,9 +26,15 @@ export interface TodayGoal {
   /** Target ideas owned at their depth, of all targets. */
   ideas: { atDepth: number; total: number };
   schedule: GoalSchedule;
+  /** Time against the budget, ideas against the plan, and pace. */
+  progress: GoalProgress | null;
 }
 
 export interface TodayView {
+  /** Goals still being set up, to finish first. */
+  drafts: { goalId: string; title: string; mapped: boolean }[];
+  /** True once any goal exists (drafts included): the welcome is for an empty app only. */
+  anyGoals: boolean;
   session: { id: string; goalTitle: string; planTitle: string; where: string } | null;
   practice: PracticeView | null;
   goals: TodayGoal[];
@@ -34,7 +43,7 @@ export interface TodayView {
   /** Ideas falling due per day for the next 14 days, across goals. */
   forecast: number[];
   preview: { question: string; goalTitle: string; date: string } | null;
-  week: { sessions: number; practised: number; minutesTarget: number };
+  week: { sessions: number; practised: number; minutesTarget: number; minutesStudied: number };
 }
 
 const WEEK_MS = 7 * 86_400_000;
@@ -66,6 +75,7 @@ export function todayView(db: Database, now = new Date()): TodayView {
       skills: { ready: caps.filter((c) => c === 'ready').length, learning: caps.filter((c) => c === 'learning').length, notStarted: caps.filter((c) => c === 'not_started').length },
       ideas: { atDepth, total: unique.size },
       schedule: goalSchedule(db, g.id, now),
+      progress: goalProgress(db, g.id, now),
     };
   });
 
@@ -93,7 +103,11 @@ export function todayView(db: Database, now = new Date()): TodayView {
 
   const weekStart = new Date(now.getTime() - WEEK_MS).toISOString();
   const practised = new Set(listEvidenceSince(db, weekStart).filter((e) => e.kind === 'practice' && !e.context.implicit).map((e) => e.nodeId)).size;
+  const all = listGoals(db);
+  const studied = attributeTime(db, weekStart).reduce((s, x) => s + x.minutes, 0);
   return {
+    drafts: all.filter((g) => g.status === 'draft').map((g) => ({ goalId: g.id, title: g.title ?? g.text, mapped: g.compiledAt !== null })),
+    anyGoals: all.length > 0,
     session,
     practice: currentPractice(db),
     goals: todayGoals,
@@ -103,7 +117,8 @@ export function todayView(db: Database, now = new Date()): TodayView {
     week: {
       sessions: sessions.filter((s) => s.startedAt >= weekStart).length,
       practised,
-      minutesTarget: goals.reduce((sum, g) => sum + (g.hoursPerWeek ?? 0) * 60, 0),
+      minutesStudied: Math.round(studied),
+      minutesTarget: goals.reduce((sum, g) => sum + (weeklyMinutes(g.budget, goalBudgetMinutes(db, g), g.approvedAt ?? g.createdAt, g.date) ?? 0), 0),
     },
   };
 }

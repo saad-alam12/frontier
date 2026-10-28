@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Assessment, ExamProfile, GoalKind } from '../core/types';
+import type { Assessment, ExamProfile, GoalFocus, GoalKind } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
 
@@ -13,6 +13,8 @@ export interface GraphSummaryEntry {
   statement: string;
   /** False for premises pulled in from outside the goal's material. */
   inMaterial: boolean;
+  /** Set for ideas outside this goal: already known, or held by another goal. */
+  elsewhere?: 'known' | 'other goal';
 }
 
 export interface ExistingCapability {
@@ -26,10 +28,13 @@ export interface ExistingCapability {
  * Validated against the ids the compiler was shown. A first compile must define at least three
  * capabilities; a recompile only adds, extends or (rarely) retires.
  */
-export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>) {
+export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>, options: { minCapabilities?: number; askCoverage?: boolean } = {}) {
+  const minCapabilities = options.minCapabilities ?? 3;
+  const askCoverage = options.askCoverage ?? false;
   return z
     .object({
       title: z.string().trim().min(2).max(60),
+      coverage: z.enum(['complete', 'partial', 'fragment']).optional(),
       capabilities: z.array(z.object({ statement: z.string().trim().min(10).max(300), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
       extend: z.array(z.object({ capabilityId: z.string().trim().min(1), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
       retire: z.array(z.string().trim().min(1)).max(15).default([]),
@@ -42,7 +47,7 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
             statement: z.string().trim().min(5).max(800),
           }),
         )
-        .max(40)
+        .max(60)
         .default([]),
     })
     .superRefine((value, ctx) => {
@@ -63,7 +68,8 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
       value.retire.forEach((id, i) => {
         if (!existingIds.has(id)) ctx.addIssue({ code: 'custom', path: ['retire', i], message: `unknown capability ${id}` });
       });
-      if (existingIds.size === 0 && value.capabilities.length < 3) ctx.addIssue({ code: 'custom', path: ['capabilities'], message: 'a first compile needs at least 3 capabilities' });
+      if (existingIds.size === 0 && value.capabilities.length < minCapabilities) ctx.addIssue({ code: 'custom', path: ['capabilities'], message: `a first compile needs at least ${minCapabilities} capabilities` });
+      if (askCoverage && !value.coverage) ctx.addIssue({ code: 'custom', path: ['coverage'], message: 'judge whether the material covers the goal: complete, partial or fragment' });
     });
 }
 
@@ -83,6 +89,27 @@ export interface GoalCompilerInput {
   existing: ExistingCapability[];
   /** Titles of teaching sources added since the last compile. */
   newMaterial: string[];
+  /** The time the learner gives the goal, in hours; null when not set. */
+  budgetHours: number | null;
+  /** Minutes already spent; the rest is what the map is sized for. */
+  spentHours: number;
+  focus: GoalFocus[];
+  /** True on the first compile with material: judge whether it covers the goal. */
+  askCoverage: boolean;
+}
+
+const FOCUS_TEXT: Record<GoalFocus, string> = {
+  concepts: 'conceptual understanding: what things mean, why they hold, how they connect',
+  math: 'mathematical rigour: definitions, derivations and proofs',
+  practice: 'practical application: using it on real tasks, including writing code where the subject has it',
+};
+
+/**
+ * Roughly how many ideas fit a budget: about twenty minutes per idea on average once depths mix, plus
+ * a third more so the plan can choose (code trims to the budget), within what one compile can hold.
+ */
+export function ideaCountFor(hours: number): number {
+  return Math.max(4, Math.min(80, Math.round(((hours * 60) / 20) * 1.3)));
 }
 
 const ASSESSMENT_TEXT: Record<Assessment, string> = {
@@ -97,13 +124,20 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
   const knownIds = new Set(input.graph.map((g) => g.id));
   const existingIds = new Set(input.existing.map((c) => c.id));
   const graphText = input.graph.length
-    ? input.graph.map((g) => `- [${g.id}] ${g.name} (${g.kind}${g.inMaterial ? '' : ', premise from elsewhere'}): ${truncate(g.statement, 160)}`).join('\n')
+    ? input.graph.map((g) => `- [${g.id}] ${g.name} (${g.kind}${g.elsewhere === 'known' ? ', the learner knows this' : g.elsewhere ? ', in another goal of the learner' : g.inMaterial ? '' : ', premise from elsewhere'}): ${truncate(g.statement, 160)}`).join('\n')
     : input.fromScratch
       ? '(the learner has no material for this goal; build the roadmap from the goal itself, every target is a new node)'
       : '(no ideas extracted from the material yet)';
   const sections = [
     `## Goal\n${input.goalText}\n\nKind: ${input.kind === 'course' ? 'a course' : 'learning on their own'}. Assessed by ${ASSESSMENT_TEXT[input.assessment]}.${input.targetGrade ? ` Target grade: ${input.targetGrade}.` : ''}${input.date ? ` Date: ${input.date}.` : ''}`,
   ];
+  if (input.focus.length) sections.push(`## What the learner wants from it\n${input.focus.map((f) => `- ${FOCUS_TEXT[f]}`).join('\n')}`);
+  if (input.budgetHours !== null) {
+    const left = Math.max(0, input.budgetHours - input.spentHours);
+    sections.push(
+      `## Time\nThe learner gives this goal about ${round(input.budgetHours)} hours in total${input.spentHours > 0.5 ? `, of which about ${round(left)} are left` : ''}. Size the map for that time: about ${ideaCountFor(left || input.budgetHours)} ideas in all (counting the ones already targeted). Give each target the depth the goal truly needs; the app trims depths to fit the time, 80/20 first, so do not shrink depths yourself.`,
+    );
+  }
   if (input.examProfile) {
     const p = input.examProfile;
     sections.push(`## Exam profile (from past exams)\n${p.summary}\nFormat: ${p.format}. Duration: ${p.durationMinutes ?? 'unknown'} minutes. Aids: ${p.aids}. Question types: ${p.questionTypes.join('; ')}. Difficulty: ${p.difficulty}.`);
@@ -122,13 +156,26 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
       ? '## Task\nRecompile incrementally: add capabilities and targets for what the new material covers, extend existing capabilities with new targets where they belong, and retire a capability only when a new one clearly supersedes it. Do not restate existing capabilities.'
       : '## Task\nCompile the goal: a short title, its capabilities and their targets.',
   );
+  if (input.askCoverage) {
+    sections.push(
+      "## Coverage\nJudge whether the goal's material covers the goal (`coverage`): `complete` when learning this material is the goal or it is a full course, script or book for it; `partial` when it covers a good part but the goal needs more; `fragment` when it is one piece (a paper, an article on one topic) of a wider goal. For `partial` and `fragment`, build the rest of the roadmap yourself with `newNodes` and use the material's ideas where they fit.",
+    );
+  }
   const result = await provider.complete({
     role: 'goalCompiler',
     system: loadPrompt('goal-compiler'),
     messages: [{ role: 'user', content: sections.join('\n\n') }],
-    submit: { name: 'submit_compile', description: 'Submit the title, new capabilities, extensions, retirements and any new nodes.', schema: buildCompileSchema(knownIds, existingIds) },
+    submit: {
+      name: 'submit_compile',
+      description: 'Submit the title, new capabilities, extensions, retirements and any new nodes.',
+      schema: buildCompileSchema(knownIds, existingIds, { minCapabilities: input.budgetHours !== null && input.budgetHours <= 3 ? 1 : 3, askCoverage: input.askCoverage }),
+    },
   });
   return result.data;
+}
+
+function round(hours: number): string {
+  return hours >= 10 ? String(Math.round(hours)) : String(Math.round(hours * 2) / 2);
 }
 
 function truncate(s: string, n: number): string {

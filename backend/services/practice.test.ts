@@ -45,7 +45,7 @@ function setup(gradeScore = 8) {
   const ids = seedExampleGraph(db);
   const id = (key: string) => ids.get(key) as string;
   const now = new Date();
-  const goal = createGoal(db, { text: 'Pass the game theory exam', kind: 'course', assessment: 'written_exam', date: null, hoursPerWeek: 5, targetGrade: null });
+  const goal = createGoal(db, { text: 'Pass the game theory exam', kind: 'course', assessment: 'written_exam', date: null, budget: { mode: 'rate', hours: 5, per: 'week', length: 12, lengthUnit: 'weeks' }, targetGrade: null });
   addCapabilities(db, goal.id, [
     { statement: 'Can find Nash equilibria', targets: [{ nodeId: id('nash'), depth: 3 }, { nodeId: id('bestResponse'), depth: 3 }, { nodeId: id('nashMutualBr'), depth: 3 }] },
     { statement: 'Can use dominance', targets: [{ nodeId: id('dominant'), depth: 2 }, { nodeId: id('pdUnique'), depth: 2 }] },

@@ -111,7 +111,7 @@ describe('goals and tiers', () => {
   it('compiles targets and refreshes target depths and tiers', () => {
     const db = openDatabase(':memory:');
     const ids = seedExampleGraph(db);
-    const goal = createGoal(db, 'Pass the game theory exam', 2);
+    const goal = createGoal(db, 'Pass the game theory exam', { priority: 2 });
     addCapabilities(db, goal.id, [
       { statement: 'Find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 4 }, { nodeId: ids.get('findPureNash') as string, depth: 4 }] },
       { statement: 'Know what SPE is', targets: [{ nodeId: ids.get('spe') as string, depth: 2 }] },

@@ -98,8 +98,8 @@ describe('scheduler', () => {
 
   it('paces a day from hours per week', () => {
     expect(dailyMinutes(null)).toBe(40);
-    expect(dailyMinutes(5)).toBe(60);
-    expect(dailyMinutes(1)).toBe(15);
-    expect(dailyMinutes(40)).toBe(120);
+    expect(dailyMinutes(5 * 60)).toBe(60);
+    expect(dailyMinutes(60)).toBe(15);
+    expect(dailyMinutes(42 * 60)).toBe(360); // cramming: six hours a day, seven days
   });
 });

@@ -7,6 +7,7 @@ import { runGoalCompiler } from '../agents/goalCompiler';
 import type { ExistingCapability, GraphSummaryEntry } from '../agents/goalCompiler';
 import { guessMaterialRole, runCourseProfile } from '../agents/materials';
 import { ancestors } from '../core/graph';
+import { centrality } from '../core/leverage';
 import { depthSkew, skillStatus } from '../core/goals';
 import type { SkillStatus } from '../core/goals';
 import { EXTRACTED_ROLES } from '../core/types';
@@ -16,10 +17,13 @@ import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { getState } from '../store/evidence';
 import type { GoalInput } from '../store/goals';
-import { addCapabilities, addTargets, createGoal, deleteCapabilities, getGoal, listCapabilities, listGoals, listMaterials, listTargets, markCompiled, saveProfile, setMaterials, updateGoal } from '../store/goals';
+import { addCapabilities, addTargets, approveGoal, createGoal, deleteCapabilities, extendBaseline, getGoal, listCapabilities, listGoals, listMaterials, listTargets, markCompiled, saveCoverage, saveProfile, setMaterials, updateGoal } from '../store/goals';
+import { logEvent } from '../store/activity';
 import { newId } from '../store/ids';
 import { coveredNodeIds, getSource, listChunks } from '../store/sources';
 import { createUnverifiedNodes, getNodes } from '../store/world';
+import { attributeTime, goalBudgetMinutes, goalProgress, spentByGoal } from './budget';
+import type { GoalProgress } from './budget';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
@@ -48,6 +52,9 @@ export interface GoalDetail {
   goal: Goal;
   capabilities: (Capability & {
     status: SkillStatus;
+    /** False when the time budget leaves every one of its ideas out. */
+    planned: boolean;
+    /** Every target; `depth` is the planned depth (0 when the budget leaves it out), `idealDepth` what the goal asks. */
     targets: (Target & { name: string; kind: KnowledgeNode['kind']; status: KnowledgeNode['status']; currentDepth: Depth })[];
   })[];
   /** Targets no source covers yet ("expected, not in your material"). */
@@ -57,6 +64,8 @@ export interface GoalDetail {
   nextIdeas: string[];
   /** What the scheduler suggests today; null until the goal is compiled. */
   schedule: GoalSchedule | null;
+  /** Time against the budget, ideas against the plan, and pace; null until the goal is compiled. */
+  progress: GoalProgress | null;
   work: GoalWorkState;
 }
 
@@ -64,7 +73,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
   const goal = getGoal(db, goalId);
   if (!goal) return undefined;
   const view = loadKnowledge(db);
-  const targets = listTargets(db, goalId);
+  const targets = listTargets(db, goalId, { all: true });
   const nodes = getNodes(
     db,
     targets.map((t) => t.nodeId),
@@ -76,9 +85,10 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
         const node = nodes.get(t.nodeId);
         return { ...t, name: node?.name ?? t.nodeId, kind: node?.kind ?? 'claim', status: node?.status ?? 'verified', currentDepth: getState(db, t.nodeId)?.depth ?? 0 };
       });
-    return { ...cap, status: skillStatus(cap.masteredAt, capTargets), targets: capTargets };
+    const planned = capTargets.filter((t) => t.depth > 0);
+    return { ...cap, status: skillStatus(cap.masteredAt, planned), planned: planned.length > 0, targets: capTargets };
   });
-  const expectedIds = [...new Set(targets.map((t) => t.nodeId))].filter((id) => nodes.get(id)?.status === 'unverified');
+  const expectedIds = [...new Set(targets.filter((t) => t.depth > 0).map((t) => t.nodeId))].filter((id) => nodes.get(id)?.status === 'unverified');
   const materials = listMaterials(db, goalId).map((m) => {
     const source = getSource(db, m.sourceId);
     const covered = coveredNodeIds(db, m.sourceId);
@@ -100,26 +110,56 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
     expected: expectedIds.map((id) => ({ nodeId: id, name: nodes.get(id)?.name ?? id, statement: nodes.get(id)?.statement ?? '', started: goal.startedUnverified.includes(id) })),
     materials,
     nextIdeas: candidates.filter((c) => c.onFringe).slice(0, 3).map((c) => view.nodes.get(c.nodeId)?.name ?? c.nodeId),
-    schedule: capabilities.length ? goalSchedule(db, goalId) : null,
+    schedule: capabilities.length && goal.status === 'active' ? goalSchedule(db, goalId) : null,
+    progress: capabilities.length ? goalProgress(db, goalId) : null,
     work,
   };
 }
 
-export function createGoalFromForm(db: Database, form: GoalForm): Goal {
+/** A new goal; as a draft it is compiled and previewed, and becomes active once its plan is approved. */
+export function createGoalFromForm(db: Database, form: GoalForm, options: { draft?: boolean } = {}): Goal {
   return transaction(db, () => {
-    const goal = createGoal(db, form);
+    const goal = createGoal(db, form, { draft: options.draft });
     setMaterials(db, goal.id, form.materials);
+    logEvent(db, 'goal.created', { goalId: goal.id }, { budget: form.budget ?? null, draft: options.draft ?? false });
+    for (const m of form.materials) logEvent(db, 'material.added', { goalId: goal.id, sourceId: m.sourceId }, { role: m.role });
     return goal;
   });
 }
 
 export function updateGoalFromForm(db: Database, goalId: string, form: Partial<GoalForm>): void {
+  const before = getGoal(db, goalId);
   transaction(db, () => {
     const { materials, ...fields } = form;
     updateGoal(db, goalId, fields);
-    if (materials) setMaterials(db, goalId, materials);
+    if (materials) {
+      const had = new Set(listMaterials(db, goalId).map((m) => m.sourceId));
+      setMaterials(db, goalId, materials);
+      for (const m of materials) if (!had.has(m.sourceId)) logEvent(db, 'material.added', { goalId, sourceId: m.sourceId }, { role: m.role });
+    }
+    if ('budget' in form && JSON.stringify(form.budget ?? null) !== JSON.stringify(before?.budget ?? null)) logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: form.budget ?? null });
   });
   refreshGoalFields(db);
+}
+
+/**
+ * The learner approved a draft's plan: it becomes active, its clock starts, and what they know now is
+ * its baseline (progress counts from here). Its ideas join the shared plan of all goals.
+ */
+export function approveGoalPlan(db: Database, goalId: string): void {
+  transaction(db, () => {
+    approveGoal(db, goalId);
+    recordBaseline(db, goalId);
+    logEvent(db, 'goal.approved', { goalId }, { budget: getGoal(db, goalId)?.budget ?? null });
+  });
+  refreshGoalFields(db);
+}
+
+/** Add the current depth of every idea the goal targets that is not in its baseline yet. */
+function recordBaseline(db: Database, goalId: string): void {
+  const depths: Record<string, Depth> = {};
+  for (const t of listTargets(db, goalId, { all: true })) depths[t.nodeId] = getState(db, t.nodeId)?.depth ?? 0;
+  extendBaseline(db, goalId, depths);
 }
 
 /** Sources whose text is read into ideas for this goal (teaching and reference material). */
@@ -128,6 +168,9 @@ function extractedSources(db: Database, goalId: string): string[] {
     .filter((m) => EXTRACTED_ROLES.includes(m.role))
     .map((m) => m.sourceId);
 }
+
+/** How many ideas from outside the goal's material (known, or in other goals) the compiler sees. */
+const SHARED_IN_COMPILE = 60;
 
 export interface CompileOptions {
   db: Database;
@@ -152,10 +195,13 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
   const scope = new Set(inMaterial);
   for (const id of inMaterial) for (const a of ancestors(id, view.index)) scope.add(a);
   for (const t of existingTargets) scope.add(t.nodeId);
-  const graph: GraphSummaryEntry[] = [...scope]
+  // What the learner knows and what their other goals hold, so overlap is targeted, not re-created.
+  const elsewhere = new Set([...view.owned, ...listTargets(db).map((t) => t.nodeId)].filter((id) => !scope.has(id) && view.nodes.has(id)));
+  const shared = [...elsewhere].sort((a, b) => centrality(b, view.index) - centrality(a, view.index) || a.localeCompare(b)).slice(0, SHARED_IN_COMPILE);
+  const graph: GraphSummaryEntry[] = [...scope, ...shared]
     .map((id) => view.nodes.get(id))
     .filter((n): n is KnowledgeNode => n !== undefined)
-    .map((n) => ({ id: n.id, kind: n.kind, name: n.name, statement: n.statement, inMaterial: inMaterial.has(n.id) }));
+    .map((n) => ({ id: n.id, kind: n.kind, name: n.name, statement: n.statement, inMaterial: inMaterial.has(n.id), elsewhere: elsewhere.has(n.id) ? (view.owned.has(n.id) ? 'known' : 'other goal') : undefined }));
 
   const existing: ExistingCapability[] = listCapabilities(db, goalId).map((c) => ({
     id: c.id,
@@ -164,6 +210,7 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
     targets: existingTargets.filter((t) => t.capabilityId === c.id).map((t) => ({ nodeId: t.nodeId, name: view.nodes.get(t.nodeId)?.name ?? t.nodeId, depth: t.depth })),
   }));
   const newMaterial = sources.filter((s) => !goal.compiledSources.includes(s)).map((s) => getSource(db, s)?.title ?? s);
+  const budgetTotal = goalBudgetMinutes(db, goal);
 
   const result = await runGoalCompiler(provider, {
     goalText: goal.text,
@@ -176,6 +223,10 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
     fromScratch: materials.length === 0,
     existing,
     newMaterial: existing.length ? newMaterial : [],
+    budgetHours: budgetTotal === null ? null : budgetTotal / 60,
+    spentHours: (spentByGoal(attributeTime(db)).get(goalId) ?? 0) / 60,
+    focus: goal.focus,
+    askCoverage: goal.coverage === null && sources.length > 0,
   });
 
   transaction(db, () => {
@@ -195,6 +246,8 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
       result.capabilities.map((c) => ({ statement: c.statement, targets: resolve(c.targets) })),
     );
     markCompiled(db, goalId, result.title, sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)));
+    if (result.coverage) saveCoverage(db, goalId, result.coverage);
+    if (goal.status !== 'draft') recordBaseline(db, goalId);
   });
 
   const skew = depthSkew(listTargets(db, goalId).map((t) => t.depth));

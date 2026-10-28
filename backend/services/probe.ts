@@ -39,8 +39,11 @@ export async function createProbe(db: Database, provider: LlmProvider, goalId: s
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const view = loadKnowledge(db);
-  const targetIds = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
-  if (targetIds.length === 0) throw new Error('compile the goal first');
+  const all = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
+  if (all.length === 0) throw new Error('compile the goal first');
+  // Ideas already owned at the depth the plan holds (often learned for another goal) are not asked again.
+  const targetIds = all.filter((id) => !(view.owned.has(id) && (view.states.get(id)?.depth ?? 0) >= targetDepthFor(id, view.goals)));
+  if (targetIds.length === 0) throw new Error('Nothing to check: you already know every idea this plan holds.');
   const ranked = rankByInformation(targetIds, view.index).slice(0, Math.max(maxQuestions * 2, 8));
   const candidates: ProbeCandidate[] = ranked.map((r) => {
     const node = view.nodes.get(r.nodeId);

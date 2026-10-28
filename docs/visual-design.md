@@ -122,9 +122,22 @@ Past steps render above the current one in the same column: the card text in bod
 ### Empty states
 One plain sentence in `text-secondary` and, where useful, one action. No dashed boxes.
 
+### Time and plans (new in R2)
+- **Segmented control**: one pill track (`surface`, inset `border-strong`), the chosen segment an ivory pill with `bg` text. Used for how time is given (In total · Per week · Per day · Per lecture) and the Stats range.
+- **Time picker**: a stepper (−, the number at 34 px weight 500, +) beside its unit in `text-soft`; a log-scale slider in the accent; quick picks as outlined mini chips ("2 hours · an article or a video"); then the true total in `accent-text` 22 px, the one number the plan is made for.
+- **Budget bar**: a 10 px track (6 px compact). Spent in ivory, the time the plan holds ahead in accent stripes (135°), the rest empty; a 2 px `text-secondary` tick where the budget's rhythm puts you by now. Legend below in 13 px.
+- **Idea field**: the plan as 16 px dots on a `surface` card: in depth = filled accent with halo, overview = 2 px accent ring, already yours = filled ivory, left out = dashed `node-muted` ring at 80%; a 7 px amber dot on an idea another goal shares. Dots ease between states as the time changes.
+- **Depth pips**: five 8 px dots per idea: filled ivory up to what you know, accent ring up to the planned depth, dashed up to what the goal asks beyond the time. Shown with a one-line legend.
+- **Progress panel** (goal page): a raised card with up to four figures (30 px number, the target after a slash in `text-muted`, a 13 px label), the budget bar, a pace sentence (amber `#E8C27A` only when it needs attention, accent when ahead, `text-secondary` when on track), then the primary action.
+- **Wizard**: the horizontal step path on top with "Cancel"/"Finish later" on the right, one question group per step, Back (quiet) and the primary action at the bottom right above a 1 px divider. Questions are 15 px `text` with a 13 px `text-muted` hint underneath.
+- **Welcome**: a 56 px brand mark, a 44 px headline, one lead paragraph, three numbered step cards, one large primary button.
+
+### Stats (new in R2)
+Cards on `surface` with an 18 px heading and a 13 px muted note saying how to read the chart. Charts are SVG drawn at their real width: 11 px `text-muted` axis text, 1 px `border-strong` grid, bars with 4 px rounded data ends and 2 px gaps between stacked segments, 2 px lines with direct labels at their ends, a crosshair and tooltip on hover (`surface-selected`, radius 10). Goal colours in fixed order (`#7489E6`, `#D95926`, `#199E70`, `#C98500`, `#D55181`, `#9085E9`, then `#5A554C` for the rest), validated for colour-vision deficiency on the dark surface; a goal keeps its colour under every filter. Sequential data (the calendar) uses the accent at four opacities. "Worth knowing" is an accent-tinted card with 16 px weight 300 sentences.
+
 ## 6. Motion
 - Default transitions 150–200 ms ease-out (hover, selection, expanding history).
-- The only looping animations: the current map node's pulse and the listening bars. Respect `prefers-reduced-motion` (disable both).
+- The only looping animations: the current map node's pulse, the listening bars, the live Session dot in the rail and the dots while a goal is being mapped. Steps of the goal wizard and the welcome fade in once (260–400 ms). Respect `prefers-reduced-motion` (disable all of them).
 
 ## 7. Accessibility
 Real buttons, links, inputs and labels; visible focus rings (2 px accent outline, 2 px offset); icon-only controls get labels; all text AA; the map has a text alternative (the list of nodes by state).

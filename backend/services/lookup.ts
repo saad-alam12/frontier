@@ -7,6 +7,7 @@ import type { Embedder } from '../ingest/embedder';
 import { cosine, nameSimilarity } from '../ingest/similarity';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
+import { logEvent } from '../store/activity';
 import { listEvidenceForNode } from '../store/evidence';
 import { listEmbeddings } from '../store/embeddings';
 import { recordEvidence } from './evidence';
@@ -106,6 +107,7 @@ export interface LookupAnswer {
 /** Search, then have the librarian answer from the top cards. Questions get answers; bare names only hits. */
 export async function lookup(deps: LookupDeps, query: string): Promise<LookupAnswer> {
   const hits = await searchIdeas(deps, query);
+  logEvent(deps.db, 'lookup', {}, { query, hits: hits.length, question: looksLikeQuestion(query) });
   if (!deps.provider || hits.length === 0 || !looksLikeQuestion(query)) return { hits, answer: null };
   const view = loadKnowledge(deps.db);
   const cards = hits.slice(0, 6).map((h) => ({

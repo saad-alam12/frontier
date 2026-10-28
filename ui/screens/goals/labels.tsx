@@ -1,4 +1,4 @@
-import type { Assessment, GoalDetail, GoalKind, MaterialRole, SkillStatus } from '../../../backend/api/contract';
+import type { Assessment, GoalDetail, GoalFocus, GoalKind, MaterialRole, SkillStatus } from '../../../backend/api/contract';
 
 export const KIND_OPTIONS: { value: GoalKind; label: string }[] = [
   { value: 'course', label: 'A course' },
@@ -82,4 +82,27 @@ export function materialSummary(materials: { role: MaterialRole; title: string }
 
 export function goalName(detail: GoalDetail): string {
   return detail.goal.title ?? detail.goal.text;
+}
+
+export const FOCUS_OPTIONS: { value: GoalFocus; label: string; hint: string }[] = [
+  { value: 'concepts', label: 'Understand the ideas', hint: 'what things mean and why' },
+  { value: 'math', label: 'Mathematical rigour', hint: 'definitions, derivations, proofs' },
+  { value: 'practice', label: 'Apply it in practice', hint: 'real tasks, and code where it fits' },
+];
+
+/** Pick any number of focuses; none means a balanced mix. */
+export function FocusChips({ value, onChange }: { value: GoalFocus[]; onChange: (next: GoalFocus[]) => void }) {
+  return (
+    <div className="chip-group" role="group" aria-label="What you want from it">
+      {FOCUS_OPTIONS.map((o) => {
+        const on = value.includes(o.value);
+        return (
+          <button key={o.value} type="button" className="chip focus-chip" aria-pressed={on} onClick={() => onChange(on ? value.filter((v) => v !== o.value) : [...value, o.value])}>
+            <span>{o.label}</span>
+            <span className="chip-hint">{o.hint}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }

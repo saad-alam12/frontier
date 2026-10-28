@@ -11,6 +11,7 @@ import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
+import { logEvent } from '../store/activity';
 import { getState } from '../store/evidence';
 import { getGoal } from '../store/goals';
 import { activeSession, appendSessionEvent, createSession, endSession, getSession, listEndedSessions, listSessionEvents, saveSessionState } from '../store/sessions';
@@ -19,7 +20,7 @@ import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
 import type { IngestionService } from './ingestion';
-import { loadKnowledge } from './knowledge';
+import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 import { MAX_PLAN_NODES, candidatesForGoal, planSession } from './planner';
 import { practiceView, startPractice, submitPracticeAnswer } from './practice';
@@ -187,6 +188,7 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
   };
   if (carried) state.nodeStatus[carried.step.nodeId] = 'active';
   const session = createSession(db, goalId, state);
+  logEvent(db, 'session.started', { goalId, sessionId: session.id }, { steps: plan.steps.length });
   appendSessionEvent(db, session.id, 'start', { goalId, plan: { title: plan.title, steps: plan.steps.map((s) => s.nodeId) }, resumes: carried ? { nodeId: carried.step.nodeId, fromSessionId: carried.resume.fromSessionId } : null });
   if (carried) carryEvents(db, carried.resume.fromSessionId, session.id, carried.step.nodeId);
   return snapshot(db, session);
@@ -209,6 +211,8 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   if (!session || session.status !== 'active') return;
   endSession(db, sessionId, 'abandoned');
   appendSessionEvent(db, sessionId, 'abandon', {});
+  logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'abandoned' });
+  refreshGoalFields(db);
   await ingestTranscript(deps, sessionId, session.state);
 }
 
@@ -292,6 +296,8 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
       saveSessionState(db, sessionId, state);
       endSession(db, sessionId, 'done');
       appendSessionEvent(db, sessionId, 'finish', {});
+      logEvent(db, 'session.ended', { goalId: state.goalId, sessionId }, { status: 'done' });
+      refreshGoalFields(db);
       await ingestTranscript(deps, sessionId, state);
       return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>);
     }
