@@ -14,6 +14,11 @@ import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, 
 import type { Grade, LearnerResponse } from '../agents/tutor';
 import type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView } from '../services/practice';
 import type { TodayGoal, TodayView } from '../services/today';
+import type { MapNodeView, MapState, MapView, NodeCard } from '../services/map';
+import type { LookupAnswer, LookupHit } from '../services/lookup';
+import type { Trail, TrailItem, TrailSummary } from '../services/trails';
+
+export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailSummary };
 
 export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, TodayGoal, TodayView };
 
@@ -92,6 +97,15 @@ export interface ApiMethods {
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock' }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null }; output: PracticeView };
+  'map.view': { input: undefined; output: MapView };
+  /** An idea's card without counting it as a lookup (the map's selection). */
+  'map.card': { input: { nodeId: string }; output: NodeCard };
+  /** Ideas by meaning and name; a question also gets a short answer from the learner's own cards. */
+  'lookup.search': { input: { query: string }; output: LookupAnswer };
+  /** Open a card from Lookup: counts as a weak review (once per idea per day). */
+  'lookup.open': { input: { nodeId: string }; output: NodeCard };
+  'trails.list': { input: { nodeId?: string }; output: TrailSummary[] };
+  'trails.get': { input: { sessionId: string }; output: Trail };
   /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
   'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
   'drafts.set': { input: { key: string; value: string }; output: undefined };

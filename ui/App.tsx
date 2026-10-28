@@ -14,9 +14,15 @@ export function App() {
   const [screen, setScreen] = useState<ScreenName>('today');
   /** A practice set opened from Today; the rail keeps Today selected while it is open. */
   const [practiceSet, setPracticeSet] = useState<string | null>(null);
+  /** A trail opened from a node card. */
+  const [trailId, setTrailId] = useState<string | null>(null);
   const navigate = (s: ScreenName) => {
     setPracticeSet(null);
     setScreen(s);
+  };
+  const openTrail = (sessionId: string) => {
+    setTrailId(sessionId);
+    setScreen('trails');
   };
   return (
     <div className="app">
@@ -24,10 +30,10 @@ export function App() {
       {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
       {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenPractice={setPracticeSet} />}
       {screen === 'session' && <SessionScreen onNavigate={navigate} />}
-      {screen === 'map' && <MapScreen />}
+      {screen === 'map' && <MapScreen onOpenTrail={openTrail} />}
       {screen === 'goals' && <GoalsScreen onNavigate={navigate} />}
-      {screen === 'lookup' && <LookupScreen />}
-      {screen === 'trails' && <TrailsScreen />}
+      {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} />}
+      {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
       {screen === 'library' && <LibraryScreen />}
       {screen === 'settings' && <SettingsScreen />}
     </div>

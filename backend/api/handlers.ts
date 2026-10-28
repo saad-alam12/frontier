@@ -13,6 +13,9 @@ import { abandonSession, currentSession, pauseSession, respond, startSession } f
 import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
+import { mapView, nodeCard } from '../services/map';
+import { lookup, openCard } from '../services/lookup';
+import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, startUnverified } from '../store/goals';
 import { deleteSource } from '../store/sources';
 import { getDrafts, setDraft } from '../store/drafts';
@@ -131,6 +134,12 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'practice.get': ({ setId }) => practiceView(ctx.db(), setId),
     'practice.start': ({ goalId, kind }) => startPractice(ctx.practiceDeps(), goalId, { kind }),
     'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
+    'map.view': () => mapView(ctx.db()),
+    'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),
+    'lookup.search': ({ query }) => lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query),
+    'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
+    'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
+    'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
     'drafts.set': ({ key, value }) => {
       setDraft(ctx.db(), key, value);

@@ -245,7 +245,7 @@ Per-source chunks run in order (each extractor sees the digest); different sourc
 
 - **Lookup.** A question ("difference between SPE and Nash?") returns node cards: (1) the learner's own statement and handle, (2) neighbourhood via chains, (3) the derivation path from solidly owned nodes down to this one, (4) the trail of the session where it was learned. Archive details hang under their parent node. Search is semantic (local embeddings) plus fuzzy name match. A lookup records `lookup` evidence (a weak retrieval signal).
 - **Trails.** Every session is stored as a timeline: predictions, answers, think-aloud text, errors, explanations that landed, nodes created. Browsable by date, goal or node; the system can narrate a trail ("how did I get from linear algebra to attention?").
-- **Map.** Zoomable graph of the world layer, coloured by the learner's depth, faded by FSRS freshness, goals outlined, fringe highlighted. Chains render as small implication markers (premises → ⟹ → conclusion).
+- **Map.** Zoomable graph of the world layer, laid out left to right from roots to results, coloured by the learner's depth, faded by FSRS freshness, goals outlined, fringe highlighted. Chains with several premises meet at a small implication marker before their conclusion.
 - **Bridges** (post-MVP). A background agent proposes structural analogies between distant areas; accepted bridges become explicit `analogous` notes the tutor uses for anchoring.
 
 ---
@@ -289,7 +289,7 @@ The interface uses cards and controls, not a raw chat log, wherever the step loo
 | Vector search | cosine similarity over embeddings stored in SQLite; sqlite-vec (MIT / Apache-2.0) if the graph outgrows that | — |
 | Local embeddings | transformers.js with a small model (e.g. bge-small-en-v1.5) | Apache-2.0 (check model license) |
 | Spaced-repetition math | ts-fsrs | MIT |
-| Graph view | Cytoscape.js (or sigma.js + graphology) | MIT |
+| Graph view | Own layered layout and canvas renderer (no dependency); Cytoscape.js or sigma.js if it ever needs more | — |
 | Math rendering | KaTeX | MIT |
 | Markdown | react-markdown + remark/rehype plugins | MIT |
 | PDF text | pdfjs-dist | Apache-2.0 |

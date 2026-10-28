@@ -10,19 +10,8 @@ import { FrontierPanel } from '../components/FrontierPanel';
 import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
 import { useDrafts } from '../hooks/useDrafts';
+import { STAGE_LABEL } from '../lib/stages';
 
-const STAGE_LABEL: Record<Stage, string> = {
-  predict: 'Predict',
-  explain: 'Explain',
-  check: 'Check',
-  derive: 'Derive',
-  connect: 'Connect',
-  compress: 'Own words',
-  use: 'Use',
-  index: 'Index pass',
-  support: 'Worked example',
-  reteach: 'Another way in',
-};
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
 

@@ -1347,3 +1347,209 @@ button.map-label:hover {
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ---------- Node card (Map, Lookup) ---------- */
+
+.node-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.link-button.idea-link {
+  font-size: inherit;
+}
+.idea-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.idea-item {
+  white-space: nowrap;
+}
+.idea-item .link-button {
+  white-space: normal;
+}
+.depth-ladder {
+  display: flex;
+  gap: 6px;
+}
+.depth-ladder .rung {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.depth-ladder .rung.is-reached {
+  background: var(--text);
+}
+.depth-ladder .rung.is-target {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ---------- Map ---------- */
+
+.side-panel.is-narrow {
+  flex: 0 1 400px;
+  max-width: 420px;
+}
+
+.main-column > .map-stage {
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 420px;
+}
+.map-stage {
+  position: relative;
+  border-radius: 18px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  overflow: hidden;
+}
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.map-canvas canvas {
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+.map-controls {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 6px;
+}
+.map-controls .mini-chip {
+  background: var(--bg-panel);
+  min-width: 32px;
+}
+.main-column > .map-head {
+  max-width: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.map-search {
+  position: relative;
+  width: 280px;
+}
+.map-matches {
+  position: absolute;
+  z-index: 5;
+  top: 52px;
+  left: 0;
+  right: 0;
+  background: var(--surface-raised);
+}
+.link-row {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.link-row:hover {
+  color: var(--accent-text);
+}
+.legend-diamond {
+  width: 7px;
+  height: 7px;
+  background: var(--node-muted);
+  transform: rotate(45deg);
+}
+
+/* ---------- Lookup ---------- */
+
+.lookup-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.lookup-input {
+  min-height: 52px;
+  border-radius: 999px;
+  padding: 0 22px;
+  font-size: 17px;
+}
+.lookup-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.list-card > li.is-selected {
+  background: var(--surface-selected);
+}
+.list-card > li:first-child.is-selected {
+  border-radius: 18px 18px 0 0;
+}
+.list-card > li:last-child.is-selected {
+  border-radius: 0 0 18px 18px;
+}
+
+/* ---------- Trails ---------- */
+
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.trail-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trail-entry.is-fresh {
+  animation: trail-in 260ms ease-out;
+}
+.trail-milestone {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.trail-milestone .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.trail-milestone .dot.is-done {
+  background: var(--text);
+}
+.trail-milestone .dot.is-upcoming {
+  border: 1.5px solid var(--node-muted);
+}
+@keyframes trail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trail-entry.is-fresh {
+    animation: none;
+  }
+}
+@media (max-width: 1199px) {
+  .side-panel.is-narrow {
+    max-width: none;
+  }
+  .main-column > .map-stage {
+    height: 560px;
+  }
+}

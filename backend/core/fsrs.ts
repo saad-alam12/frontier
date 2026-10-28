@@ -38,8 +38,9 @@ function toCard(state: FsrsState, now: Date): Card {
 }
 
 /**
- * Apply one review. `weight` below 1 gives partial credit: the state moves that fraction of the way
- * from its current values to what a full review would produce (the idea behind fractional implicit repetition).
+ * Apply one review. `weight` below 1 gives partial credit: stability, difficulty and the review clock
+ * move that fraction of the way from their current values to what a full review would produce (the
+ * idea behind fractional implicit repetition).
  */
 export function applyReview(state: FsrsState, score: number, at: Date, weight = 1): FsrsState {
   const w = Math.max(0, Math.min(1, weight));
@@ -59,11 +60,15 @@ export function applyReview(state: FsrsState, score: number, at: Date, weight = 
   const stability = state.stability + w * (next.stability - state.stability);
   const difficulty = state.lastReview ? state.difficulty + w * (next.difficulty - state.difficulty) : next.difficulty;
   const intervalDays = Math.max(1, scheduler.next_interval(stability, 0));
+  // The clock moves the same fraction of the way: a light touch (a lookup, implicit credit two hops
+  // away) must not make a long-unreviewed idea look freshly reviewed.
+  const last = state.lastReview ? new Date(state.lastReview).getTime() : at.getTime();
+  const lastReview = new Date(last + w * (at.getTime() - last));
   return {
     stability,
     difficulty,
-    lastReview: at.toISOString(),
-    due: new Date(at.getTime() + intervalDays * DAY_MS).toISOString(),
+    lastReview: lastReview.toISOString(),
+    due: new Date(lastReview.getTime() + intervalDays * DAY_MS).toISOString(),
     reps: state.reps + 1,
     lapses: state.lapses + (scoreToRating(score) === Rating.Again && state.lastReview ? 1 : 0),
   };

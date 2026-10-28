@@ -37,7 +37,17 @@ describe('fsrs wrapper', () => {
     expect(half.stability).toBeGreaterThan(base.stability);
     expect(half.stability).toBeLessThan(full.stability);
     expect(half.stability).toBeCloseTo(base.stability + 0.5 * (full.stability - base.stability), 6);
-    expect(half.lastReview).toBe(days(5).toISOString());
+    // the clock moves halfway too: from day 0 to day 2.5
+    expect(half.lastReview).toBe(new Date((t0.getTime() + days(5).getTime()) / 2).toISOString());
+  });
+
+  it('a light touch long after learning does not make an idea look freshly reviewed', () => {
+    const base = applyReview(emptyFsrs(), 0.9, t0);
+    const touched = applyReview(base, 0.6, days(60), 0.2);
+    const now = days(60);
+    expect(recallProbability(touched, now)).toBeGreaterThan(recallProbability(base, now));
+    expect(recallProbability(touched, now)).toBeLessThan(0.9);
+    expect(touched.lastReview).toBe(days(12).toISOString()); // 20% of the way from day 0 to day 60
   });
 
   it('a failure counts a lapse and lowers stability', () => {
