@@ -61,13 +61,28 @@ export function formatHours(minutes: number): string {
 // What an idea costs
 
 /**
- * Minutes to raise an idea one level, by the level reached: recognizing is quick, each deeper level
- * costs more (explaining, deriving, applying, transferring), and includes a share of the practice
- * that keeps it. Terms cost half.
+ * Minutes of goal time to raise an idea one level, all in: the session's cards for it, a share of the
+ * practice that keeps it, and some slack. Recognizing is a quick index pass (7); explaining runs
+ * predict, explain, check and own words (25 in all); deriving adds a derive card (30 in all), so an
+ * idea learned in depth costs about half an hour. Applying and transferring come from practice over
+ * time. Terms cost half.
  */
-export const LEVEL_MINUTES: readonly number[] = [0, 4, 8, 14, 18, 22];
-/** What one more level is worth relative to the first: the first levels carry most of the use (80/20). */
-export const LEVEL_VALUE: readonly number[] = [0, 1, 0.55, 0.4, 0.25, 0.15];
+export const LEVEL_MINUTES: readonly number[] = [0, 7, 18, 5, 8, 8];
+/**
+ * What a level is worth. Explaining an idea carries most of the use: a few ideas understood beat many
+ * only recognized, so the plan takes the most useful ideas to the depth the goal asks before it adds
+ * more ideas.
+ */
+export const LEVEL_VALUE: readonly number[] = [0, 0.35, 1, 0.45, 0.25, 0.15];
+/** Targets the compiler marks core (the goal fails without them) weigh this much more. */
+export const CORE_WEIGHT = 2;
+/** Goal minutes one idea learned in depth counts for; sizes the map the compiler is asked for. */
+export const IDEA_MINUTES = 30;
+
+/** Roughly how many ideas a budget holds: one per half hour, plus a fifth so the plan can choose (4–80). */
+export function ideaCountFor(minutes: number): number {
+  return Math.max(4, Math.min(80, Math.round((minutes / IDEA_MINUTES) * 1.2)));
+}
 
 export function levelMinutes(kind: NodeKind, level: number, speed = 1): number {
   return (LEVEL_MINUTES[level] ?? 0) * (kind === 'term' ? 0.5 : 1) * speed;
@@ -109,6 +124,8 @@ export interface PlanTarget {
   idealDepth: Depth;
   /** How much the learner leans into this part (material keeps arriving on it); 1 by default. */
   weight?: number;
+  /** The compiler marked it core: the goal fails without it. */
+  core?: boolean;
 }
 
 export interface PlanNode {
@@ -133,9 +150,9 @@ export interface GoalPlan {
   ideas: {
     /** Distinct ideas the goal's capabilities name. */
     total: number;
-    /** Still to learn, planned at depth 3 or more. */
+    /** Still to learn, planned at depth 2 or more (explained, derived, applied). */
     deep: number;
-    /** Still to learn, planned at depth 1–2. */
+    /** Still to learn, planned at depth 1 (recognized). */
     overview: number;
     /** Left out entirely (planned depth 0). */
     cut: number;
@@ -170,8 +187,10 @@ interface Level {
 
 /**
  * Spend every goal's remaining budget on idea levels, best value per minute first (design §6).
- * Value is goal priority × part weight × (1 + log centrality) × the level's value, so recognizing
- * many ideas comes before deriving a few, and shared foundations come before goal-specific detail.
+ * Value is goal priority × part weight × core weight × (1 + log centrality) × the level's value. An
+ * idea climbs to the depth the goal asks once its first level is bought (explaining and deriving are
+ * worth more per minute than recognizing), so the most useful ideas are learned properly before more
+ * ideas join, and core ideas and shared foundations come before goal-specific detail.
  * An idea several goals want is paid once, split between the goals that can afford it; a goal that
  * cannot pay its share still gets the idea when another goal pays for it. What the learner already
  * knows is free. Goals without a budget get every target at its full depth.
@@ -186,7 +205,7 @@ export function allocate(goals: PlanGoal[], targets: PlanTarget[], nodes: Map<st
   for (const t of live) {
     const byGoal = wants.get(t.nodeId) ?? new Map<string, { depth: number; weight: number }>();
     const prev = byGoal.get(t.goalId);
-    byGoal.set(t.goalId, { depth: Math.max(prev?.depth ?? 0, t.idealDepth), weight: Math.max(prev?.weight ?? 0, t.weight ?? 1) });
+    byGoal.set(t.goalId, { depth: Math.max(prev?.depth ?? 0, t.idealDepth), weight: Math.max(prev?.weight ?? 0, (t.weight ?? 1) * (t.core ? CORE_WEIGHT : 1)) });
     wants.set(t.nodeId, byGoal);
   }
 
@@ -267,7 +286,7 @@ export function allocate(goals: PlanGoal[], targets: PlanTarget[], nodes: Map<st
       const depth = Math.min(want, reached.get(nodeId) ?? 0);
       if (depth === 0) cut += 1;
       else if (node.depth >= depth) ready += 1;
-      else if (depth >= 3) deep += 1;
+      else if (depth >= 2) deep += 1;
       else overview += 1;
       if (depth < want) trimmed += 1;
       if ((goalsOf.get(nodeId) ?? 1) > 1) shared += 1;

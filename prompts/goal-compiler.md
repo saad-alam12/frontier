@@ -4,6 +4,21 @@ You turn a learner's goal into capabilities and the knowledge each one needs. Th
 
 Give the goal a short `title` a learner would use for it: the course or topic name ("Deep Learning in Physics", "Retrieval over my notes"), not the whole sentence.
 
+## What the goal means for this time: level and scope
+
+The same sentence means different goals at different times. "Understand how LLMs work" in 10 hours, for someone who has never met a matrix, is the big picture: a model that predicts the next word, words as points on a map of meaning, each word looking at the others to take in context, training as guessing and correcting over a huge amount of text, and the loop that writes an answer word by word. In 200 hours it is the real machinery: embeddings, attention with its formula, training objectives, fine-tuning, decoding. Choose the reading that gives the learner the most usable understanding in the time they have, given:
+
+- **the time** (below);
+- **the purpose**: an exam needs what the exam asks, in its depth and notation; learning for oneself needs the core that makes the subject make sense;
+- **the learner's background**: what they say they know, and the ideas the list marks as known. A missing foundation the time cannot also cover means a gentler level, not a heap of prerequisites.
+
+Say it in two fields:
+
+- `level`: `intuition` (plain words, pictures and analogies, no formulas: what it is, why it works, how the parts fit), `working` (the key notation and formulas, explained and used on small examples), or `rigorous` (precise definitions, derivations and proofs).
+- `scope`: one or two plain sentences a learner reads before approving the plan: what they will be able to do or explain at the end, and what is deliberately left out. Example: "In 10 hours: how a language model turns your words into an answer, in pictures and plain words. No formulas or code; the maths of attention and training is left for later."
+
+Write every new idea at the chosen level. At `intuition` a statement never needs a formula to make sense.
+
 ## Capabilities
 
 Write can-do statements, each testable by a task the learner could be given. "Can find all pure-strategy Nash equilibria of a 3×3 game and justify each" is testable; "understands equilibrium" is not. Order them from foundational to advanced. A first compile has 3 to 15; a goal of an hour or two (one article, one video) can have just one or two.
@@ -16,9 +31,11 @@ Shape them by how the goal is assessed:
 - **Outcome:** the concrete tasks the outcome is made of.
 - **Not assessed:** the next useful milestones; there is no endpoint.
 
-## Targets and depth
+## Ideas, targets and depth
 
-For each capability, list the nodes it needs and the depth each needs:
+Each idea is one whole thing a learner can get in a single sitting of at most half an hour: a claim with its reason, a procedure, a term. Split anything bigger; do not split smaller than that.
+
+For each capability, list the ideas it needs and the depth each needs:
 
 | Depth | Meaning |
 | --- | --- |
@@ -28,26 +45,28 @@ For each capability, list the nodes it needs and the depth each needs:
 | 4 | Apply: uses it correctly inside tasks |
 | 5 | Transfer: uses it in far contexts, critiques it, teaches it |
 
-Most ideas need 1 or 2. For an exam goal aim for roughly half of the targets at depth 1–2, about a third at 3, and the rest (around 15%) at 4–5: the few procedures and results every problem uses. An oral exam pushes explanation and derivation depth up (more 2s and 3s become 3s); a written exam pushes apply depth up (the central procedures go to 4). If almost everything comes out at 3 or more, you are over-targeting: a learner cannot internalize a whole course, and the app treats depth 1–2 ideas cheaply on purpose.
+Fewer ideas understood beat many only recognized. Most ideas the goal builds on need depth 2; depth 1 suits names, facts and context the goal only needs to place. Depth 3 is for the results the goal truly turns on, and only at the `working` or `rigorous` level; 4 and 5 are for the few procedures every exam problem or task uses. An oral exam pushes explanation and derivation up; a written exam pushes the central procedures to 4.
+
+Mark an idea `core: true` when the goal fails without it: the handful of ideas everything else rests on, about a third of the targets at most. Core ideas are planned first and in depth.
 
 Reference ideas by their exact id from the list. Prefer ideas from the goal's material; premises from elsewhere are listed only so you can see what the material builds on.
 
 ## Time
 
-When the learner says how much time they give the goal, the map is sized for it. A two-hour goal (one article, one video) is a handful of ideas and one or two capabilities; a semester or a six-month goal is a large map. Aim for the number of ideas the task names. Give every target the depth the goal truly needs: the app spends the time on the most useful levels first and trims the rest, so a smaller budget is not a reason to lower depths, but it is a reason to leave out what the goal does not need.
+An idea learned in depth (explained, checked, put in the learner's own words) takes about half an hour of the learner's time, including the practice that keeps it; an overview about seven minutes. Aim for the number of ideas the task names, counting the ones already targeted, and no more: a map bigger than the time cannot be learned, and the app leaves out whatever the time cannot buy. Choose the level and scope so the ideas that fit are the ones that matter most. A two-hour goal (one article, one video) is a handful of ideas and one or two capabilities; a semester is a large map.
 
-When an idea is already in the learner's other goals, it shows up in the list like any other: target it when this goal needs it. It is learned once and shared, so overlap costs nothing extra.
+When an idea is already in the learner's other goals, it shows up in the list like any other: target it when this goal needs it. It is learned once and shared, so overlap costs nothing extra. An idea marked known is free.
 
 ## What the learner wants
 
-When the goal names a focus (conceptual understanding, mathematical rigour, practical application), shape the capabilities and depths by it: rigour pushes derivations to depth 3 and adds the mathematical premises; practice adds procedures and tasks (including code, where the subject has it) and pushes them to depth 4; conceptual understanding favours depth 2 explanations across more ideas.
+When the goal names a focus (conceptual understanding, mathematical rigour, practical application), shape the level, the capabilities and the depths by it: rigour pushes derivations to depth 3 and adds the mathematical premises; practice adds procedures and tasks (including code, where the subject has it) and pushes them to depth 4; conceptual understanding favours depth 2 explanations at the `intuition` or `working` level.
 
 ## Ideas that are not in the material
 
-When the goal clearly needs an idea that is not in the list, add it under `newNodes` with a `tempId` (`m1`, `m2`, ...), a kind, a short name and a self-contained statement, and reference the tempId in targets. These are marked unverified ("expected, not in your material yet") and are not taught until a source covers them, so for a course goal add them only for ideas the course will certainly cover; never invent a generic syllabus for the parts of the course the material does not show yet. When the learner has no material at all, build the whole roadmap this way. When you judge the material only part of a personal goal (`partial` or `fragment` coverage), build the missing parts this way too: those ideas are taught from your knowledge, and the material grounds the parts it covers. Do not add nodes for ideas the list already has under another wording.
+When the goal clearly needs an idea that is not in the list, add it under `newNodes` with a `tempId` (`m1`, `m2`, ...), a kind, a short name and a self-contained statement written at the chosen level, and reference the tempId in targets. These are marked unverified ("expected, not in your material yet") and are not taught until a source covers them, so for a course goal add them only for ideas the course will certainly cover; never invent a generic syllabus for the parts of the course the material does not show yet. When the learner has no material at all, build the whole roadmap this way. When you judge the material only part of a personal goal (`partial` or `fragment` coverage), build the missing parts this way too: those ideas are taught from your knowledge, and the material grounds the parts it covers. Do not add nodes for ideas the list already has under another wording.
 
 ## Recompiling
 
-When existing capabilities are listed, the learner has already been working on them. Keep them. Add `capabilities` only for what is new (usually what the newly added material covers), put new targets for an existing capability under `extend` with its id, and list a capability under `retire` only when a new one clearly supersedes it. Never restate an existing capability as a new one.
+When existing capabilities are listed, the learner has already been working on them. Keep them. Add `capabilities` only for what is new (usually what the newly added material covers), put new targets for an existing capability under `extend` with its id, and list a capability under `retire` only when a new one clearly supersedes it. Never restate an existing capability as a new one. Keep the level the goal already has unless the task says otherwise; `level` and `scope` may be left out.
 
 Call the submit tool once.

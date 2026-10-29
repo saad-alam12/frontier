@@ -11,7 +11,8 @@ import { Markdown } from '../../components/Markdown';
 import { VerticalPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
 import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
-import { ASSESSMENT_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, dateLabel, formatDate, goalName, isExam, plural, weeksUntil } from './labels';
+import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, dateLabel, formatDate, goalName, isExam, plural } from './labels';
+import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 
 const SKILLS_SHOWN = 6;
 /** A lecture counts as done once this share of its ideas is yours. */
@@ -151,6 +152,12 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
             goal.date ? formatDate(goal.date) : null,
           ]}
         />
+        {goal.scope && (
+          <div className="scope-note">
+            <div className="t-caption text-muted">{goal.level ? LEVEL_LABEL[goal.level] : 'What it means for your time'}</div>
+            <p className="m-0">{goal.scope}</p>
+          </div>
+        )}
       </section>
 
       <WorkNotice detail={detail} onRetry={() => void run('compile', async () => void (await call('goals.compile', { goalId: goal.id })))} />
@@ -341,7 +348,7 @@ function PaceNotes({ progress }: { progress: GoalProgress }) {
 /** Change the time with the plan re-computed live, then save. */
 function TimeEditor({ detail, onClose, onSaved }: { detail: GoalDetail; onClose: () => void; onSaved: () => void }) {
   const { goal } = detail;
-  const [budget, setBudget] = useState<GoalBudget | null>(goal.budget);
+  const [budget, setBudget] = useState<GoalBudget>(goal.budget ?? defaultBudget(goal.kind, goal.date));
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [saving, setSaving] = useState(false);
   const teaching = detail.materials.filter((m) => m.role === 'teaching').length;

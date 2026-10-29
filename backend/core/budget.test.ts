@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocate, budgetMinutes, budgetSpanDays, describeBudget, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from './budget';
+import { allocate, budgetMinutes, budgetSpanDays, describeBudget, ideaCountFor, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from './budget';
 import type { PlanGoal, PlanNode, PlanTarget } from './budget';
 import type { Depth } from './types';
 
@@ -52,7 +52,7 @@ describe('allocate', () => {
     const large = allocate([goal('g', 240)], targets, byId(nodes)).goals.get('g');
     if (!small || !large) throw new Error('no plan');
     expect(small.plannedMinutes).toBeLessThanOrEqual(120);
-    expect(small.ideas.deep).toBeLessThan(5);
+    expect(small.ideas.deep).toBeLessThanOrEqual(5);
     expect(small.ideas.trimmed).toBeGreaterThan(30);
     expect(small.sessions).toBeLessThanOrEqual(3);
     expect(large.ideas.trimmed).toBe(0);
@@ -60,15 +60,58 @@ describe('allocate', () => {
     expect(large.sessions).toBeGreaterThan(small.sessions * 5);
   });
 
-  it('spends a small budget on breadth before depth (80/20) and on foundations first', () => {
-    const { targets, nodes } = course('g', 20, 3);
-    const plan = allocate([goal('g', 1.5)], targets, byId(nodes));
+  it('learns the core and the central ideas properly before adding more', () => {
+    const { targets, nodes: mixed } = course('g', 20, 2);
+    const nodes = mixed.map((n) => ({ ...n, kind: 'claim' as const }));
+    const core = targets.map((t, i) => ({ ...t, core: i >= 15 }));
+    const plan = allocate([goal('g', 3.5)], core, byId(nodes));
     const depths = nodes.map((n) => plan.nodeDepth.get(n.id) ?? 0);
-    // most ideas are at least recognized before any is derived
-    expect(depths.filter((d) => d >= 1).length).toBeGreaterThan(15);
-    // the central ideas (0–2) are the ones that go deeper
-    const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
-    expect(mean(depths.slice(0, 3))).toBeGreaterThan(mean(depths.slice(3)) + 0.5);
+    // the five core ideas (15–19) and the central foundations (0–2) are explained
+    expect(depths.slice(15).every((d) => d >= 2)).toBe(true);
+    expect(depths.slice(0, 3).every((d) => d >= 2)).toBe(true);
+    // what does not fit is left out rather than skimmed
+    expect(depths.filter((d) => d === 1).length).toBeLessThanOrEqual(2);
+    expect(depths.filter((d) => d === 0).length).toBeGreaterThan(8);
+    // with less time, no ordinary idea goes before a core one
+    const less = allocate([goal('g', 2)], core, byId(nodes));
+    const kept = nodes.filter((n) => (less.nodeDepth.get(n.id) ?? 0) >= 2).map((n) => Number(n.id.slice(1)));
+    expect(kept.every((i) => i < 3 || i >= 15)).toBe(true);
+  });
+
+  it('fits a realistic map to its time: about half an hour per idea learned in depth', () => {
+    const map = (n: number, coreCount: number) => {
+      const nodes: PlanNode[] = Array.from({ length: n }, (_, i) => ({ id: `i${i}`, kind: 'claim', depth: 0, centrality: 0 }));
+      const targets: PlanTarget[] = nodes.map((nd, i) => ({ goalId: 'g', capabilityId: `cap${i % 4}`, nodeId: nd.id, idealDepth: (i < coreCount ? 3 : 2) as Depth, core: i < coreCount }));
+      return { nodes, targets };
+    };
+    const ten = map(24, 8);
+    const plan10 = allocate([goal('g', 10)], ten.targets, byId(ten.nodes));
+    const g10 = plan10.goals.get('g');
+    expect(g10?.plannedMinutes).toBeLessThanOrEqual(600);
+    expect(g10?.ideas.deep).toBeGreaterThanOrEqual(18);
+    expect(g10?.ideas.deep).toBeLessThanOrEqual(22);
+    expect(g10?.ideas.overview).toBeLessThanOrEqual(2);
+    for (const t of ten.targets.filter((x) => x.core)) expect(plan10.nodeDepth.get(t.nodeId)).toBe(3);
+    expect(g10?.sessions).toBeLessThanOrEqual(14);
+
+    const five = map(12, 4);
+    const g5 = allocate([goal('g', 5)], five.targets, byId(five.nodes)).goals.get('g');
+    expect(g5?.plannedMinutes).toBeLessThanOrEqual(300);
+    expect(g5?.ideas.deep).toBeGreaterThanOrEqual(10);
+
+    const two = map(5, 2);
+    const g2 = allocate([goal('g', 2)], two.targets.map((t) => ({ ...t, idealDepth: 2 as Depth })), byId(two.nodes)).goals.get('g');
+    expect(g2?.plannedMinutes).toBeLessThanOrEqual(120);
+    expect(g2?.ideas.deep).toBe(4);
+    expect(g2?.sessions).toBeLessThanOrEqual(3);
+  });
+
+  it('asks the compiler for about one idea per half hour', () => {
+    expect(ideaCountFor(600)).toBe(24);
+    expect(ideaCountFor(300)).toBe(12);
+    expect(ideaCountFor(120)).toBe(5);
+    expect(ideaCountFor(30)).toBe(4);
+    expect(ideaCountFor(12000)).toBe(80);
   });
 
   it('never throws away what the learner knows, and known ideas cost nothing', () => {

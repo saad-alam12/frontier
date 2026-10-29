@@ -16,7 +16,7 @@ import { getGoal, listTargets } from '../store/goals';
 import { closeProbeSet, createProbeSet, getProbeSet, openProbeId, recordProbeAnswer } from '../store/probes';
 import { getNodes } from '../store/world';
 import { recordEvidence } from './evidence';
-import { loadKnowledge } from './knowledge';
+import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { targetDepthFor } from '../core/leverage';
 
 export const MAX_PROBE_QUESTIONS = 8;
@@ -142,7 +142,7 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
   );
   const byNode = new Map<string, Assessment>(assessments.map((a) => [a.nodeId, a]));
 
-  return transaction(db, () => {
+  const outcomes = transaction(db, () => {
     const outcomes: ProbeOutcome[] = [];
     for (const { problem, input } of prepared) {
       const a = byNode.get(problem.nodeId);
@@ -175,4 +175,7 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
     deleteDrafts(db, set.problems.map((p) => probeDraftKey(p.id)));
     return outcomes;
   });
+  // what the probe showed changes what the time buys
+  refreshGoalFields(db);
+  return outcomes;
 }

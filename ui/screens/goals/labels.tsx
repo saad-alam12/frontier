@@ -1,4 +1,4 @@
-import type { Assessment, GoalDetail, GoalFocus, GoalKind, MaterialRole, SkillStatus } from '../../../backend/api/contract';
+import type { Assessment, GoalDetail, GoalFocus, GoalKind, GoalLevel, MaterialRole, SkillStatus } from '../../../backend/api/contract';
 
 export const KIND_OPTIONS: { value: GoalKind; label: string }[] = [
   { value: 'course', label: 'A course' },
@@ -41,6 +41,13 @@ export const ROLE_LABEL: Record<MaterialRole, string> = Object.fromEntries(ROLE_
 export const SKILL_LABEL: Record<SkillStatus, string> = { ready: 'Ready', learning: 'Learning', not_started: 'Not started' };
 export const SKILL_TONE: Record<SkillStatus, string> = { ready: 'text-text', learning: 'text-accent-text', not_started: 'text-muted' };
 
+/** How deep the goal's language goes, as the compiler read it for the time. */
+export const LEVEL_LABEL: Record<GoalLevel, string> = {
+  intuition: 'The big picture, in plain words',
+  working: 'Working knowledge, with the key formulas',
+  rigorous: 'In full: definitions, derivations, proofs',
+};
+
 export const isExam = (a: Assessment | null) => a === 'written_exam' || a === 'oral_exam';
 
 /** "Exam date" for exams, "Deadline" for projects and outcomes, nothing for open-ended goals. */
@@ -55,12 +62,6 @@ export function formatDate(iso: string | null, withYear = true): string {
   if (!iso) return '';
   const d = new Date(`${iso}T12:00:00`);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', withYear ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long' });
-}
-
-export function weeksUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  const ms = new Date(`${iso}T12:00:00`).getTime() - Date.now();
-  return Number.isNaN(ms) ? null : Math.max(0, Math.ceil(ms / (7 * 24 * 3600 * 1000)));
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

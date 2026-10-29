@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import type { Assessment, ExamProfile, GoalFocus, GoalKind } from '../core/types';
+import { ideaCountFor } from '../core/budget';
+import { GOAL_LEVELS } from '../core/types';
+import type { Assessment, ExamProfile, GoalFocus, GoalKind, GoalLevel } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
 
 const DepthSchema = z.number().int().min(1).max(5);
-const TargetsSchema = z.array(z.object({ ref: z.string().trim().min(1), depth: DepthSchema }));
+const TargetsSchema = z.array(z.object({ ref: z.string().trim().min(1), depth: DepthSchema, core: z.boolean().default(false) }));
 
 export interface GraphSummaryEntry {
   id: string;
@@ -26,7 +28,8 @@ export interface ExistingCapability {
 
 /**
  * Validated against the ids the compiler was shown. A first compile must define at least three
- * capabilities; a recompile only adds, extends or (rarely) retires.
+ * capabilities (one for a short goal) and say what the goal means for its time (level and scope); a
+ * recompile only adds, extends or (rarely) retires.
  */
 export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>, options: { minCapabilities?: number; askCoverage?: boolean } = {}) {
   const minCapabilities = options.minCapabilities ?? 3;
@@ -34,6 +37,8 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
   return z
     .object({
       title: z.string().trim().min(2).max(60),
+      level: z.enum(GOAL_LEVELS).optional(),
+      scope: z.string().trim().min(10).max(400).optional(),
       coverage: z.enum(['complete', 'partial', 'fragment']).optional(),
       capabilities: z.array(z.object({ statement: z.string().trim().min(10).max(300), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
       extend: z.array(z.object({ capabilityId: z.string().trim().min(1), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
@@ -69,6 +74,8 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
         if (!existingIds.has(id)) ctx.addIssue({ code: 'custom', path: ['retire', i], message: `unknown capability ${id}` });
       });
       if (existingIds.size === 0 && value.capabilities.length < minCapabilities) ctx.addIssue({ code: 'custom', path: ['capabilities'], message: `a first compile needs at least ${minCapabilities} capabilities` });
+      if (existingIds.size === 0 && !value.level) ctx.addIssue({ code: 'custom', path: ['level'], message: 'say how deep the goal goes for this time: intuition, working or rigorous' });
+      if (existingIds.size === 0 && !value.scope) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'say in one or two plain sentences what the goal means in the time given' });
       if (askCoverage && !value.coverage) ctx.addIssue({ code: 'custom', path: ['coverage'], message: 'judge whether the material covers the goal: complete, partial or fragment' });
     });
 }
@@ -96,6 +103,10 @@ export interface GoalCompilerInput {
   focus: GoalFocus[];
   /** True on the first compile with material: judge whether it covers the goal. */
   askCoverage: boolean;
+  /** What the learner says they already know about the subject. */
+  background: string | null;
+  /** The level an earlier compile chose; null on the first compile. */
+  level: GoalLevel | null;
 }
 
 const FOCUS_TEXT: Record<GoalFocus, string> = {
@@ -103,14 +114,6 @@ const FOCUS_TEXT: Record<GoalFocus, string> = {
   math: 'mathematical rigour: definitions, derivations and proofs',
   practice: 'practical application: using it on real tasks, including writing code where the subject has it',
 };
-
-/**
- * Roughly how many ideas fit a budget: about twenty minutes per idea on average once depths mix, plus
- * a third more so the plan can choose (code trims to the budget), within what one compile can hold.
- */
-export function ideaCountFor(hours: number): number {
-  return Math.max(4, Math.min(80, Math.round(((hours * 60) / 20) * 1.3)));
-}
 
 const ASSESSMENT_TEXT: Record<Assessment, string> = {
   written_exam: 'a written exam',
@@ -132,12 +135,14 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
     `## Goal\n${input.goalText}\n\nKind: ${input.kind === 'course' ? 'a course' : 'learning on their own'}. Assessed by ${ASSESSMENT_TEXT[input.assessment]}.${input.targetGrade ? ` Target grade: ${input.targetGrade}.` : ''}${input.date ? ` Date: ${input.date}.` : ''}`,
   ];
   if (input.focus.length) sections.push(`## What the learner wants from it\n${input.focus.map((f) => `- ${FOCUS_TEXT[f]}`).join('\n')}`);
+  if (input.background) sections.push(`## What the learner says they already know\n${input.background}`);
   if (input.budgetHours !== null) {
     const left = Math.max(0, input.budgetHours - input.spentHours);
     sections.push(
-      `## Time\nThe learner gives this goal about ${round(input.budgetHours)} hours in total${input.spentHours > 0.5 ? `, of which about ${round(left)} are left` : ''}. Size the map for that time: about ${ideaCountFor(left || input.budgetHours)} ideas in all (counting the ones already targeted). Give each target the depth the goal truly needs; the app trims depths to fit the time, 80/20 first, so do not shrink depths yourself.`,
+      `## Time\nThe learner gives this goal about ${round(input.budgetHours)} hours in total${input.spentHours > 0.5 ? `, of which about ${round(left)} are left` : ''}. An idea learned in depth takes about half an hour of that, an overview about seven minutes. Size the map for the time: about ${ideaCountFor((left || input.budgetHours) * 60)} ideas in all, counting the ones already targeted.`,
     );
   }
+  if (input.level) sections.push(`## Level so far\nThe goal has been read at the ${input.level} level. Keep new ideas at that level unless the task says otherwise.`);
   if (input.examProfile) {
     const p = input.examProfile;
     sections.push(`## Exam profile (from past exams)\n${p.summary}\nFormat: ${p.format}. Duration: ${p.durationMinutes ?? 'unknown'} minutes. Aids: ${p.aids}. Question types: ${p.questionTypes.join('; ')}. Difficulty: ${p.difficulty}.`);
@@ -154,7 +159,7 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
   sections.push(
     input.existing.length
       ? '## Task\nRecompile incrementally: add capabilities and targets for what the new material covers, extend existing capabilities with new targets where they belong, and retire a capability only when a new one clearly supersedes it. Do not restate existing capabilities.'
-      : '## Task\nCompile the goal: a short title, its capabilities and their targets.',
+      : '## Task\nCompile the goal: a short title, the level and scope it has for this time, its capabilities and their targets.',
   );
   if (input.askCoverage) {
     sections.push(

@@ -6,6 +6,7 @@ import { runPlanner } from '../agents/planner';
 import type { PlannerCandidate } from '../agents/planner';
 import { dependents } from '../core/graph';
 import { targetDepthFor } from '../core/leverage';
+import { computeFringe, doneSet } from '../core/ownership';
 import { orderByDependencies, planCandidates } from '../core/plan';
 import type { Depth, Tier } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
@@ -41,7 +42,10 @@ export interface LessonPlan {
 }
 
 export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeView = loadKnowledge(db)) {
-  const targetIds = [...new Set(listTargets(db, goalId).map((t) => t.nodeId))].filter((id) => view.nodes.has(id));
+  const aims = new Map<string, number>();
+  for (const t of listTargets(db, goalId)) if (view.nodes.has(t.nodeId)) aims.set(t.nodeId, Math.max(aims.get(t.nodeId) ?? 0, t.depth));
+  const targetIds = [...aims.keys()];
+  const done = doneSet(view.owned, view.states, aims);
   // Unverified ideas (a compile's guesses no source covers yet) are taught for goals with no material
   // at all, for personal goals whose material covers only part of the goal (the compile built the
   // rest), or when the learner chose to start one. A course's expected ideas wait for its lectures.
@@ -49,10 +53,10 @@ export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeV
   const fromScratch = listMaterials(db, goalId).length === 0;
   const selfBuilt = goal?.kind === 'personal' && (goal.coverage === 'partial' || goal.coverage === 'fragment');
   const teachable = (id: string) => view.nodes.get(id)?.status !== 'unverified' || fromScratch || selfBuilt || (goal?.startedUnverified.includes(id) ?? false);
-  const fringe = new Set([...view.fringe].filter(teachable));
-  const candidates = planCandidates(targetIds, view.owned, fringe, view.index);
+  const fringe = new Set([...computeFringe({ nodes: view.nodes.values(), index: view.index, owned: done })].filter(teachable));
+  const candidates = planCandidates(targetIds, done, fringe, view.index);
   const candidateSet = new Set(candidates.map((c) => c.nodeId));
-  const unreachable = targetIds.filter((id) => !view.owned.has(id) && !candidateSet.has(id)).map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id }));
+  const unreachable = targetIds.filter((id) => !done.has(id) && !candidateSet.has(id)).map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id }));
   return { targetIds, candidates, unreachable };
 }
 

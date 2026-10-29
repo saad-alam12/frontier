@@ -57,7 +57,7 @@ async function setup(scores: number[] = []) {
   for (const key of ['strategy', 'payoff']) own(key);
   const goal = createGoal(db, 'Pass the game theory exam');
   addCapabilities(db, goal.id, [
-    { statement: 'Can find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('profile') as string, depth: 1 }, { nodeId: ids.get('bestResponse') as string, depth: 2 }] },
+    { statement: 'Can find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('profile') as string, depth: 1 }, { nodeId: ids.get('bestResponse') as string, depth: 1 }] },
     { statement: 'Can explain dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 2 }, { nodeId: ids.get('dominantNash') as string, depth: 3 }] },
   ]);
   refreshGoalFields(db);

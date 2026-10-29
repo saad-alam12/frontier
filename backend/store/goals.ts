@@ -1,7 +1,7 @@
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
-import type { Assessment, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
+import type { Assessment, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
@@ -25,6 +25,9 @@ interface GoalRow {
   course_plan: string;
   profile_sources: string;
   started_unverified: string;
+  level: GoalLevel | null;
+  scope: string | null;
+  background: string | null;
 }
 interface CapabilityRow {
   id: string;
@@ -38,6 +41,8 @@ interface TargetRow {
   node_id: string;
   depth: number;
   planned_depth: number | null;
+  core: number;
+  approved_depth: number | null;
 }
 
 const toGoal = (r: GoalRow): Goal => ({
@@ -62,9 +67,19 @@ const toGoal = (r: GoalRow): Goal => ({
   coursePlan: parseJson<UpcomingUnit[]>(r.course_plan, []),
   profileSources: parseJson<string[]>(r.profile_sources, []),
   startedUnverified: parseJson<string[]>(r.started_unverified, []),
+  level: r.level,
+  scope: r.scope,
+  background: r.background,
 });
 const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
-const toTarget = (r: TargetRow): Target => ({ capabilityId: r.capability_id, nodeId: r.node_id, depth: (r.planned_depth ?? r.depth) as Depth, idealDepth: r.depth as Depth });
+const toTarget = (r: TargetRow): Target => ({
+  capabilityId: r.capability_id,
+  nodeId: r.node_id,
+  depth: (r.planned_depth ?? r.depth) as Depth,
+  idealDepth: r.depth as Depth,
+  core: r.core === 1,
+  approvedDepth: r.approved_depth as Depth | null,
+});
 
 /** What the learner states about a goal; everything else is derived. */
 export interface GoalInput {
@@ -76,6 +91,8 @@ export interface GoalInput {
   budget?: GoalBudget | null;
   focus?: GoalFocus[];
   priority?: number;
+  /** What the learner already knows about it, in their words. */
+  background?: string | null;
 }
 
 /** A new goal is active unless created as a draft to preview its plan first. */
@@ -84,7 +101,7 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
   const id = newId('goal');
   const now = nowIso();
   db.prepare(
-    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)',
   ).run(
     id,
     g.text,
@@ -98,6 +115,7 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
     options.draft ? 'draft' : 'active',
     now,
     options.draft ? null : now,
+    g.background?.trim() || null,
   );
   return getGoal(db, id) as Goal;
 }
@@ -106,7 +124,7 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
   const current = getGoal(db, id);
   if (!current) return;
   const next = { ...current, ...patch };
-  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ? WHERE id = ?').run(
+  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ?, background = ? WHERE id = ?').run(
     next.text,
     next.kind,
     next.assessment,
@@ -116,6 +134,7 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
     JSON.stringify(next.focus),
     next.priority,
     next.status,
+    next.background?.trim() || null,
     id,
   );
 }
@@ -160,9 +179,16 @@ export function listGoals(db: Database): Goal[] {
   return (db.prepare('SELECT * FROM goals ORDER BY created_at').all() as unknown as GoalRow[]).map(toGoal);
 }
 
-/** Record a compile: the goal's short title and which teaching sources it covered. */
-export function markCompiled(db: Database, goalId: string, title: string | null, sourceIds: string[]): void {
-  db.prepare('UPDATE goals SET compiled_at = ?, title = COALESCE(?, title), compiled_sources = ? WHERE id = ?').run(nowIso(), title, JSON.stringify(sourceIds), goalId);
+/** Record a compile: the goal's short title, which teaching sources it covered, and what the goal means for its time. */
+export function markCompiled(db: Database, goalId: string, title: string | null, sourceIds: string[], reading: { level?: GoalLevel | null; scope?: string | null } = {}): void {
+  db.prepare('UPDATE goals SET compiled_at = ?, title = COALESCE(?, title), compiled_sources = ?, level = COALESCE(?, level), scope = COALESCE(?, scope) WHERE id = ?').run(
+    nowIso(),
+    title,
+    JSON.stringify(sourceIds),
+    reading.level ?? null,
+    reading.scope ?? null,
+    goalId,
+  );
 }
 
 export function saveProfile(db: Database, goalId: string, profile: ExamProfile | null, plan: UpcomingUnit[], sourceIds: string[]): void {
@@ -197,8 +223,14 @@ export function rolesOfSource(db: Database, sourceId: string): { goalId: string;
   return (db.prepare('SELECT goal_id, role FROM goal_materials WHERE source_id = ?').all(sourceId) as { goal_id: string; role: MaterialRole }[]).map((r) => ({ goalId: r.goal_id, role: r.role }));
 }
 
+export interface NewTarget {
+  nodeId: string;
+  depth: Depth;
+  core?: boolean;
+}
+
 /** Add capabilities after the existing ones, with their targets. */
-export function addCapabilities(db: Database, goalId: string, capabilities: { statement: string; targets: { nodeId: string; depth: Depth }[] }[]): Capability[] {
+export function addCapabilities(db: Database, goalId: string, capabilities: { statement: string; targets: NewTarget[] }[]): Capability[] {
   const start = (db.prepare('SELECT COALESCE(MAX(ord) + 1, 0) AS n FROM capabilities WHERE goal_id = ?').get(goalId) as { n: number }).n;
   const insertCap = db.prepare('INSERT INTO capabilities (id, goal_id, statement, ord, mastered_at) VALUES (?, ?, ?, ?, NULL)');
   const out: Capability[] = [];
@@ -211,10 +243,25 @@ export function addCapabilities(db: Database, goalId: string, capabilities: { st
   return out;
 }
 
-/** Add targets to an existing capability; an existing target keeps the deeper of the two depths. */
-export function addTargets(db: Database, capabilityId: string, targets: { nodeId: string; depth: Depth }[]): void {
-  const upsert = db.prepare('INSERT INTO targets (capability_id, node_id, depth) VALUES (?, ?, ?) ON CONFLICT(capability_id, node_id) DO UPDATE SET depth = MAX(depth, excluded.depth)');
-  for (const t of targets) upsert.run(capabilityId, t.nodeId, t.depth);
+/** Add targets to an existing capability; an existing target keeps the deeper of the two depths and stays core once core. */
+export function addTargets(db: Database, capabilityId: string, targets: NewTarget[]): void {
+  const upsert = db.prepare(
+    'INSERT INTO targets (capability_id, node_id, depth, core) VALUES (?, ?, ?, ?) ON CONFLICT(capability_id, node_id) DO UPDATE SET depth = MAX(depth, excluded.depth), core = MAX(core, excluded.core)',
+  );
+  for (const t of targets) upsert.run(capabilityId, t.nodeId, t.depth, t.core ? 1 : 0);
+}
+
+/**
+ * The learner approved the plan as it stands (approving a draft, changing the time, a new map): every
+ * target of the goal not yet capped keeps its planned depth as the most automatic re-plans may give it.
+ */
+export function approvePlannedDepths(db: Database, goalId: string): void {
+  db.prepare('UPDATE targets SET approved_depth = COALESCE(planned_depth, depth) WHERE approved_depth IS NULL AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
+}
+
+/** Lift the caps before the plan is approved again (a new time re-plans from the ideal depths). */
+export function clearApprovedDepths(db: Database, goalId: string): void {
+  db.prepare('UPDATE targets SET approved_depth = NULL WHERE capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
 }
 
 export function deleteCapabilities(db: Database, ids: string[]): void {

@@ -7,7 +7,8 @@ import { StepPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
 import { IdeaField, TimePicker, planSummary, trimSentence } from '../../components/budget';
 import { submitOnModEnter } from '../../components/AnswerSurface';
-import { ASSESSMENT_OPTIONS, FocusChips, KIND_OPTIONS, dateLabel, isExam, weeksUntil } from './labels';
+import { ASSESSMENT_OPTIONS, FocusChips, KIND_OPTIONS, LEVEL_LABEL, dateLabel, isExam } from './labels';
+import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
 import type { Material } from './MaterialPicker';
 import { Question } from './GoalForm';
@@ -36,6 +37,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
   const [date, setDate] = useState(d?.date ?? '');
   const [grade, setGrade] = useState(d?.targetGrade ?? '');
   const [focus, setFocus] = useState<GoalFocus[]>(d?.focus ?? []);
+  const [background, setBackground] = useState(d?.background ?? '');
   const [materials, setMaterials] = useState<Material[]>(draft?.materials.map((m) => ({ sourceId: m.sourceId, title: m.title, role: m.role })) ?? []);
   const [budget, setBudget] = useState<GoalBudget | null>(d?.budget ?? null);
   const [goalId, setGoalId] = useState<string | null>(d?.id ?? null);
@@ -45,6 +47,8 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
   const dateName = dateLabel(assessment);
   const teaching = materials.filter((m) => m.role === 'teaching').length;
   const index = STEPS.findIndex((s) => s.key === step);
+  /** The time shown is the time planned and saved: the learner's, or the default until they change it. */
+  const time = budget ?? defaultBudget(kind, dateName && date ? date : null);
 
   const form = (): GoalFormData => ({
     text: text.trim(),
@@ -52,8 +56,9 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
     assessment: assessment ?? 'none',
     targetGrade: isExam(assessment) && grade.trim() ? grade.trim() : null,
     date: dateName && date ? date : null,
-    budget: budget ?? defaultBudget(kind, dateName && date ? date : null),
+    budget: time,
     focus,
+    background: background.trim() || null,
     materials: materials.map((m) => ({ sourceId: m.sourceId, role: m.role })),
   });
 
@@ -63,7 +68,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
     setError(null);
     try {
       const f = form();
-      setBudget(f.budget ?? null);
+      setBudget(time);
       if (goalId) await call('goals.update', { goalId, form: f });
       else setGoalId((await call('goals.create', { form: f, draft: true })).goal.id);
       setStep('plan');
@@ -148,6 +153,11 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
                     <FocusChips value={focus} onChange={setFocus} />
                   </Question>
                 )}
+                {assessment && (
+                  <Field label="What do you already know about it?" htmlFor="goal-background" hint="Optional. A line is enough, like “Python yes, never seen a matrix”. It decides how the map starts; your answers later refine it.">
+                    <input id="goal-background" className="input" value={background} onChange={(e) => setBackground(e.target.value)} />
+                  </Field>
+                )}
               </div>
             )}
             <WizardNav onNext={() => setStep('material')} nextDisabled={!text.trim() || !kind || !assessment} />
@@ -172,11 +182,11 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
             <div className="flex flex-col gap-[12px]">
               <h1 className="t-display">How much time do you give it?</h1>
               <p className="t-lead m-0">
-                Your time decides the map. With less, you get the most useful ideas, mostly as an overview. With more, more ideas, deeper. You can change it whenever things change.
+                Your time decides the map. With less, the few ideas that matter most, learned properly; with more, more ideas and deeper. Each idea takes about half an hour. You can change the time whenever things change.
               </p>
             </div>
             <TimePicker
-              value={budget ?? defaultBudget(kind, dateName && date ? date : null)}
+              value={time}
               onChange={setBudget}
               resources={teaching}
               allowPerResource={kind === 'course' || teaching > 0}
@@ -186,17 +196,10 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
           </section>
         )}
 
-        {step === 'plan' && goalId && <PlanStep goalId={goalId} budget={budget} onBudget={setBudget} onBack={() => setStep('time')} onDone={onDone} />}
+        {step === 'plan' && goalId && <PlanStep goalId={goalId} budget={time} onBudget={setBudget} onBack={() => setStep('time')} onDone={onDone} />}
       </div>
     </Screen>
   );
-}
-
-/** A sensible starting point: a course runs to its date at a few hours a week; anything else, ten hours. */
-function defaultBudget(kind: GoalKind | null, date: string | null): GoalBudget {
-  const weeks = weeksUntil(date);
-  if (kind === 'course') return { mode: 'rate', hours: 4, per: 'week', length: Math.max(1, weeks ?? 12), lengthUnit: 'weeks' };
-  return { mode: 'total', hours: 10 };
 }
 
 function Explainer({ title, children }: { title: string; children: React.ReactNode }) {
@@ -229,7 +232,7 @@ function WizardNav({ onBack, onNext, nextLabel = 'Continue', nextDisabled }: { o
  * The plan for the time: while the goal is mapped, a quiet placeholder; then how many sessions and
  * ideas it comes to, the ideas as a field of dots, and the time control, which re-plans live.
  */
-function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string; budget: GoalBudget | null; onBudget: (b: GoalBudget) => void; onBack: () => void; onDone: (goalId: string) => void }) {
+function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string; budget: GoalBudget; onBudget: (b: GoalBudget) => void; onBack: () => void; onDone: (goalId: string) => void }) {
   const [detail, setDetail] = useState<GoalDetail | null>(null);
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -301,6 +304,12 @@ function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string
         <h1 className="t-display">{summary?.headline ?? 'Your plan'}</h1>
         {summary && <p className="t-lead m-0">{summary.detail}.</p>}
       </div>
+      {detail.goal.scope && (
+        <div className="scope-note">
+          <div className="t-caption text-muted">{detail.goal.level ? LEVEL_LABEL[detail.goal.level] : 'What it means for your time'}</div>
+          <p className="m-0">{detail.goal.scope}</p>
+        </div>
+      )}
       {preview && <IdeaField ideas={preview.ideas} />}
       <ul className="plan-notes">
         {coverage && coverage !== 'complete' && detail.materials.length > 0 && <li>Your material covers {coverage === 'partial' ? 'part' : 'a piece'} of this goal. The rest of the map comes from what the goal needs, and your material grounds the parts it covers.</li>}

@@ -33,8 +33,7 @@ const RANGE: Record<Mode, { min: number; max: number; picks: { hours: number; la
 
 const UNIT_LABEL: Record<Mode, string> = { total: 'hours in total', week: 'hours a week', day: 'hours a day', resource: 'hours per lecture' };
 
-function modeOf(b: GoalBudget | null): Mode {
-  if (!b) return 'total';
+function modeOf(b: GoalBudget): Mode {
   if (b.mode === 'rate') return b.per;
   return b.mode;
 }
@@ -60,7 +59,7 @@ export function TimePicker({
   allowPerResource,
   defaultWeeks,
 }: {
-  value: GoalBudget | null;
+  value: GoalBudget;
   onChange: (b: GoalBudget) => void;
   /** Teaching resources the goal has now (a per-lecture budget counts them). */
   resources: number;
@@ -69,9 +68,9 @@ export function TimePicker({
   defaultWeeks: number | null;
 }) {
   const mode = modeOf(value);
-  const hours = value?.hours ?? 10;
-  const length = value?.mode === 'rate' ? value.length : (defaultWeeks ?? 8);
-  const lengthUnit = value?.mode === 'rate' ? value.lengthUnit : 'weeks';
+  const hours = value.hours;
+  const length = value.mode === 'rate' ? value.length : (defaultWeeks ?? 8);
+  const lengthUnit = value.mode === 'rate' ? value.lengthUnit : 'weeks';
   const [text, setText] = useState(String(hours));
   useEffect(() => setText(String(hours)), [hours]);
 
@@ -90,7 +89,7 @@ export function TimePicker({
     onChange(build({ mode: m, hours: fromSlider(toSlider(h, m), m) }));
   };
 
-  const total = budgetMinutes(value ?? build({}), resources) ?? 0;
+  const total = budgetMinutes(value, resources) ?? 0;
   const modes = MODES.filter((m) => m.value !== 'resource' || allowPerResource);
   return (
     <div className="time-picker">
@@ -203,7 +202,7 @@ type DotKind = 'deep' | 'overview' | 'known' | 'cut';
 
 function dotKind(i: PlanIdea): DotKind {
   if (i.plannedDepth > 0 && i.currentDepth >= i.plannedDepth) return 'known';
-  return i.plannedDepth >= 3 ? 'deep' : i.plannedDepth >= 1 ? 'overview' : 'cut';
+  return i.plannedDepth >= 2 ? 'deep' : i.plannedDepth === 1 ? 'overview' : 'cut';
 }
 
 /** One line on what the plan does with an idea, and why when the time trims it. */
@@ -314,7 +313,7 @@ export function paceSentence(progress: GoalProgress): { text: string; tone: 'cal
   const { pace } = progress;
   if (pace.kind === 'behind_time') return { text: `You have put in ${formatHours(progress.spentMinutes)} of the ${formatHours(progress.expectedByNow ?? 0)} your rhythm planned by now. Less time means a smaller plan: find a slot this week, or change the time.`, tone: 'warn' };
   if (pace.kind === 'slow') return { text: `Ideas are taking about ${(pace.ratio ?? 2).toFixed(1)}× the planned time. The plan has shrunk to fit; give the goal more time to keep its depth.`, tone: 'warn' };
-  if (pace.kind === 'fast') return { text: 'You are learning faster than planned, so the plan grew to use the time.', tone: 'good' };
+  if (pace.kind === 'fast') return { text: 'You are learning faster than planned, so the goal will finish early. To use the time, change it and the plan will go deeper.', tone: 'good' };
   if (pace.kind === 'on_track') return { text: 'On track.', tone: 'calm' };
   return null;
 }

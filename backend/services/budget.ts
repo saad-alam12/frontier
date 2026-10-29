@@ -8,7 +8,7 @@ import { allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, pac
 import type { Allocation, GoalPlan, Pace, PlanGoal, PlanNode, PlanTarget } from '../core/budget';
 import { indexChains } from '../core/graph';
 import { centrality } from '../core/leverage';
-import { EXTRACTED_ROLES } from '../core/types';
+import { EXTRACTED_ROLES, OWNED_DEPTH } from '../core/types';
 import type { Depth, Goal, GoalBudget, KnowledgeNode, NodeState } from '../core/types';
 import type { Activity } from '../store/activity';
 import { listActivity } from '../store/activity';
@@ -79,9 +79,13 @@ interface PlanInputs {
   speed: number;
 }
 
-/** Everything the allocation needs, for the active goals plus (for a preview) one draft. */
-function planInputs(db: Database, include?: string): PlanInputs {
-  const goals = listGoals(db).filter((g) => g.status === 'active' || g.id === include);
+/**
+ * Everything the allocation needs, for the active goals plus (for a preview) one draft. Each target's
+ * ideal depth is capped at the depth the learner approved, so automatic re-plans never go deeper than
+ * the approved plan; `uncapped` lifts the caps of one goal, for previewing a new time.
+ */
+function planInputs(db: Database, options: { include?: string; uncapped?: string } = {}): PlanInputs {
+  const goals = listGoals(db).filter((g) => g.status === 'active' || g.id === options.include);
   const goalIds = new Set(goals.map((g) => g.id));
   const caps = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
   const nodes = new Map(listNodes(db).map((n) => [n.id, n]));
@@ -104,17 +108,25 @@ function planInputs(db: Database, include?: string): PlanInputs {
     const goalId = caps.get(t.capabilityId);
     if (!goalId || !goalIds.has(goalId) || !nodes.has(t.nodeId)) continue;
     const covered = coverCount.get(goalId)?.get(t.nodeId) ?? 0;
-    targets.push({ goalId, capabilityId: t.capabilityId, nodeId: t.nodeId, idealDepth: t.idealDepth, weight: Math.min(1.6, 1 + 0.15 * Math.max(0, covered - 1)) });
+    const cap = goalId === options.uncapped ? null : t.approvedDepth;
+    targets.push({
+      goalId,
+      capabilityId: t.capabilityId,
+      nodeId: t.nodeId,
+      idealDepth: Math.min(t.idealDepth, cap ?? 5) as Depth,
+      weight: Math.min(1.6, 1 + 0.15 * Math.max(0, covered - 1)),
+      core: t.core,
+    });
   }
   const targeted = new Set(targets.map((t) => t.nodeId));
   const depthOf = (id: string) => states.get(id)?.depth ?? 0;
   const planNodes = new Map<string, PlanNode>();
   for (const id of targeted) {
     const node = nodes.get(id) as KnowledgeNode;
-    // premises outside every plan that still have to be learned first, along the cheapest chain in
+    // premises outside every plan that still have to be owned first, along the cheapest chain in
     const chains = index.into.get(id) ?? [];
-    const missing = chains.length ? Math.min(...chains.map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < 1).length)) : 0;
-    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centrality(id, index), premiseMinutes: missing * ideaMinutes('claim', 0, 1) });
+    const missing = chains.length ? Math.min(...chains.map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH).length)) : 0;
+    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centrality(id, index), premiseMinutes: missing * ideaMinutes('claim', 0, OWNED_DEPTH) });
   }
 
   const shares = attributeTime(db);
@@ -174,7 +186,7 @@ export interface PlanPreview {
  * the learner sets the time, before approving.
  */
 export function previewPlan(db: Database, goalId: string, budget: GoalBudget | null): PlanPreview | null {
-  const inputs = planInputs(db, goalId);
+  const inputs = planInputs(db, { include: goalId, uncapped: goalId });
   if (!inputs.goals.some((g) => g.id === goalId)) return null;
   const allocation = runAllocation(db, inputs, { goalId, budget });
   const plan = allocation.goals.get(goalId);
@@ -240,7 +252,7 @@ export interface GoalProgress {
 export function goalProgress(db: Database, goalId: string, now = new Date()): GoalProgress | null {
   const goal = getGoal(db, goalId);
   if (!goal) return null;
-  const inputs = planInputs(db, goalId);
+  const inputs = planInputs(db, { include: goalId });
   const allocation = runAllocation(db, inputs);
   const plan = allocation.goals.get(goalId);
   if (!plan) return null;

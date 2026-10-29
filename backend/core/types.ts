@@ -166,7 +166,21 @@ export interface Goal {
   profileSources: string[];
   /** Unverified nodes the learner chose to learn anyway. */
   startedUnverified: string[];
+  /** How the compiler reads the goal for its time, purpose and the learner's background; null before R3 compiles. */
+  level: GoalLevel | null;
+  /** One or two plain sentences: what the goal means in the time given. */
+  scope: string | null;
+  /** What the learner says they already know about it, in their words. */
+  background: string | null;
 }
+
+/**
+ * How deep the goal's language goes (design §3.1): intuition (plain words and pictures, no formulas),
+ * working (the key notation and formulas, explained and used), rigorous (precise definitions,
+ * derivations, proofs).
+ */
+export const GOAL_LEVELS = ['intuition', 'working', 'rigorous'] as const;
+export type GoalLevel = (typeof GOAL_LEVELS)[number];
 
 export interface GoalMaterial {
   sourceId: string;
@@ -189,6 +203,10 @@ export interface Target {
   depth: Depth;
   /** The depth the compiler asked for. */
   idealDepth: Depth;
+  /** The compiler marked it core: the goal fails without it. */
+  core: boolean;
+  /** The depth of the plan the learner approved; automatic re-plans never go deeper. Null: not capped. */
+  approvedDepth: Depth | null;
 }
 
 /**

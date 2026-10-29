@@ -36,3 +36,14 @@ export function computeFringe({ nodes, index, owned }: FringeInput): Set<string>
   }
   return fringe;
 }
+
+/**
+ * What a goal's planning treats as done: owned ideas, plus ideas the goal plans only to be recognized
+ * (aim 1) that the learner already recognizes. Such an idea is not taught again, and ideas built on
+ * it become learnable.
+ */
+export function doneSet(owned: Set<string>, states: Map<string, NodeState>, aims: Map<string, number>): Set<string> {
+  const done = new Set(owned);
+  for (const [nodeId, aim] of aims) if (aim === 1 && (states.get(nodeId)?.depth ?? 0) >= 1) done.add(nodeId);
+  return done;
+}

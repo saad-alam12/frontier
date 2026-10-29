@@ -1815,6 +1815,19 @@ button.map-label:hover {
   background: var(--accent);
 }
 
+/* What the goal means for its time: the compiler's level and scope, read before approving. */
+.scope-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
 /* ---------- Idea field (plan preview) ---------- */
 
 .idea-field-wrap {

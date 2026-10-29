@@ -30,7 +30,7 @@ export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit,
 export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, TodayGoal, TodayView };
 
 export type { DeltaItem, IdeaRef, Effort, ModelOptions, GoalForm, GoalWorkState, MaterialView };
-export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind, MaterialRole, UpcomingUnit } from '../core/types';
+export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind, GoalLevel, MaterialRole, UpcomingUnit } from '../core/types';
 export type { SkillStatus } from '../core/goals';
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };

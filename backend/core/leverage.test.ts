@@ -22,10 +22,10 @@ const goals: GoalContext = {
     ['cap3', { id: 'cap3', goalId: 'g2', statement: 's', order: 0, masteredAt: null }],
   ]),
   targets: [
-    { capabilityId: 'cap1', nodeId: 'c', depth: 3, idealDepth: 3 },
-    { capabilityId: 'cap2', nodeId: 'c', depth: 2, idealDepth: 2 },
-    { capabilityId: 'cap3', nodeId: 'a', depth: 5, idealDepth: 5 },
-    { capabilityId: 'cap1', nodeId: 'd', depth: 1, idealDepth: 1 },
+    { capabilityId: 'cap1', nodeId: 'c', depth: 3, idealDepth: 3, core: true, approvedDepth: null },
+    { capabilityId: 'cap2', nodeId: 'c', depth: 2, idealDepth: 2, core: false, approvedDepth: null },
+    { capabilityId: 'cap3', nodeId: 'a', depth: 5, idealDepth: 5, core: false, approvedDepth: null },
+    { capabilityId: 'cap1', nodeId: 'd', depth: 1, idealDepth: 1, core: false, approvedDepth: null },
   ],
 };
 
@@ -61,22 +61,12 @@ describe('leverage', () => {
 });
 
 describe('assignTiers', () => {
-  it('internalizes deep targets, indexes shallow ones, archives the rest, and promotes top leverage', () => {
-    const scores = [
-      { nodeId: 'deep', leverage: 1, goalRelevance: 1, centrality: 1, depthGap: 3, expectedEffort: 1, targetDepth: 3 as const },
-      { nodeId: 'hot', leverage: 9, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth: 1 as const },
-      { nodeId: 'cold1', leverage: 0.1, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth: 1 as const },
-      { nodeId: 'cold2', leverage: 0.1, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth: 2 as const },
-      { nodeId: 'cold3', leverage: 0.1, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth: 2 as const },
-      { nodeId: 'none', leverage: 0, goalRelevance: 0, centrality: 1, depthGap: 0, expectedEffort: 1, targetDepth: 0 as const },
-      { nodeId: 'hotTerm', leverage: 99, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth: 1 as const },
-    ];
-    const kinds = new Map<string, KnowledgeNode['kind']>([['hotTerm', 'term']]);
-    const tiers = assignTiers(scores, kinds);
-    expect(tiers.get('deep')).toBe('internalize');
-    expect(tiers.get('hot')).toBe('internalize');
-    expect(tiers.get('hotTerm')).toBe('index');
-    expect(tiers.get('cold1')).toBe('index');
+  it('follows the plan: explained or deeper is internalized, recognized is indexed, unplanned is archived', () => {
+    const score = (nodeId: string, targetDepth: 0 | 1 | 2 | 3) => ({ nodeId, leverage: 1, goalRelevance: 1, centrality: 1, depthGap: 1, expectedEffort: 1, targetDepth });
+    const tiers = assignTiers([score('derive', 3), score('explain', 2), score('recognize', 1), score('none', 0)]);
+    expect(tiers.get('derive')).toBe('internalize');
+    expect(tiers.get('explain')).toBe('internalize');
+    expect(tiers.get('recognize')).toBe('index');
     expect(tiers.get('none')).toBe('archive');
   });
 });

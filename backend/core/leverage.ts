@@ -99,26 +99,13 @@ export function leverageOf(
   };
 }
 
-/** Share of goal-targeted nodes (by leverage) that are promoted to the internalize tier even if their target depth is low. */
-export const INTERNALIZE_SHARE = 0.2;
-
 /**
- * Tiers (design §6): nodes a goal needs at depth 3+ are internalized; other targeted nodes are indexed,
- * except the top share by leverage among claims and procedures, which are internalized too; nodes no goal
- * needs are archived.
+ * Tiers (design §6) follow the plan: an idea planned to be explained or deeper (depth 2+) gets the
+ * full step loop and is maintained by practice; one planned only to be recognized gets an index pass;
+ * one no active goal plans is archived.
  */
-export function assignTiers(scores: LeverageScore[], kinds: Map<string, KnowledgeNode['kind']>): Map<string, Tier> {
+export function assignTiers(scores: LeverageScore[]): Map<string, Tier> {
   const tiers = new Map<string, Tier>();
-  const targeted = scores.filter((s) => s.targetDepth > 0);
-  const promotable = targeted
-    .filter((s) => s.targetDepth < 3 && kinds.get(s.nodeId) !== 'term')
-    .sort((a, b) => b.leverage - a.leverage || a.nodeId.localeCompare(b.nodeId));
-  const promoteCount = Math.floor(targeted.length * INTERNALIZE_SHARE);
-  const promoted = new Set(promotable.slice(0, promoteCount).map((s) => s.nodeId));
-  for (const s of scores) {
-    if (s.targetDepth === 0) tiers.set(s.nodeId, 'archive');
-    else if (s.targetDepth >= 3 || promoted.has(s.nodeId)) tiers.set(s.nodeId, 'internalize');
-    else tiers.set(s.nodeId, 'index');
-  }
+  for (const s of scores) tiers.set(s.nodeId, s.targetDepth >= 2 ? 'internalize' : s.targetDepth === 1 ? 'index' : 'archive');
   return tiers;
 }

@@ -16,8 +16,27 @@ import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { getState } from '../store/evidence';
-import type { GoalInput } from '../store/goals';
-import { addCapabilities, addTargets, approveGoal, createGoal, deleteCapabilities, extendBaseline, getGoal, listCapabilities, listGoals, listMaterials, listTargets, markCompiled, saveCoverage, saveProfile, setMaterials, updateGoal } from '../store/goals';
+import {
+  addCapabilities,
+  addTargets,
+  approveGoal,
+  approvePlannedDepths,
+  clearApprovedDepths,
+  createGoal,
+  deleteCapabilities,
+  extendBaseline,
+  getGoal,
+  listCapabilities,
+  listGoals,
+  listMaterials,
+  listTargets,
+  markCompiled,
+  saveCoverage,
+  saveProfile,
+  setMaterials,
+  updateGoal,
+} from '../store/goals';
+import type { GoalInput, NewTarget } from '../store/goals';
 import { logEvent } from '../store/activity';
 import { newId } from '../store/ids';
 import { coveredNodeIds, getSource, listChunks } from '../store/sources';
@@ -129,6 +148,7 @@ export function createGoalFromForm(db: Database, form: GoalForm, options: { draf
 
 export function updateGoalFromForm(db: Database, goalId: string, form: Partial<GoalForm>): void {
   const before = getGoal(db, goalId);
+  const retimed = 'budget' in form && JSON.stringify(form.budget ?? null) !== JSON.stringify(before?.budget ?? null);
   transaction(db, () => {
     const { materials, ...fields } = form;
     updateGoal(db, goalId, fields);
@@ -137,9 +157,14 @@ export function updateGoalFromForm(db: Database, goalId: string, form: Partial<G
       setMaterials(db, goalId, materials);
       for (const m of materials) if (!had.has(m.sourceId)) logEvent(db, 'material.added', { goalId, sourceId: m.sourceId }, { role: m.role });
     }
-    if ('budget' in form && JSON.stringify(form.budget ?? null) !== JSON.stringify(before?.budget ?? null)) logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: form.budget ?? null });
+    if (retimed) {
+      logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: form.budget ?? null });
+      // a new time is a new plan to approve: it re-plans from the ideal depths
+      clearApprovedDepths(db, goalId);
+    }
   });
   refreshGoalFields(db);
+  if (retimed && before?.status === 'active') approvePlannedDepths(db, goalId);
 }
 
 /**
@@ -153,6 +178,7 @@ export function approveGoalPlan(db: Database, goalId: string): void {
     logEvent(db, 'goal.approved', { goalId }, { budget: getGoal(db, goalId)?.budget ?? null });
   });
   refreshGoalFields(db);
+  approvePlannedDepths(db, goalId);
 }
 
 /** Add the current depth of every idea the goal targets that is not in its baseline yet. */
@@ -191,7 +217,7 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
   const view = loadKnowledge(db);
 
   const inMaterial = new Set(sources.flatMap((s) => coveredNodeIds(db, s)).filter((id) => view.nodes.has(id)));
-  const existingTargets = listTargets(db, goalId);
+  const existingTargets = listTargets(db, goalId, { all: true });
   const scope = new Set(inMaterial);
   for (const id of inMaterial) for (const a of ancestors(id, view.index)) scope.add(a);
   for (const t of existingTargets) scope.add(t.nodeId);
@@ -207,7 +233,7 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
     id: c.id,
     statement: c.statement,
     mastered: c.masteredAt !== null,
-    targets: existingTargets.filter((t) => t.capabilityId === c.id).map((t) => ({ nodeId: t.nodeId, name: view.nodes.get(t.nodeId)?.name ?? t.nodeId, depth: t.depth })),
+    targets: existingTargets.filter((t) => t.capabilityId === c.id).map((t) => ({ nodeId: t.nodeId, name: view.nodes.get(t.nodeId)?.name ?? t.nodeId, depth: t.idealDepth })),
   }));
   const newMaterial = sources.filter((s) => !goal.compiledSources.includes(s)).map((s) => getSource(db, s)?.title ?? s);
   const budgetTotal = goalBudgetMinutes(db, goal);
@@ -227,6 +253,8 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
     spentHours: (spentByGoal(attributeTime(db)).get(goalId) ?? 0) / 60,
     focus: goal.focus,
     askCoverage: goal.coverage === null && sources.length > 0,
+    background: goal.background,
+    level: goal.level,
   });
 
   transaction(db, () => {
@@ -237,7 +265,7 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
       return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
     });
     if (created.length) createUnverifiedNodes(db, created);
-    const resolve = (targets: { ref: string; depth: number }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth })));
+    const resolve = (targets: { ref: string; depth: number; core: boolean }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })));
     deleteCapabilities(db, result.retire);
     for (const e of result.extend) if (!result.retire.includes(e.capabilityId)) addTargets(db, e.capabilityId, resolve(e.targets));
     addCapabilities(
@@ -245,7 +273,13 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
       goalId,
       result.capabilities.map((c) => ({ statement: c.statement, targets: resolve(c.targets) })),
     );
-    markCompiled(db, goalId, result.title, sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)));
+    markCompiled(
+      db,
+      goalId,
+      result.title,
+      sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)),
+      { level: result.level, scope: result.scope },
+    );
     if (result.coverage) saveCoverage(db, goalId, result.coverage);
     if (goal.status !== 'draft') recordBaseline(db, goalId);
   });
@@ -253,6 +287,8 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
   const skew = depthSkew(listTargets(db, goalId).map((t) => t.depth));
   if (skew.overTargeted) console.warn(`goal ${goalId}: ${Math.round(skew.deepShare * 100)}% of targets are at depth 3 or more; the compiler is over-targeting`);
   refreshGoalFields(db);
+  // ideas a recompile adds to an active goal join its approved plan at the depth the plan gives them
+  if (goal.status === 'active') approvePlannedDepths(db, goalId);
   return goalDetail(db, goalId) as GoalDetail;
 }
 
@@ -291,10 +327,13 @@ export async function guessRole(db: Database, provider: LlmProvider, sourceId: s
   return guessMaterialRole(provider, { title: source?.title ?? '', text });
 }
 
-function dedupeTargets(targets: { nodeId: string; depth: Depth }[]): { nodeId: string; depth: Depth }[] {
-  const best = new Map<string, Depth>();
-  for (const t of targets) if ((best.get(t.nodeId) ?? 0) < t.depth) best.set(t.nodeId, t.depth);
-  return [...best.entries()].map(([nodeId, depth]) => ({ nodeId, depth }));
+function dedupeTargets(targets: NewTarget[]): NewTarget[] {
+  const best = new Map<string, NewTarget>();
+  for (const t of targets) {
+    const prev = best.get(t.nodeId);
+    best.set(t.nodeId, { nodeId: t.nodeId, depth: Math.max(prev?.depth ?? 0, t.depth) as Depth, core: Boolean(prev?.core || t.core) });
+  }
+  return [...best.values()];
 }
 
 /** What a goal still needs before it is up to date, in order. Pure decision over stored state. */

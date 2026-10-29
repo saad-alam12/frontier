@@ -55,9 +55,7 @@ export function leverageScores(view: KnowledgeView): LeverageScore[] {
 export function refreshGoalFields(db: Database): Map<string, Tier> {
   replan(db);
   const view = loadKnowledge(db);
-  const scores = leverageScores(view);
-  const kinds = new Map([...view.nodes.values()].map((n) => [n.id, n.kind]));
-  const tiers = assignTiers(scores, kinds);
+  const tiers = assignTiers(leverageScores(view));
   transaction(db, () => {
     for (const node of view.nodes.values()) {
       setGoalFields(db, node.id, targetDepthFor(node.id, view.goals), tiers.get(node.id) ?? 'archive');

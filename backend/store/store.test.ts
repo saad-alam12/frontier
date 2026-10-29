@@ -114,7 +114,7 @@ describe('goals and tiers', () => {
     const goal = createGoal(db, 'Pass the game theory exam', { priority: 2 });
     addCapabilities(db, goal.id, [
       { statement: 'Find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 4 }, { nodeId: ids.get('findPureNash') as string, depth: 4 }] },
-      { statement: 'Know what SPE is', targets: [{ nodeId: ids.get('spe') as string, depth: 2 }] },
+      { statement: 'Know what SPE is', targets: [{ nodeId: ids.get('spe') as string, depth: 1 }] },
     ]);
     expect(listGoals(db)[0]?.kind).toBe('personal');
     expect(listTargets(db, goal.id)).toHaveLength(3);

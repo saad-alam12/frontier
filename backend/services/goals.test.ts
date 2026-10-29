@@ -38,7 +38,9 @@ describe('goal compile', () => {
       expect(req.messages[0]?.content).toContain(`[${ids.get('nash')}] Nash equilibrium`);
       return {
         title: 'Game theory',
-        coverage: 'complete',
+        level: 'working',
+      scope: 'Find and explain equilibria in small games, in the standard notation.',
+      coverage: 'complete',
         capabilities: [
           { statement: 'Can find all pure Nash equilibria of a small matrix game', targets: [{ ref: ids.get('nash'), depth: 4 }, { ref: ids.get('findPureNash'), depth: 4 }] },
           { statement: 'Can explain why dominated strategies are never played', targets: [{ ref: ids.get('dominatedNeverPlayed'), depth: 3 }, { ref: ids.get('nash'), depth: 2 }] },
@@ -64,6 +66,8 @@ describe('goal compile', () => {
     const goal = seedGoal(db, 'learn');
     const good = {
       title: 'Game theory',
+      level: 'working',
+      scope: 'Find and explain equilibria in small games, in the standard notation.',
       coverage: 'complete',
       capabilities: [
         { statement: 'Can explain Nash equilibrium', targets: [{ ref: ids.get('nash'), depth: 2 }] },
@@ -83,7 +87,9 @@ async function compiledGoal() {
   const goal = seedGoal(db, 'Pass the game theory exam', 2);
   provider.script('goalCompiler', {
     title: 'Game theory',
-    coverage: 'complete',
+    level: 'working',
+      scope: 'Find and explain equilibria in small games, in the standard notation.',
+      coverage: 'complete',
     capabilities: [
       { statement: 'Can find pure Nash equilibria', targets: [{ ref: ids.get('nash'), depth: 4 }, { ref: ids.get('findPureNash'), depth: 4 }, { ref: ids.get('nashMutualBr'), depth: 3 }] },
       { statement: 'Can explain dominance results', targets: [{ ref: ids.get('dominantNash'), depth: 3 }, { ref: ids.get('dominant'), depth: 2 }] },
@@ -195,6 +201,8 @@ describe('planner', () => {
     const goal = seedGoal(db, 'exam');
     provider.script('goalCompiler', {
       title: 'Exam',
+      level: 'working',
+      scope: 'Find and explain equilibria in small games, in the standard notation.',
       coverage: 'complete',
       capabilities: [
         { statement: 'Can explain a ghost idea', targets: [{ ref: 'm1', depth: 2 }] },

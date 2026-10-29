@@ -310,6 +310,18 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX activity_goal ON activity(goal_id, at);
     `,
   },
+  {
+    version: 7,
+    sql: `
+      -- R3: what the goal means for its time (level and scope), what the learner already knows about it,
+      -- core targets, and the depth the learner approved (automatic re-plans never go deeper).
+      ALTER TABLE goals ADD COLUMN level TEXT;
+      ALTER TABLE goals ADD COLUMN scope TEXT;
+      ALTER TABLE goals ADD COLUMN background TEXT;
+      ALTER TABLE targets ADD COLUMN core INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE targets ADD COLUMN approved_depth INTEGER;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

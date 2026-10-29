@@ -84,12 +84,16 @@ function compiler(req: CompleteRequest<unknown>) {
     const names = ['Adam optimizer', 'Learning rate schedules', 'Momentum'];
     return {
       title: 'Optimizers',
+      level: 'working',
+      scope: 'How the common optimizers move the weights, explained and compared.',
       capabilities: names.map((name, i) => ({ statement: `Can explain ${name} to a peer`, targets: [{ ref: `m${i + 1}`, depth: 2 }] })),
       newNodes: names.map((name, i) => ({ tempId: `m${i + 1}`, kind: 'term', name, statement: `${name}, as an optimizer idea.` })),
     };
   }
   return {
     title: 'Deep Learning in Physics',
+    level: existing ? undefined : 'rigorous',
+    scope: existing ? undefined : 'Derive and use the methods of the course on exam problems.',
     coverage: existing ? undefined : 'partial',
     capabilities: existing ? capabilities : [...capabilities, { statement: 'Can explain an expected idea', targets: [{ ref: 'm1', depth: 1 }] }],
     extend: firstExisting && fresh[0] ? [{ capabilityId: firstExisting, targets: [{ ref: fresh[0].id, depth: 1 }] }] : [],

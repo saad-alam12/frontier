@@ -152,6 +152,43 @@ describe('shared ideas once learned', () => {
   });
 });
 
+describe('approved plans', () => {
+  it('never re-plans deeper than the plan the learner approved, and re-approves when the time changes', () => {
+    const { db, id } = setup();
+    const draft = createGoalFromForm(db, { text: 'Learn game theory basics', budget: { mode: 'total', hours: 1 }, materials: [] }, { draft: true });
+    addCapabilities(db, draft.id, [{ statement: 'Can find Nash equilibria', targets: ['nash', 'bestResponse', 'dominant', 'spe', 'profile'].map((k) => ({ nodeId: id(k), depth: 3 as const })) }]);
+    approveGoalPlan(db, draft.id);
+    const approved = new Map(listTargets(db, draft.id, { all: true }).map((t) => [t.nodeId, t.depth]));
+    expect([...approved.values()].some((d) => d < 3)).toBe(true);
+    expect(listTargets(db, draft.id, { all: true }).every((t) => t.approvedDepth === t.depth)).toBe(true);
+
+    // the learner turns out to know two ideas: the time they free is not spent going deeper than approved
+    recordEvidence(db, { nodeId: id('bestResponse'), kind: 'derive', score: 1, reasoning: 'knew it' });
+    recordEvidence(db, { nodeId: id('profile'), kind: 'derive', score: 1, reasoning: 'knew it' });
+    refreshGoalFields(db);
+    for (const t of listTargets(db, draft.id, { all: true })) expect(t.depth).toBeLessThanOrEqual(approved.get(t.nodeId) ?? 0);
+
+    // a new time is a new plan: it goes back to the ideal depths, then holds there
+    updateGoalFromForm(db, draft.id, { budget: { mode: 'total', hours: 20 } });
+    expect(listTargets(db, draft.id, { all: true }).every((t) => t.depth === t.idealDepth && t.approvedDepth === t.idealDepth)).toBe(true);
+  });
+
+  it('previews exactly the time given: ten hours never plans more than ten hours (owner screenshot, R2)', () => {
+    const { db } = setup();
+    const draft = createGoalFromForm(db, { text: 'Understand how LLMs work', budget: { mode: 'total', hours: 10 }, materials: [] }, { draft: true });
+    const nodes = listNodes(db).slice(0, 34);
+    addCapabilities(db, draft.id, [0, 1, 2, 3].map((c) => ({ statement: `Can explain part ${c + 1}`, targets: nodes.filter((_, i) => i % 4 === c).map((n) => ({ nodeId: n.id, depth: 3 as const })) })));
+    const preview = previewPlan(db, draft.id, { mode: 'total', hours: 10 });
+    const plan = preview?.plan;
+    expect(plan?.plannedMinutes).toBeLessThanOrEqual(600);
+    expect(plan?.sessions).toBeLessThanOrEqual(14);
+    expect((plan?.ideas.deep ?? 0) + (plan?.ideas.overview ?? 0) + (plan?.ideas.ready ?? 0) + (plan?.ideas.cut ?? 0)).toBe(plan?.ideas.total);
+    expect(plan?.ideas.cut).toBeGreaterThan(0);
+    // half an hour per claim learned in depth (terms half): at most twenty claims fit ten hours
+    expect(preview?.ideas.filter((i) => i.plannedDepth > 0 && i.kind !== 'term').length).toBeLessThanOrEqual(20);
+  });
+});
+
 describe('compiling with a budget', () => {
   it('sizes the request to the time, records coverage, and teaches self-built ideas for a fragment', async () => {
     const { db, id } = setup();
@@ -160,10 +197,13 @@ describe('compiling with a budget', () => {
       goalCompiler: (req: CompleteRequest<unknown>) => {
         const text = req.messages[0]?.content ?? '';
         expect(text).toContain('about 2 hours in total');
+        expect(text).toContain('about 5 ideas in all');
         expect(text).toContain('conceptual understanding');
         expect(text).toContain('## Coverage');
         return {
           title: 'Attention',
+          level: 'intuition',
+          scope: 'In 2 hours: how attention lets each word take in the others, in plain words.',
           coverage: 'fragment',
           capabilities: [{ statement: 'Can explain how one player best responds to another', targets: [{ ref: id('bestResponse'), depth: 2 }, { ref: 'm1', depth: 2 }] }],
           newNodes: [{ tempId: 'm1', kind: 'term', name: 'Softmax weighting', statement: 'Turning scores into weights that sum to one.' }],

@@ -5,7 +5,8 @@ import { describeBudget } from '../../../backend/core/budget';
 import { Breadcrumb, Screen } from '../../components/Shell';
 import { Button, ChoiceChips, DefGrid, Field, Notice } from '../../components/controls';
 import { TimePicker } from '../../components/budget';
-import { ASSESSMENT_OPTIONS, ASSESSMENT_PHRASE, FocusChips, KIND_OPTIONS, capitalize, dateLabel, formatDate, goalName, isExam, materialSummary, weeksUntil } from './labels';
+import { ASSESSMENT_OPTIONS, ASSESSMENT_PHRASE, FocusChips, KIND_OPTIONS, capitalize, dateLabel, formatDate, goalName, isExam, materialSummary } from './labels';
+import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
 import type { Material } from './MaterialPicker';
 
@@ -21,7 +22,8 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
   const [date, setDate] = useState(g.date ?? '');
   const [grade, setGrade] = useState(g.targetGrade ?? '');
   const [focus, setFocus] = useState<GoalFocus[]>(g.focus);
-  const [budget, setBudget] = useState<GoalBudget | null>(g.budget);
+  const [background, setBackground] = useState(g.background ?? '');
+  const [budget, setBudget] = useState<GoalBudget>(g.budget ?? defaultBudget(g.kind, g.date));
   const [materials, setMaterials] = useState<Material[]>(existing.materials.map((m) => ({ sourceId: m.sourceId, title: m.title, role: m.role })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
     date: dateName && date ? date : null,
     budget,
     focus,
+    background: background.trim() || null,
     materials: materials.map((m) => ({ sourceId: m.sourceId, role: m.role })),
   });
 
@@ -61,7 +64,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
           { label: 'Kind', value: kind === 'course' ? 'Course' : 'On your own' },
           { label: 'Target', value: assessment === 'none' ? 'Not assessed' : isExam(assessment) && grade.trim() ? `${grade.trim()} in ${ASSESSMENT_PHRASE[assessment]}` : capitalize(ASSESSMENT_PHRASE[assessment]) },
           ...(dateName ? [{ label: 'Date', value: date ? formatDate(date) : '—' }] : []),
-          { label: 'Time', value: budget ? `${describeBudget(budget, teaching).total}, ${describeBudget(budget, teaching).detail}` : 'Not set' },
+          { label: 'Time', value: `${describeBudget(budget, teaching).total}, ${describeBudget(budget, teaching).detail}` },
           { label: 'Material', value: materialSummary(materials, kind === 'course') },
         ]}
       />
@@ -112,6 +115,9 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
         <Question label="What do you want from it?">
           <FocusChips value={focus} onChange={setFocus} />
         </Question>
+        <Field label="What do you already know about it?" htmlFor="goal-background" hint="Optional. It shapes the next map; your answers in sessions count too.">
+          <input id="goal-background" className="input" value={background} onChange={(e) => setBackground(e.target.value)} />
+        </Field>
         <Question label="How much time do you give it?">
           <TimePicker value={budget} onChange={setBudget} resources={teaching} allowPerResource={kind === 'course' || teaching > 0} defaultWeeks={weeksUntil(date || null)} />
         </Question>
