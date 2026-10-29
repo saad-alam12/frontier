@@ -23,6 +23,7 @@ import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
 import { simplifyIdea } from './goals';
+import { noteBackgroundGaps } from './remap';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
@@ -499,8 +500,9 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     return;
   }
 
-  // the idea's half hour (design §4.3)
+  // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
   const missing = stage !== 'predict' && grade.score < PASS_SCORE && grade.missingBackground !== null;
+  if (missing && grade.missingBackground) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
   const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
   if (box === 'simplify') {
     const reason = missing && grade.missingBackground ? `It needs ${grade.missingBackground.name}, which this goal's time does not also cover` : 'It was taking longer than its half hour allows';

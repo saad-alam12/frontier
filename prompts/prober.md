@@ -24,4 +24,6 @@ You receive each question with its key and rubric, and the learner's answer (wit
 - `reasoning`: one or two sentences naming what was met and what was missed. If the reasoning shows a specific misconception, say what it is.
 - `misconception`: a one-sentence description of a wrong belief, if the answer shows one; otherwise null.
 
+Then look across all the answers for missing background: a foundation the goal's ideas rest on that the learner plainly does not have (they cannot say what a matrix or a derivative is, not a slip on one detail). List each under `gaps` with a short name and a rough estimate of the hours it takes to learn from scratch, at most five; leave it empty when the answers show none. The app uses this to offer a map that fits the learner.
+
 Call the submit tool once.

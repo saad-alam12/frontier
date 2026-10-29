@@ -4,7 +4,7 @@
  * small worker that reads new material, profiles it and recompiles when material arrives.
  */
 import { runGoalCompiler } from '../agents/goalCompiler';
-import type { ExistingCapability, GraphSummaryEntry } from '../agents/goalCompiler';
+import type { CompileResult, ExistingCapability, GoalCompilerInput, GraphSummaryEntry } from '../agents/goalCompiler';
 import { guessMaterialRole, runCourseProfile } from '../agents/materials';
 import { ancestors } from '../core/graph';
 import { centrality } from '../core/leverage';
@@ -28,7 +28,6 @@ import {
   extendBaseline,
   getGoal,
   listCapabilities,
-  listGoals,
   listMaterials,
   listTargets,
   markCompiled,
@@ -44,7 +43,6 @@ import { coveredNodeIds, getSource, listChunks } from '../store/sources';
 import { createUnverifiedNodes, getNodes } from '../store/world';
 import { attributeTime, goalBudgetMinutes, goalProgress, spentByGoal } from './budget';
 import type { GoalProgress } from './budget';
-import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
 import { goalSchedule } from './practice';
@@ -213,7 +211,7 @@ function recordBaseline(db: Database, goalId: string): void {
 }
 
 /** Sources whose text is read into ideas for this goal (teaching and reference material). */
-function extractedSources(db: Database, goalId: string): string[] {
+export function extractedSources(db: Database, goalId: string): string[] {
   return listMaterials(db, goalId)
     .filter((m) => EXTRACTED_ROLES.includes(m.role))
     .map((m) => m.sourceId);
@@ -227,15 +225,9 @@ export interface CompileOptions {
   provider: LlmProvider;
 }
 
-/**
- * Compile incrementally: the compiler sees the goal's own material (plus the premises its ideas are
- * built on) and the existing capabilities, adds what is new and leaves existing capabilities, their ids
- * and mastery alone unless one is clearly superseded.
- */
-export async function compileGoal(options: CompileOptions, goalId: string): Promise<GoalDetail> {
-  const { db, provider } = options;
-  const goal = getGoal(db, goalId);
-  if (!goal) throw new Error(`unknown goal ${goalId}`);
+/** What the compiler sees for a goal: its material's ideas and premises, what the learner knows elsewhere, its fields and time. */
+export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInput; sources: string[] } {
+  const goalId = goal.id;
   const materials = listMaterials(db, goalId);
   const sources = extractedSources(db, goalId);
   const view = loadKnowledge(db);
@@ -261,52 +253,78 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
   }));
   const newMaterial = sources.filter((s) => !goal.compiledSources.includes(s)).map((s) => getSource(db, s)?.title ?? s);
   const budgetTotal = goalBudgetMinutes(db, goal);
+  return {
+    sources,
+    input: {
+      goalText: goal.text,
+      kind: goal.kind,
+      assessment: goal.assessment,
+      targetGrade: goal.targetGrade,
+      date: goal.date,
+      examProfile: goal.examProfile,
+      graph,
+      fromScratch: materials.length === 0,
+      existing,
+      newMaterial: existing.length ? newMaterial : [],
+      budgetHours: budgetTotal === null ? null : budgetTotal / 60,
+      spentHours: (spentByGoal(attributeTime(db)).get(goalId) ?? 0) / 60,
+      focus: goal.focus,
+      askCoverage: goal.coverage === null && sources.length > 0,
+      background: goal.background,
+      level: goal.level,
+    },
+  };
+}
 
-  const result = await runGoalCompiler(provider, {
-    goalText: goal.text,
-    kind: goal.kind,
-    assessment: goal.assessment,
-    targetGrade: goal.targetGrade,
-    date: goal.date,
-    examProfile: goal.examProfile,
-    graph,
-    fromScratch: materials.length === 0,
-    existing,
-    newMaterial: existing.length ? newMaterial : [],
-    budgetHours: budgetTotal === null ? null : budgetTotal / 60,
-    spentHours: (spentByGoal(attributeTime(db)).get(goalId) ?? 0) / 60,
-    focus: goal.focus,
-    askCoverage: goal.coverage === null && sources.length > 0,
-    background: goal.background,
-    level: goal.level,
-  });
+/** What a compile writes; a re-map's proposal has the same shape (without extensions or retirements). */
+export type CompileOutput = Pick<CompileResult, 'title' | 'level' | 'scope' | 'coverage' | 'capabilities' | 'extend' | 'retire' | 'newNodes'>;
 
-  transaction(db, () => {
-    const tempToId = new Map<string, string>();
-    const created = result.newNodes.map((n) => {
-      const id = newId('node');
-      tempToId.set(n.tempId, id);
-      return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
-    });
-    if (created.length) createUnverifiedNodes(db, created);
-    const resolve = (targets: { ref: string; depth: number; core: boolean }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })));
-    deleteCapabilities(db, result.retire);
-    for (const e of result.extend) if (!result.retire.includes(e.capabilityId)) addTargets(db, e.capabilityId, resolve(e.targets));
-    addCapabilities(
-      db,
-      goalId,
-      result.capabilities.map((c) => ({ statement: c.statement, targets: resolve(c.targets) })),
-    );
-    markCompiled(
-      db,
-      goalId,
-      result.title,
-      sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)),
-      { level: result.level, scope: result.scope },
-    );
-    if (result.coverage) saveCoverage(db, goalId, result.coverage);
-    if (goal.status !== 'draft') recordBaseline(db, goalId);
+/**
+ * Write a compile: new nodes, retirements, extensions and new capabilities, then the goal's title,
+ * level and scope. `replace` drops every existing capability first (a re-map draws the map anew).
+ * No re-plan; the caller refreshes.
+ */
+export function applyCompile(db: Database, goal: Goal, result: CompileOutput, sources: string[], options: { replace?: boolean } = {}): void {
+  const goalId = goal.id;
+  const tempToId = new Map<string, string>();
+  const created = result.newNodes.map((n) => {
+    const id = newId('node');
+    tempToId.set(n.tempId, id);
+    return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
   });
+  if (created.length) createUnverifiedNodes(db, created);
+  const resolve = (targets: { ref: string; depth: number; core: boolean }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })));
+  if (options.replace) deleteCapabilities(db, listCapabilities(db, goalId).map((c) => c.id));
+  deleteCapabilities(db, result.retire);
+  for (const e of result.extend) if (!result.retire.includes(e.capabilityId)) addTargets(db, e.capabilityId, resolve(e.targets));
+  addCapabilities(
+    db,
+    goalId,
+    result.capabilities.map((c) => ({ statement: c.statement, targets: resolve(c.targets) })),
+  );
+  markCompiled(
+    db,
+    goalId,
+    result.title,
+    sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)),
+    { level: result.level, scope: result.scope },
+  );
+  if (result.coverage) saveCoverage(db, goalId, result.coverage);
+  if (goal.status !== 'draft') recordBaseline(db, goalId);
+}
+
+/**
+ * Compile incrementally: the compiler sees the goal's own material (plus the premises its ideas are
+ * built on) and the existing capabilities, adds what is new and leaves existing capabilities, their ids
+ * and mastery alone unless one is clearly superseded.
+ */
+export async function compileGoal(options: CompileOptions, goalId: string): Promise<GoalDetail> {
+  const { db, provider } = options;
+  const goal = getGoal(db, goalId);
+  if (!goal) throw new Error(`unknown goal ${goalId}`);
+  const { input, sources } = compileInput(db, goal);
+  const result = await runGoalCompiler(provider, input);
+  transaction(db, () => applyCompile(db, goal, result, sources));
 
   const skew = depthSkew(listTargets(db, goalId).map((t) => t.depth));
   if (skew.overTargeted) console.warn(`goal ${goalId}: ${Math.round(skew.deepShare * 100)}% of targets are at depth 3 or more; the compiler is over-targeting`);
@@ -358,102 +376,4 @@ function dedupeTargets(targets: NewTarget[]): NewTarget[] {
     best.set(t.nodeId, { nodeId: t.nodeId, depth: Math.max(prev?.depth ?? 0, t.depth) as Depth, core: Boolean(prev?.core || t.core) });
   }
   return [...best.values()];
-}
-
-/** What a goal still needs before it is up to date, in order. Pure decision over stored state. */
-export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | null {
-  const goal = getGoal(db, goalId);
-  if (!goal) return null;
-  const materials = listMaterials(db, goalId);
-  const extracted = extractedSources(db, goalId);
-  if (extracted.some((s) => getSource(db, s)?.status !== 'done' && getSource(db, s)?.status !== 'failed')) return 'read';
-  const profileSet = materials.filter((m) => m.role === 'assessment' || m.role === 'scope').map((m) => m.sourceId);
-  if (!sameSet(profileSet, goal.profileSources)) return 'profile';
-  const readable = extracted.filter((s) => getSource(db, s)?.status === 'done');
-  if (goal.compiledAt === null) return materials.length === 0 || readable.length > 0 ? 'compile' : null;
-  return readable.some((s) => !goal.compiledSources.includes(s)) ? 'compile' : null;
-}
-
-function sameSet(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((x) => b.includes(x));
-}
-
-export interface GoalWorkerDeps {
-  db: () => Database;
-  provider: () => LlmProvider;
-  ingestion: () => IngestionService;
-  onChange: (goalId: string) => void;
-}
-
-/**
- * Keeps goals up to date in the background: starts reading new teaching material, then profiles
- * assessment and scope material, then compiles. One run per goal at a time; a refresh during a run
- * runs again afterwards.
- */
-export class GoalWorker {
-  private readonly states = new Map<string, GoalWorkState>();
-  private readonly running = new Set<string>();
-  private readonly again = new Set<string>();
-
-  constructor(private readonly deps: GoalWorkerDeps) {}
-
-  status(goalId: string): GoalWorkState {
-    return this.states.get(goalId) ?? { state: 'idle' };
-  }
-
-  /** Called when a source finishes ingesting: every goal using it may be ready for the next step. */
-  onSourceDone(sourceId: string): void {
-    for (const goal of listGoals(this.deps.db())) if (listMaterials(this.deps.db(), goal.id).some((m) => m.sourceId === sourceId)) this.refresh(goal.id);
-  }
-
-  refresh(goalId: string): void {
-    if (this.running.has(goalId)) {
-      this.again.add(goalId);
-      return;
-    }
-    this.running.add(goalId);
-    void this.run(goalId).finally(() => {
-      this.running.delete(goalId);
-      if (this.again.delete(goalId)) this.refresh(goalId);
-    });
-  }
-
-  /** Recompile now even if nothing new arrived (the learner asked). */
-  async compileNow(goalId: string): Promise<void> {
-    await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId));
-  }
-
-  private async run(goalId: string): Promise<void> {
-    for (let guard = 0; guard < 4; guard += 1) {
-      const step = nextGoalStep(this.deps.db(), goalId);
-      if (step === null) return this.set(goalId, { state: 'idle' });
-      if (step === 'read') {
-        const pending = extractedSources(this.deps.db(), goalId).filter((s) => getSource(this.deps.db(), s)?.status !== 'done');
-        for (const s of pending) this.deps.ingestion().start(s);
-        return this.set(goalId, { state: 'reading', message: 'Reading your material' });
-      }
-      const ok =
-        step === 'profile'
-          ? await this.step(goalId, 'profiling', "Learning the exam's style from your material", () => profileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId))
-          : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId));
-      if (!ok) return;
-    }
-  }
-
-  private async step(goalId: string, state: 'profiling' | 'compiling', message: string, fn: () => Promise<unknown>): Promise<boolean> {
-    this.set(goalId, { state, message });
-    try {
-      await fn();
-      this.set(goalId, { state: 'idle' });
-      return true;
-    } catch (error) {
-      this.set(goalId, { state: 'failed', message: error instanceof Error ? error.message : String(error) });
-      return false;
-    }
-  }
-
-  private set(goalId: string, state: GoalWorkState): void {
-    this.states.set(goalId, state);
-    this.deps.onChange(goalId);
-  }
 }

@@ -43,10 +43,14 @@ describe('one answer field, read as dictated', () => {
     const provider = new FakeProvider({
       prober: [{ assessments: [{ nodeId: 'node_jac', score: 0, reasoning: 'No answer given; it needed the product of the Jacobians.', misconception: null }] }],
     });
-    const [assessment] = await assessProbeAnswers(provider, [
+    const {
+      assessments: [assessment],
+      gaps,
+    } = await assessProbeAnswers(provider, [
       { nodeId: 'node_jac', question: 'What is the Jacobian of a composition?', answerKey: 'The product, outermost first.', rubric: ['product', 'order'], answer: '', confidence: null },
     ]);
     expect(assessment?.score).toBe(0);
+    expect(gaps).toEqual([]);
     const call = provider.calls[0];
     expect(call?.messages[0]?.content).toContain('(empty: the learner has no idea)');
     expect(call?.system).toMatch(/empty field means "I don't know"/);

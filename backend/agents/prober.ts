@@ -69,8 +69,11 @@ export const AssessmentSchema = z.object({
 });
 export type Assessment = z.infer<typeof AssessmentSchema>;
 
+/** A foundation the answers show the learner lacks, with rough hours to learn it from scratch. */
+export const GapSchema = z.object({ name: z.string().trim().min(2).max(120), hours: z.number().min(0.25).max(200) });
+
 export function buildAssessmentSchema(nodeIds: Set<string>) {
-  return z.object({ assessments: z.array(AssessmentSchema).min(1) }).superRefine((value, ctx) => {
+  return z.object({ assessments: z.array(AssessmentSchema).min(1), gaps: z.array(GapSchema).max(5).default([]) }).superRefine((value, ctx) => {
     const seen = new Set<string>();
     value.assessments.forEach((a, i) => {
       if (!nodeIds.has(a.nodeId)) ctx.addIssue({ code: 'custom', path: ['assessments', i, 'nodeId'], message: `unknown nodeId ${a.nodeId}` });
@@ -80,7 +83,7 @@ export function buildAssessmentSchema(nodeIds: Set<string>) {
   });
 }
 
-export async function assessProbeAnswers(provider: LlmProvider, answers: ProbeAnswer[]): Promise<Assessment[]> {
+export async function assessProbeAnswers(provider: LlmProvider, answers: ProbeAnswer[]): Promise<{ assessments: Assessment[]; gaps: z.infer<typeof GapSchema>[] }> {
   const body = answers
     .map(
       (a) =>
@@ -93,5 +96,5 @@ export async function assessProbeAnswers(provider: LlmProvider, answers: ProbeAn
     messages: [{ role: 'user', content: `Judge these answers.\n\n${body}` }],
     submit: { name: 'submit_assessments', description: 'Submit one assessment per question.', schema: buildAssessmentSchema(new Set(answers.map((a) => a.nodeId))) },
   });
-  return result.data.assessments;
+  return { assessments: result.data.assessments, gaps: result.data.gaps };
 }

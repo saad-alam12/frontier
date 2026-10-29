@@ -5,7 +5,7 @@ import type { Embedder } from './ingest/embedder';
 import { createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import { IngestionService } from './services/ingestion';
-import { GoalWorker, nextGoalStep } from './services/goals';
+import { GoalWorker, nextGoalStep } from './services/goalWorker';
 import { listGoals } from './store/goals';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';

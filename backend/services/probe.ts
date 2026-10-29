@@ -17,6 +17,7 @@ import { closeProbeSet, createProbeSet, getProbeSet, openProbeId, recordProbeAns
 import { getNodes } from '../store/world';
 import { recordEvidence } from './evidence';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
+import { noteBackgroundGaps } from './remap';
 import { targetDepthFor } from '../core/leverage';
 
 export const MAX_PROBE_QUESTIONS = 8;
@@ -129,7 +130,7 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
     .filter((p): p is NonNullable<typeof p> => p !== null);
   if (prepared.length === 0) throw new Error('no answers matched this probe');
 
-  const assessments = await assessProbeAnswers(
+  const { assessments, gaps } = await assessProbeAnswers(
     provider,
     prepared.map((p) => ({
       nodeId: p.problem.nodeId,
@@ -175,7 +176,8 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
     deleteDrafts(db, set.problems.map((p) => probeDraftKey(p.id)));
     return outcomes;
   });
-  // what the probe showed changes what the time buys
+  // what the probe showed changes what the time buys, and missing background may call for a new map
+  if (set.goalId) noteBackgroundGaps(db, set.goalId, gaps, 'probe');
   refreshGoalFields(db);
   return outcomes;
 }

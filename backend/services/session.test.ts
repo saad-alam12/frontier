@@ -6,7 +6,7 @@ import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { FakeEmbedder } from '../ingest/embedder';
 import { openDatabase } from '../store/db';
-import { addCapabilities, capTargets, createGoal, listTargets } from '../store/goals';
+import { addCapabilities, capTargets, createGoal, getGoal, listTargets } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
@@ -405,6 +405,8 @@ describe('teaching session', () => {
     const built = targets.find((t) => t.nodeId === ids.get('nashMutualBr'));
     expect(built?.simplified).toBe('Simplified with Nash equilibrium');
     expect(built?.depth).toBeLessThanOrEqual(2);
+    // the missing foundation is noted for the goal's map too
+    expect(getGoal(db, goal.id)?.gaps.map((g) => [g.name, g.source])).toEqual([['best responses', 'session']]);
   });
 
   it('gives an idea its half hour: past it, one last step in the learner\u2019s own words, then on', async () => {

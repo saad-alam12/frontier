@@ -119,6 +119,19 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
         </div>
       ))}
 
+      {today.remaps.map((r) => (
+        <div key={r.goalId} className="next-card is-quiet">
+          <div className="mode">
+            <span className="mode-dot" aria-hidden="true" />A new map
+          </div>
+          <span className="t-heading">{r.title}</span>
+          <p className="t-lead m-0">{r.reason}</p>
+          <div className="button-row">
+            <Button onClick={() => onOpenGoals({ name: 'goal', goalId: r.goalId })}>Look at it</Button>
+          </div>
+        </div>
+      ))}
+
       {today.fading.length > 0 && (
         <Section title="What is fading" meta={`${today.fading.length} ${today.fading.length === 1 ? 'idea' : 'ideas'}`}>
           <ul className="list-card">

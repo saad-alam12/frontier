@@ -1,0 +1,116 @@
+/**
+ * The goal worker: decides what a goal still needs (read its material, profile its exams, compile,
+ * propose a re-map) and does it in the background, one run per goal at a time.
+ */
+import type { LlmProvider } from '../llm/provider';
+import type { Database } from '../store/db';
+import { getGoal, listGoals, listMaterials } from '../store/goals';
+import { getSource } from '../store/sources';
+import { compileGoal, extractedSources, profileGoal } from './goals';
+import type { GoalWorkState } from './goals';
+import type { IngestionService } from './ingestion';
+import { pendingRemapNeed, proposeRemap } from './remap';
+
+/** What a goal still needs before it is up to date, in order. Pure decision over stored state. */
+export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | 'remap' | null {
+  const goal = getGoal(db, goalId);
+  if (!goal) return null;
+  const materials = listMaterials(db, goalId);
+  const extracted = extractedSources(db, goalId);
+  if (extracted.some((s) => getSource(db, s)?.status !== 'done' && getSource(db, s)?.status !== 'failed')) return 'read';
+  const profileSet = materials.filter((m) => m.role === 'assessment' || m.role === 'scope').map((m) => m.sourceId);
+  if (!sameSet(profileSet, goal.profileSources)) return 'profile';
+  const readable = extracted.filter((s) => getSource(db, s)?.status === 'done');
+  if (goal.compiledAt === null) return materials.length === 0 || readable.length > 0 ? 'compile' : null;
+  if (readable.some((s) => !goal.compiledSources.includes(s))) return 'compile';
+  // a re-map the learner asked for, or one their missing background calls for (proposed, never applied)
+  if (goal.status === 'active' && (goal.remap?.state === 'requested' || (goal.remap === null && pendingRemapNeed(db, goal) !== 'none'))) return 'remap';
+  return null;
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
+export interface GoalWorkerDeps {
+  db: () => Database;
+  provider: () => LlmProvider;
+  ingestion: () => IngestionService;
+  onChange: (goalId: string) => void;
+}
+
+/**
+ * Keeps goals up to date in the background: starts reading new teaching material, then profiles
+ * assessment and scope material, then compiles, then proposes a re-map when one is due. One run per
+ * goal at a time; a refresh during a run runs again afterwards.
+ */
+export class GoalWorker {
+  private readonly states = new Map<string, GoalWorkState>();
+  private readonly running = new Set<string>();
+  private readonly again = new Set<string>();
+
+  constructor(private readonly deps: GoalWorkerDeps) {}
+
+  status(goalId: string): GoalWorkState {
+    return this.states.get(goalId) ?? { state: 'idle' };
+  }
+
+  /** Called when a source finishes ingesting: every goal using it may be ready for the next step. */
+  onSourceDone(sourceId: string): void {
+    for (const goal of listGoals(this.deps.db())) if (listMaterials(this.deps.db(), goal.id).some((m) => m.sourceId === sourceId)) this.refresh(goal.id);
+  }
+
+  refresh(goalId: string): void {
+    if (this.running.has(goalId)) {
+      this.again.add(goalId);
+      return;
+    }
+    this.running.add(goalId);
+    void this.run(goalId).finally(() => {
+      this.running.delete(goalId);
+      if (this.again.delete(goalId)) this.refresh(goalId);
+    });
+  }
+
+  /** Recompile now even if nothing new arrived (the learner asked). */
+  async compileNow(goalId: string): Promise<void> {
+    await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId));
+  }
+
+  private async run(goalId: string): Promise<void> {
+    for (let guard = 0; guard < 4; guard += 1) {
+      const step = nextGoalStep(this.deps.db(), goalId);
+      if (step === null) return this.set(goalId, { state: 'idle' });
+      if (step === 'read') {
+        const pending = extractedSources(this.deps.db(), goalId).filter((s) => getSource(this.deps.db(), s)?.status !== 'done');
+        for (const s of pending) this.deps.ingestion().start(s);
+        return this.set(goalId, { state: 'reading', message: 'Reading your material' });
+      }
+      const options = { db: this.deps.db(), provider: this.deps.provider() };
+      const ok =
+        step === 'profile'
+          ? await this.step(goalId, 'profiling', "Learning the exam's style from your material", () => profileGoal(options, goalId))
+          : step === 'remap'
+            ? await this.step(goalId, 'compiling', 'Drawing a map that fits what your answers showed', () => proposeRemap(options, goalId))
+            : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal(options, goalId));
+      if (!ok) return;
+    }
+  }
+
+  private async step(goalId: string, state: 'profiling' | 'compiling', message: string, fn: () => Promise<unknown>): Promise<boolean> {
+    this.set(goalId, { state, message });
+    try {
+      await fn();
+      this.set(goalId, { state: 'idle' });
+      return true;
+    } catch (error) {
+      this.set(goalId, { state: 'failed', message: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  }
+
+  private set(goalId: string, state: GoalWorkState): void {
+    this.states.set(goalId, state);
+    this.deps.onChange(goalId);
+  }
+}

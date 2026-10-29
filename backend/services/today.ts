@@ -33,6 +33,8 @@ export interface TodayGoal {
 export interface TodayView {
   /** Goals still being set up, to finish first. */
   drafts: { goalId: string; title: string; mapped: boolean }[];
+  /** Goals with a new map proposed for what the learner's answers showed, waiting for a yes or no. */
+  remaps: { goalId: string; title: string; reason: string }[];
   /** True once any goal exists (drafts included): the welcome is for an empty app only. */
   anyGoals: boolean;
   session: { id: string; goalTitle: string; planTitle: string; where: string } | null;
@@ -107,6 +109,7 @@ export function todayView(db: Database, now = new Date()): TodayView {
   const studied = attributeTime(db, weekStart).reduce((s, x) => s + x.minutes, 0);
   return {
     drafts: all.filter((g) => g.status === 'draft').map((g) => ({ goalId: g.id, title: g.title ?? g.text, mapped: g.compiledAt !== null })),
+    remaps: goals.flatMap((g) => (g.remap?.state === 'ready' ? [{ goalId: g.id, title: g.title ?? g.text, reason: g.remap.proposal.reason }] : [])),
     anyGoals: all.length > 0,
     session,
     practice: currentPractice(db),

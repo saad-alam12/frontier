@@ -69,4 +69,8 @@ When the goal clearly needs an idea that is not in the list, add it under `newNo
 
 When existing capabilities are listed, the learner has already been working on them. Keep them. Add `capabilities` only for what is new (usually what the newly added material covers), put new targets for an existing capability under `extend` with its id, and list a capability under `retire` only when a new one clearly supersedes it. Never restate an existing capability as a new one. Keep the level the goal already has unless the task says otherwise; `level` and `scope` may be left out.
 
+## Re-mapping
+
+Sometimes the app asks for the whole map again, because the learner's answers showed missing background or because they asked for it. Then the current map is shown only as a guide: draw every capability anew, at the level and size the time left allows, and leave `extend` and `retire` empty. The learner sees your new map next to their current one and chooses, so make the difference worth it: a learner who cannot yet read the formulas needs ideas they can actually get in half an hour each, not the same map with lower numbers. When the missing foundation is too big for this goal's time, say so with a `backgroundGoal`: a goal sentence for it and rough hours, which the learner can start separately.
+
 Call the submit tool once.

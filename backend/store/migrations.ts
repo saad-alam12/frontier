@@ -329,6 +329,14 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE targets ADD COLUMN simplified TEXT;
     `,
   },
+  {
+    version: 9,
+    sql: `
+      -- R3: prerequisites the learner showed they lack, and a re-map waiting to be made or approved.
+      ALTER TABLE goals ADD COLUMN gaps TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE goals ADD COLUMN remap TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

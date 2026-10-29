@@ -1836,6 +1836,25 @@ button.map-label:hover {
   line-height: 1.55;
 }
 
+/* A proposed map, next to the plan the learner has. */
+.remap-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px;
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+.background-goal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
 /* ---------- Idea field (plan preview) ---------- */
 
 .idea-field-wrap {

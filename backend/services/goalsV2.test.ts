@@ -9,7 +9,8 @@ import { openDatabase } from '../store/db';
 import { createGoal, getGoal, listCapabilities, markCapabilityMastered, setMaterials, startUnverified } from '../store/goals';
 import { listNodes } from '../store/world';
 import { IngestionService } from './ingestion';
-import { compileGoal, createGoalFromForm, goalDetail, guessRole, nextGoalStep, profileGoal } from './goals';
+import { compileGoal, createGoalFromForm, goalDetail, guessRole, profileGoal } from './goals';
+import { nextGoalStep } from './goalWorker';
 import { candidatesForGoal } from './planner';
 
 /** Extractor fixture: `NODE name: statement` and `CHAIN a + b => c` lines. */

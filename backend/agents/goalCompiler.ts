@@ -31,7 +31,7 @@ export interface ExistingCapability {
  * capabilities (one for a short goal) and say what the goal means for its time (level and scope); a
  * recompile only adds, extends or (rarely) retires.
  */
-export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>, options: { minCapabilities?: number; askCoverage?: boolean } = {}) {
+export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>, options: { minCapabilities?: number; askCoverage?: boolean; remap?: boolean } = {}) {
   const minCapabilities = options.minCapabilities ?? 3;
   const askCoverage = options.askCoverage ?? false;
   return z
@@ -54,6 +54,10 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
         )
         .max(60)
         .default([]),
+      backgroundGoal: z
+        .object({ text: z.string().trim().min(5).max(200), hours: z.number().min(1).max(400) })
+        .nullable()
+        .default(null),
     })
     .superRefine((value, ctx) => {
       const temp = new Set<string>();
@@ -77,6 +81,7 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
       if (existingIds.size === 0 && !value.level) ctx.addIssue({ code: 'custom', path: ['level'], message: 'say how deep the goal goes for this time: intuition, working or rigorous' });
       if (existingIds.size === 0 && !value.scope) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'say in one or two plain sentences what the goal means in the time given' });
       if (askCoverage && !value.coverage) ctx.addIssue({ code: 'custom', path: ['coverage'], message: 'judge whether the material covers the goal: complete, partial or fragment' });
+      if (!options.remap && value.backgroundGoal) ctx.addIssue({ code: 'custom', path: ['backgroundGoal'], message: 'a separate goal is only suggested when re-mapping' });
     });
 }
 
@@ -107,7 +112,23 @@ export interface GoalCompilerInput {
   background: string | null;
   /** The level an earlier compile chose; null on the first compile. */
   level: GoalLevel | null;
+  /** A re-map: the whole map is drawn again (the existing capabilities are replaced, not kept). */
+  remap?: RemapRequest;
 }
+
+export interface RemapRequest {
+  /** fill: add missing background the time covers; simplify: a gentler map; asked: the learner asked. */
+  kind: 'fill' | 'simplify' | 'asked';
+  gaps: { name: string; hours: number }[];
+  hoursLeft: number | null;
+}
+
+const REMAP_TASK: Record<RemapRequest['kind'], string> = {
+  fill: 'The learner showed they lack the prerequisites below, and the time left covers them. Map the goal again with them added at the depth the goal needs, as core ideas ahead of the ideas that rest on them.',
+  simplify:
+    'The learner lacks the foundations below, and the time left cannot also cover them. Map the goal again at a gentler level (usually `intuition`): keep its purpose, and choose the ideas that give a usable understanding without those foundations. Prefer the existing ideas at lower depths to new ones that say the same in simpler words. Suggest a separate goal for the missing foundation in `backgroundGoal` (a sentence the learner could have written, and rough hours).',
+  asked: "The learner asked for a new map for their time and what they know now. Map the goal again from scratch for the time left.",
+};
 
 const FOCUS_TEXT: Record<GoalFocus, string> = {
   concepts: 'conceptual understanding: what things mean, why they hold, how they connect',
@@ -147,9 +168,13 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
     const p = input.examProfile;
     sections.push(`## Exam profile (from past exams)\n${p.summary}\nFormat: ${p.format}. Duration: ${p.durationMinutes ?? 'unknown'} minutes. Aids: ${p.aids}. Question types: ${p.questionTypes.join('; ')}. Difficulty: ${p.difficulty}.`);
   }
+  if (input.remap) {
+    const gaps = input.remap.gaps.map((g) => `- ${g.name} (about ${round(g.hours)} hours to learn from scratch)`).join('\n');
+    sections.push(`## Re-mapping\n${REMAP_TASK[input.remap.kind]}${gaps ? `\n\nMissing background the learner showed:\n${gaps}` : ''}${input.remap.hoursLeft !== null ? `\n\nTime left for this goal: about ${round(input.remap.hoursLeft)} hours.` : ''}`);
+  }
   if (input.existing.length) {
     sections.push(
-      `## Existing capabilities (keep them; add, extend or retire only as the task says)\n${input.existing
+      `## ${input.remap ? 'The current map (it is replaced: use it as a guide, not as a constraint)' : 'Existing capabilities (keep them; add, extend or retire only as the task says)'}\n${input.existing
         .map((c) => `- [${c.id}]${c.mastered ? ' (mastered)' : ''} ${c.statement}\n  targets: ${c.targets.map((t) => `${t.name} [${t.nodeId}] depth ${t.depth}`).join('; ')}`)
         .join('\n')}`,
     );
@@ -157,7 +182,9 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
   if (input.newMaterial.length) sections.push(`## Material added since the last compile\n${input.newMaterial.map((t) => `- ${t}`).join('\n')}`);
   sections.push(`## Ideas in the goal's material\n${graphText}`);
   sections.push(
-    input.existing.length
+    input.remap
+      ? '## Task\nDraw the whole map again: a title, the level and scope for the time left, every capability and its targets. Leave `extend` and `retire` empty.'
+      : input.existing.length
       ? '## Task\nRecompile incrementally: add capabilities and targets for what the new material covers, extend existing capabilities with new targets where they belong, and retire a capability only when a new one clearly supersedes it. Do not restate existing capabilities.'
       : '## Task\nCompile the goal: a short title, the level and scope it has for this time, its capabilities and their targets.',
   );
@@ -173,7 +200,7 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
     submit: {
       name: 'submit_compile',
       description: 'Submit the title, new capabilities, extensions, retirements and any new nodes.',
-      schema: buildCompileSchema(knownIds, existingIds, { minCapabilities: input.budgetHours !== null && input.budgetHours <= 3 ? 1 : 3, askCoverage: input.askCoverage }),
+      schema: buildCompileSchema(knownIds, input.remap ? new Set<string>() : existingIds, { minCapabilities: input.remap || (input.budgetHours !== null && input.budgetHours <= 3) ? 1 : 3, askCoverage: input.askCoverage, remap: input.remap !== undefined }),
     },
   });
   return result.data;

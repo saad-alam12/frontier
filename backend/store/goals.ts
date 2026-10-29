@@ -1,7 +1,7 @@
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
-import type { Assessment, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, MaterialRole, Target, UpcomingUnit } from '../core/types';
+import type { Assessment, BackgroundGap, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, GoalRemap, MaterialRole, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
@@ -28,6 +28,8 @@ interface GoalRow {
   level: GoalLevel | null;
   scope: string | null;
   background: string | null;
+  gaps: string;
+  remap: string | null;
 }
 interface CapabilityRow {
   id: string;
@@ -71,6 +73,8 @@ const toGoal = (r: GoalRow): Goal => ({
   level: r.level,
   scope: r.scope,
   background: r.background,
+  gaps: parseJson<BackgroundGap[]>(r.gaps, []),
+  remap: parseJson<GoalRemap | null>(r.remap, null),
 });
 const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
 const toTarget = (r: TargetRow): Target => ({
@@ -195,6 +199,14 @@ export function markCompiled(db: Database, goalId: string, title: string | null,
 
 export function saveProfile(db: Database, goalId: string, profile: ExamProfile | null, plan: UpcomingUnit[], sourceIds: string[]): void {
   db.prepare('UPDATE goals SET exam_profile = ?, course_plan = ?, profile_sources = ? WHERE id = ?').run(profile ? JSON.stringify(profile) : null, JSON.stringify(plan), JSON.stringify(sourceIds), goalId);
+}
+
+export function saveGaps(db: Database, goalId: string, gaps: BackgroundGap[]): void {
+  db.prepare('UPDATE goals SET gaps = ? WHERE id = ?').run(JSON.stringify(gaps), goalId);
+}
+
+export function saveRemap(db: Database, goalId: string, remap: GoalRemap | null): void {
+  db.prepare('UPDATE goals SET remap = ? WHERE id = ?').run(remap ? JSON.stringify(remap) : null, goalId);
 }
 
 export function startUnverified(db: Database, goalId: string, nodeId: string): void {

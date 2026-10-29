@@ -18,11 +18,12 @@ import type { MapNodeView, MapState, MapView, NodeCard } from '../services/map';
 import type { LookupAnswer, LookupHit } from '../services/lookup';
 import type { Trail, TrailItem, TrailSummary } from '../services/trails';
 import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget';
+import type { RemapView } from '../services/remap';
 import type { TickInput } from '../services/activity';
 import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
 import type { GoalBudget } from '../core/types';
 
-export type { GoalProgress, PlanPreview, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
+export type { GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
 
 export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailSummary };
@@ -84,6 +85,14 @@ export interface ApiMethods {
   'goals.remove': { input: { goalId: string }; output: undefined };
   /** Recompile now (incremental) even if no new material arrived. */
   'goals.compile': { input: { goalId: string }; output: GoalDetail };
+  /** A re-map proposed for the goal, next to its current plan; null when none is ready. */
+  'goals.remapView': { input: { goalId: string }; output: RemapView | null };
+  /** Use the proposed map: it replaces the current one and its plan becomes the approved one. */
+  'goals.remapApprove': { input: { goalId: string }; output: GoalDetail };
+  /** Keep the current map; the gaps behind the proposal are not proposed again. */
+  'goals.remapDismiss': { input: { goalId: string }; output: GoalDetail };
+  /** Ask for a new map for the goal's time (drawn in the background, then proposed). */
+  'goals.remapRequest': { input: { goalId: string }; output: GoalDetail };
   /** Learn an expected (unverified) idea anyway. */
   'goals.startUnverified': { input: { goalId: string; nodeId: string }; output: GoalDetail };
   /** Opens a file picker; adds the files to the library unread and guesses each one's role. */

@@ -172,7 +172,37 @@ export interface Goal {
   scope: string | null;
   /** What the learner says they already know about it, in their words. */
   background: string | null;
+  /** Prerequisites the learner showed they lack, from the probe and sessions. */
+  gaps: BackgroundGap[];
+  /** A re-map waiting to be made or approved; null when there is none. */
+  remap: GoalRemap | null;
 }
+
+/** A prerequisite the learner showed they lack (design §3.2), as the tutor or the prober named it. */
+export interface BackgroundGap {
+  name: string;
+  /** Rough hours to learn it from scratch: the model's estimate. */
+  hours: number;
+  source: 'probe' | 'session';
+  /** `new` until a re-map has been proposed for it (approved or not). */
+  status: 'new' | 'proposed';
+  at: string;
+}
+
+/** A new map for the goal, proposed for the learner to approve; never applied on its own. */
+export interface RemapProposal {
+  /** Why, in a sentence for the learner. */
+  reason: string;
+  title: string;
+  level: GoalLevel;
+  scope: string;
+  capabilities: { statement: string; targets: { ref: string; depth: number; core: boolean }[] }[];
+  newNodes: { tempId: string; kind: NodeKind; name: string; statement: string }[];
+  /** A separate goal for a missing foundation the time cannot cover. */
+  backgroundGoal: { text: string; hours: number } | null;
+}
+
+export type GoalRemap = { state: 'requested'; at: string } | { state: 'ready'; at: string; proposal: RemapProposal };
 
 /**
  * How deep the goal's language goes (design §3.1): intuition (plain words and pictures, no formulas),

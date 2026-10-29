@@ -37,6 +37,24 @@ export function transaction<T>(db: Database, fn: () => T): T {
   }
 }
 
+/**
+ * Run `fn` inside a savepoint that is always rolled back: to preview what a change would do without
+ * making it. `fn` must be synchronous.
+ */
+export function dryRun<T>(db: Database, fn: () => T): T {
+  const depth = depths.get(db) ?? 0;
+  const name = `sp${depth}`;
+  db.exec(`SAVEPOINT ${name}`);
+  depths.set(db, depth + 1);
+  try {
+    return fn();
+  } finally {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    depths.set(db, depth);
+  }
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

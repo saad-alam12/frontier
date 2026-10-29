@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { call, isCancelled } from '../../api';
-import type { GoalBudget, GoalDetail, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView } from '../../../backend/api/contract';
+import type { GoalBudget, GoalDetail, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
 import { BudgetBar, IdeaField, TimePicker, paceSentence, planSummary, trimSentence } from '../../components/budget';
 import { useSurface } from '../../lib/activity';
@@ -11,7 +11,7 @@ import { Markdown } from '../../components/Markdown';
 import { VerticalPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
 import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
-import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, dateLabel, formatDate, goalName, isExam, plural } from './labels';
+import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, capitalize, dateLabel, formatDate, goalName, isExam, plural } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 
 const SKILLS_SHOWN = 6;
@@ -162,6 +162,15 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
 
       <WorkNotice detail={detail} onRetry={() => void run('compile', async () => void (await call('goals.compile', { goalId: goal.id })))} />
       {error && <Notice error>{error}</Notice>}
+      {goal.remap?.state === 'ready' && <RemapPanel goalId={goal.id} onChanged={onChanged} />}
+      {compiled && goal.status === 'active' && goal.level === null && goal.remap === null && detail.work.state === 'idle' && (
+        <div className="button-row">
+          <span className="t-small text-secondary">This goal was mapped before plans fitted the time.</span>
+          <Button kind="quiet" disabled={busy !== null} onClick={() => void run('remap', async () => void (await call('goals.remapRequest', { goalId: goal.id }).then(onChanged)))}>
+            Draw a map for your time
+          </Button>
+        </div>
+      )}
 
       {progress && (
         <div className="goal-hero">
@@ -520,6 +529,82 @@ function mockStart(date: string): string | null {
   if (Number.isNaN(d.getTime())) return null;
   d.setDate(d.getDate() - 28);
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+}
+
+/**
+ * A new map proposed for what the learner's answers showed (or that they asked for), next to the plan
+ * they have: same time, how many sessions and ideas each gives, the new map's dots. Nothing changes
+ * until they choose it.
+ */
+function RemapPanel({ goalId, onChanged }: { goalId: string; onChanged: () => void }) {
+  const [view, setView] = useState<RemapView | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void call('goals.remapView', { goalId }).then((v) => live && setView(v));
+    return () => {
+      live = false;
+    };
+  }, [goalId]);
+  if (!view) return null;
+  const choose = (label: string, method: 'goals.remapApprove' | 'goals.remapDismiss') => {
+    setBusy(label);
+    void call(method, { goalId })
+      .then(onChanged)
+      .finally(() => setBusy(null));
+  };
+  const startBackground = (goal: NonNullable<RemapView['backgroundGoal']>) => {
+    setBusy('background');
+    void call('goals.create', { form: { text: goal.text, kind: 'personal', assessment: 'none', budget: { mode: 'total', hours: goal.hours }, focus: [], materials: [] }, draft: true })
+      .then(() => setStarted(true))
+      .finally(() => setBusy(null));
+  };
+  const now = view.before ? planSummary(view.before.plan).headline : null;
+  const next = view.after ? planSummary(view.after.plan) : null;
+  return (
+    <section className="remap-panel" aria-label="A new map">
+      <div className="flex flex-col gap-[8px]">
+        <div className="t-caption text-accent-text">A new map for your time</div>
+        <p className="t-lead m-0">{view.reason}</p>
+      </div>
+      <DefGrid
+        rows={[
+          ...(now ? [{ label: 'Your map', value: now }] : []),
+          ...(next ? [{ label: 'The new map', value: `${next.headline}. ${capitalize(next.detail)}.` }] : []),
+        ]}
+      />
+      <div className="scope-note">
+        <div className="t-caption text-muted">{LEVEL_LABEL[view.level]}</div>
+        <p className="m-0">{view.scope}</p>
+      </div>
+      {view.after && <IdeaField ideas={view.after.ideas} />}
+      <div className="button-row">
+        <Button kind="primary" disabled={busy !== null} onClick={() => choose('approve', 'goals.remapApprove')}>
+          {busy === 'approve' ? 'Switching…' : 'Use the new map'}
+        </Button>
+        <Button kind="quiet" disabled={busy !== null} onClick={() => choose('dismiss', 'goals.remapDismiss')}>
+          Keep my map
+        </Button>
+      </div>
+      {view.backgroundGoal && (
+        <div className="background-goal">
+          {started ? (
+            <span className="t-small text-secondary">Started as a new goal. Its plan will be ready under Goals in a minute or two.</span>
+          ) : (
+            <>
+              <span className="t-small text-secondary">
+                The missing background is a goal of its own: “{view.backgroundGoal.text}”, about {formatHours(view.backgroundGoal.hours * 60)}.
+              </span>
+              <Button kind="quiet" disabled={busy !== null} onClick={() => view.backgroundGoal && startBackground(view.backgroundGoal)}>
+                Start it as a goal
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function WorkNotice({ detail, onRetry }: { detail: GoalDetail; onRetry: () => void }) {

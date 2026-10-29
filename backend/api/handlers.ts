@@ -21,6 +21,9 @@ import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, startUnverified } from '../store/goals';
 import { deleteSource } from '../store/sources';
+import { getProbeSet } from '../store/probes';
+import { getSession } from '../store/sessions';
+import { approveRemap, dismissRemap, remapView, requestRemap } from '../services/remap';
 import { getDrafts, setDraft } from '../store/drafts';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
@@ -109,6 +112,20 @@ export function buildHandlers(ctx: AppContext): Handlers {
       refreshGoalFields(ctx.db());
       return undefined;
     },
+    'goals.remapView': ({ goalId }) => remapView(ctx.db(), goalId),
+    'goals.remapApprove': ({ goalId }) => {
+      approveRemap(ctx.db(), goalId);
+      return detail(goalId);
+    },
+    'goals.remapDismiss': ({ goalId }) => {
+      dismissRemap(ctx.db(), goalId);
+      return detail(goalId);
+    },
+    'goals.remapRequest': ({ goalId }) => {
+      requestRemap(ctx.db(), goalId);
+      ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
+    },
     'goals.compile': async ({ goalId }) => {
       await ctx.goalWorker().compileNow(goalId);
       return detail(goalId);
@@ -124,19 +141,30 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'materials.addPaths': ({ paths }) => addMaterials(paths),
     'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
     'probe.open': ({ goalId }) => openProbe(ctx.db(), goalId),
-    'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
+    'probe.submit': async ({ probeId, answers }) => {
+      const outcomes = await submitProbe(ctx.db(), ctx.provider(), probeId, answers);
+      const goalId = getProbeSet(ctx.db(), probeId)?.goalId;
+      if (goalId) ctx.goalWorker().refresh(goalId); // missing background may call for a new map
+      return outcomes;
+    },
     'probe.cancel': ({ probeId }) => cancelProbe(probeId),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db()),
     'session.start': ({ goalId }) => startSession(ctx.practiceDeps(), goalId),
-    'session.respond': ({ sessionId, response }) => respond(ctx.practiceDeps(), sessionId, response),
+    'session.respond': async ({ sessionId, response }) => {
+      const snap = await respond(ctx.practiceDeps(), sessionId, response);
+      if (snap.status !== 'active') ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map
+      return snap;
+    },
     'session.cancel': ({ sessionId }) => cancelRespond(sessionId),
     'session.pause': ({ sessionId }) => {
       pauseSession(ctx.db(), sessionId);
       return undefined;
     },
     'session.end': async ({ sessionId }) => {
+      const goalId = getSession(ctx.db(), sessionId)?.goalId;
       await abandonSession(ctx.practiceDeps(), sessionId);
+      if (goalId) ctx.goalWorker().refresh(goalId); // the session may have shown missing background
       return undefined;
     },
     'today.view': () => todayView(ctx.db()),
