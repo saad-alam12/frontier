@@ -191,7 +191,8 @@ describe('planner', () => {
     const plan = await planSession(db, provider, goal.id);
     expect(plan.steps.map((s) => s.nodeId).slice(0, 2).sort()).toEqual([ids.get('bestResponse'), ids.get('profile')].sort());
     expect(plan.steps[2]?.nodeId).toBe(ids.get('nash'));
-    expect(plan.steps[2]?.mode).toBe('derive');
+    expect(plan.steps[2]?.aim).toBe(4);
+    expect(plan.steps[2]?.minutes).toBe(19); // a term asked to be applied: half of 38 minutes
     expect(plan.steps[2]?.dependsOn.sort()).toEqual([ids.get('bestResponse'), ids.get('profile')].sort());
     expect(plan.candidateCount).toBeGreaterThan(3);
   });

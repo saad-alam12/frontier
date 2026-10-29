@@ -3,6 +3,7 @@ import { isGraded } from '../core/session';
 import type { Stage } from '../core/session';
 import type { LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
+import type { Assessment, GoalFocus, GoalLevel } from '../core/types';
 import { answerReadingPrompt } from './prompts';
 
 const md = (max: number) => z.string().trim().min(1).max(max);
@@ -28,6 +29,11 @@ export const GradeSchema = z.object({
   feedback: md(3000),
   misconception: z.string().trim().max(300).nullable().default(null),
   confidentlyWrong: z.boolean().default(false),
+  /** A prerequisite the learner plainly lacks (not a slip): what it is and roughly how long to learn it from scratch. */
+  missingBackground: z
+    .object({ name: z.string().trim().min(2).max(120), hours: z.number().min(0.25).max(200) })
+    .nullable()
+    .default(null),
 });
 export type Grade = z.infer<typeof GradeSchema>;
 
@@ -46,13 +52,29 @@ export interface LearnerResponse {
   effort?: number;
   /** Optional handle on the compress card. */
   handle?: string;
+  /** "I know this, test me" on a predict or explain card: go straight to the question that shows the aim. */
+  testMe?: boolean;
+}
+
+export interface TutorGoal {
+  text: string;
+  /** How deep the goal's language goes; null for goals compiled before levels existed. */
+  level: GoalLevel | null;
+  /** What the goal means in the learner's time. */
+  scope: string | null;
+  assessment: Assessment;
+  focus: GoalFocus[];
 }
 
 export interface TutorStepInput {
-  goalText: string;
+  goal: TutorGoal;
   why: string;
   node: { id: string; kind: string; name: string; statement: string };
-  premises: { name: string; statement: string; owned: boolean; ownStatement: string | null; handle: string | null }[];
+  /** The depth this session takes the idea to; the loop stops there. */
+  aim: number;
+  /** Why the idea was simplified for this learner (teach its core intuition); null when it was not. */
+  simplified: string | null;
+  premises: { name: string; statement: string; owned: boolean; ownStatement: string | null; handle: string | null; simplified: boolean }[];
   dependents: { name: string }[];
   bugs: string[];
   /** Worked examples from the sources for this node: material for worked-example cards and use tasks. */
@@ -72,13 +94,22 @@ export interface TutorStepResult {
 export async function runTutorStep(provider: LlmProvider, input: TutorStepInput): Promise<TutorStepResult> {
   const expectGrade = input.previous !== null && isGraded(input.previous.stage);
   const sections: string[] = [];
-  sections.push(`## Goal\n${input.goalText}\n\nWhy this node today: ${input.why}`);
+  sections.push(goalSection(input.goal, input.why));
   sections.push(`## Node (for you only; do not reveal it before the learner has tried)\n[${input.node.id}] ${input.node.name} (${input.node.kind})\n${input.node.statement}`);
+  sections.push(`## How deep this idea goes today\nThe plan asks depth ${input.aim}: ${DEPTH_TEXT[Math.max(1, Math.min(5, input.aim))]}. Teach to that and no further, and keep the whole idea within about half an hour.`);
+  if (input.simplified) {
+    sections.push(
+      `## Simplified for this learner\n${input.simplified}. Teach the idea's core intuition in plain words with an everyday picture: what it does, why it matters, what the rest of the map needs from it. No formulas, symbols or derivations; leave the detail for later.`,
+    );
+  }
   sections.push(
     `## Premises and the learner's hold on them\n${
       input.premises.length
         ? input.premises
-            .map((p) => `- ${p.name}${p.owned ? ' (owned)' : ' (not yet owned)'}: ${p.statement}${p.ownStatement ? `\n  learner's own words: "${p.ownStatement}"` : ''}${p.handle ? `\n  handle: "${p.handle}"` : ''}`)
+            .map(
+              (p) =>
+                `- ${p.name}${p.owned ? ' (owned)' : ' (not yet owned)'}${p.simplified ? ' (learned as an intuition only)' : ''}: ${p.statement}${p.ownStatement ? `\n  learner's own words: "${p.ownStatement}"` : ''}${p.handle ? `\n  handle: "${p.handle}"` : ''}`,
+            )
             .join('\n')
         : '(no premises recorded)'
     }`,
@@ -117,6 +148,40 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   return result.data as TutorStepResult;
 }
 
+const DEPTH_TEXT = [
+  '',
+  'recognize: know it exists and roughly what it is about',
+  'explain: state it in their own words with an example',
+  'derive: rebuild it from its premises and say why each is needed',
+  'apply: use it correctly inside a task',
+  'transfer: use it in a far context, critique it, teach it',
+];
+
+const LEVEL_TEXT: Record<GoalLevel, string> = {
+  intuition: 'intuition: plain words, pictures and analogies, no formulas',
+  working: 'working knowledge: the key notation and formulas, explained in words and used on small examples',
+  rigorous: 'rigorous: precise definitions, derivations and proofs',
+};
+
+const ASSESSMENT_TEXT: Record<Assessment, string> = {
+  written_exam: 'a written exam',
+  oral_exam: 'an oral exam',
+  presentation_or_project: 'a presentation or project',
+  outcome: 'a concrete outcome',
+  none: 'nothing; the learner studies for themselves',
+};
+
+const FOCUS_TEXT: Record<GoalFocus, string> = { concepts: 'conceptual understanding', math: 'mathematical rigour', practice: 'practical application' };
+
+function goalSection(goal: TutorGoal, why: string): string {
+  const lines = [`## Goal\n${goal.text}`];
+  if (goal.scope) lines.push(`What it means in the learner's time: ${goal.scope}`);
+  if (goal.level) lines.push(`Level: ${LEVEL_TEXT[goal.level]}.`);
+  lines.push(`Assessed by ${ASSESSMENT_TEXT[goal.assessment]}.${goal.focus.length ? ` The learner wants ${goal.focus.map((f) => FOCUS_TEXT[f]).join(' and ')}.` : ''}`);
+  lines.push(`Why this node today: ${why}`);
+  return lines.join('\n\n');
+}
+
 export function cardText(card: TutorCard): string {
   switch (card.stage) {
     case 'predict':
@@ -143,6 +208,7 @@ export function responseText(r: LearnerResponse): string {
   if (r.confidence !== undefined) parts.push(`confidence: ${confidenceLabel(r.confidence)}`);
   if (r.handle) parts.push(`handle: ${r.handle}`);
   if (r.effort !== undefined) parts.push(`effort ${r.effort}/5`);
+  if (r.testMe) parts.push('(the learner said they know this and asked to be tested)');
   return parts.join('\n');
 }
 

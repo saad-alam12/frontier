@@ -3,23 +3,26 @@
  * close → preview. State is persisted after every transition so the app can resume at the same card.
  */
 import { runRecall, runTutorStep } from '../agents/tutor';
-import type { Grade, LearnerResponse, TutorCard, TutorStepInput } from '../agents/tutor';
+import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
 import { dependents, neighbourhood } from '../core/graph';
-import { applyGrade, emptyEdge, evidenceKindFor, isGraded, nextStage, stagesFor } from '../core/session';
+import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
+import { PASS_SCORE } from '../core/types';
+import type { Depth, Goal } from '../core/types';
 import { CommitGate } from '../llm/cancel';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
-import { logEvent } from '../store/activity';
+import { logEvent, secondsOnNode } from '../store/activity';
 import { getState } from '../store/evidence';
-import { getGoal } from '../store/goals';
+import { getGoal, listTargets } from '../store/goals';
 import { activeSession, appendSessionEvent, createSession, endSession, getSession, listEndedSessions, listSessionEvents, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
+import { simplifyIdea } from './goals';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
@@ -60,6 +63,8 @@ export interface SessionState {
   practiceSetId?: string | null;
   /** The practice problem whose solution is showing; the next response moves on. */
   practiceRevealed?: string | null;
+  /** Minutes an idea carried over from an ended session already had there; they count toward its half hour. */
+  priorMinutes?: Record<string, number>;
 }
 
 /** Where the learner stopped inside an idea: the open card and the loop state around it. */
@@ -85,7 +90,23 @@ export interface SessionSnapshot {
   status: SessionRecord['status'];
   phase: Phase;
   plan: { title: string; orientation: string; steps: (LessonStep & { status: NodeStatus })[] };
-  current: { nodeId: string; name: string; why: string; mode: LessonStep['mode']; stage: Stage; stages: Stage[]; stageIndex: number; stageCount: number } | null;
+  current: {
+    nodeId: string;
+    name: string;
+    why: string;
+    /** The depth this session takes the idea to. */
+    aim: Depth;
+    /** Why the idea was simplified (taught as its core intuition); null when it was not. */
+    simplified: string | null;
+    /** A one-line note on the idea's half hour, when it is wrapping up. */
+    note: string | null;
+    /** "I know this, test me" is offered: a prediction or explanation, with a deeper question to jump to. */
+    canTestOut: boolean;
+    stage: Stage;
+    stages: Stage[];
+    stageIndex: number;
+    stageCount: number;
+  } | null;
   card: PublicCard | null;
   previousNodes: { id: string; name: string }[];
   closing: SessionState['closing'];
@@ -154,19 +175,33 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
 
 export function currentSession(db: Database): SessionSnapshot | null {
   const session = activeSession<SessionState>(db);
-  return session ? snapshot(db, session) : null;
+  return session ? snapshot(db, normalized(session)) : null;
+}
+
+/**
+ * Sessions saved before R3 planned steps by mode (index, teach, derive) and counted easy answers; read
+ * them as aims and strong answers so they resume where they were.
+ */
+function normalized(session: SessionRecord<SessionState>): SessionRecord<SessionState> {
+  type OldStep = LessonStep & { mode?: 'index' | 'teach' | 'derive' };
+  const steps = session.state.plan.steps.map((st: OldStep) => {
+    if (st.aim !== undefined) return st;
+    const aim: Depth = st.mode === 'index' ? 1 : st.mode === 'derive' ? 3 : 2;
+    return { ...st, aim, fromDepth: 0 as Depth, minutes: IDEA_MAX_MINUTES, simplified: null };
+  });
+  return { ...session, state: { ...session.state, plan: { ...session.state.plan, steps }, edge: normalizeEdge(session.state.edge) } };
 }
 
 export async function startSession(deps: SessionDeps, goalId: string): Promise<SessionSnapshot> {
   const { db } = deps;
   const active = activeSession<SessionState>(db);
-  if (active) return snapshot(db, active);
+  if (active) return snapshot(db, normalized(active));
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
-  const ended = listEndedSessions<SessionState>(db, goalId);
+  const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
   const view = loadKnowledge(db);
-  const carried = ended[0] ? carriedPlace(ended[0], (id, depth) => view.owned.has(id) && (view.states.get(id)?.depth ?? 0) >= depth) : null;
-  const planned = await planSession(db, deps.provider, goalId, carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES);
+  const carried = ended[0] ? carriedPlace(ended[0], (id, depth) => (view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id))) : null;
+  const planned = await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
   const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
   const previousNodes = previouslyTaughtNodes(ended);
@@ -186,6 +221,7 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
     closing: null,
     pendingEffort: null,
     resume: carried?.resume ?? null,
+    priorMinutes: carried ? { [carried.step.nodeId]: secondsOnNode(db, [carried.resume.fromSessionId], carried.step.nodeId) / 60 } : {},
   };
   if (carried) state.nodeStatus[carried.step.nodeId] = 'active';
   const session = createSession(db, goalId, state);
@@ -230,8 +266,9 @@ export function cancelRespond(sessionId: string): boolean {
 
 /** Advance the session with the learner's response to the current card (or an acknowledgement). */
 export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse): Promise<SessionSnapshot> {
-  const session = getSession<SessionState>(deps.db, sessionId);
-  if (!session) throw new Error(`unknown session ${sessionId}`);
+  const stored = getSession<SessionState>(deps.db, sessionId);
+  if (!stored) throw new Error(`unknown session ${sessionId}`);
+  const session = normalized(stored);
   if (session.status !== 'active') return snapshot(deps.db, session);
   if (inflight.has(sessionId)) throw new Error('Still working on your last answer.');
   const gate = answersQuestion(session.state) ? new CommitGate() : null;
@@ -253,8 +290,8 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
   const { db } = deps;
   const sessionId = session.id;
   const state = session.state;
-  const goal = getGoal(db, state.goalId);
-  const goalText = goal?.text ?? '';
+  const goal = tutorGoal(getGoal(db, state.goalId));
+  const goalText = goal.text;
 
   switch (state.phase) {
     case 'reconstruct': {
@@ -272,11 +309,11 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
     }
     case 'orient': {
       appendSessionEvent(db, sessionId, 'orient', {});
-      await beginStep(deps, sessionId, state, 0, goalText);
+      await beginStep(deps, sessionId, state, 0, goal);
       break;
     }
     case 'teach': {
-      await handleTeachResponse(deps, sessionId, state, response, goalText);
+      await handleTeachResponse(deps, sessionId, state, response, goal);
       break;
     }
     case 'practice': {
@@ -355,7 +392,7 @@ async function startSessionPractice(deps: SessionDeps, sessionId: string, state:
   }
 }
 
-async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goalText: string): Promise<void> {
+async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goal: TutorGoal): Promise<void> {
   state.stepIndex = index;
   state.edge = emptyEdge();
   state.supportAfter = null;
@@ -374,15 +411,20 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
     state.stage = resume.stage;
     state.card = resume.card;
     state.supportAfter = resume.supportAfter;
-    state.edge = resume.edge;
+    state.edge = normalizeEdge(resume.edge);
     state.pendingEffort = resume.pendingEffort;
     state.history[step.nodeId] = resume.history;
     state.resume = null;
     appendSessionEvent(deps.db, sessionId, 'resume', { nodeId: step.nodeId, stage: resume.stage, fromSessionId: resume.fromSessionId });
     return;
   }
-  const first = stagesFor(step.mode)[0] as Stage;
-  await produceCard(deps, sessionId, state, step, first, null, goalText);
+  const first = stepStages(step)[0] as Stage;
+  await produceCard(deps, sessionId, state, step, first, null, goal);
+}
+
+/** The step loop for a step: fitted to its aim, from the depth it started at. */
+function stepStages(step: LessonStep): Stage[] {
+  return stagesFor(step.aim, step.fromDepth);
 }
 
 /** Ask the tutor for the card of `stage` (grading `previous` in the same call when given) and show it. */
@@ -393,9 +435,9 @@ async function produceCard(
   step: LessonStep,
   stage: Stage,
   previous: TutorStepInput['previous'],
-  goalText: string,
+  goal: TutorGoal,
 ): Promise<Grade | null> {
-  const result = await runTutorStep(deps.provider, buildTutorInput(deps.db, state, step, previous, stage, goalText));
+  const result = await runTutorStep(deps.provider, buildTutorInput(deps.db, state, step, previous, stage, goal));
   if (!result.card) throw new Error('the tutor returned no card');
   state.stage = stage;
   state.card = result.card;
@@ -406,13 +448,22 @@ async function produceCard(
   return result.grade;
 }
 
-async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: SessionState, response: LearnerResponse, goalText: string): Promise<void> {
+async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: SessionState, response: LearnerResponse, goal: TutorGoal): Promise<void> {
   const { db } = deps;
   const step = state.plan.steps[state.stepIndex];
   const stage = state.stage;
   const card = state.card;
   if (!step || !stage || !card) throw new Error('no card to respond to');
-  const stages = stagesFor(step.mode);
+  const stages = stepStages(step);
+
+  // "I know this, test me": the question that shows the aim decides, with no explanation first
+  if (response.testMe && canTestOut(step, stage, state.edge)) {
+    state.edge = testOutEdge(state.edge, stage);
+    finishHistory(state, step.nodeId, stage, response, null);
+    await produceCard(deps, sessionId, state, step, certifyingStage(step.aim), null, goal);
+    appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response });
+    return;
+  }
 
   if (!isGraded(stage)) {
     // explain / support / reteach: the learner read it; an effort rating may ride along to the next evidence
@@ -422,7 +473,7 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     const resumeFrom = stage === 'support' || stage === 'reteach' ? (state.supportAfter ?? stage) : stage;
     state.supportAfter = null;
     const next = nextStage(stages, resumeFrom, 'none');
-    await advance(deps, sessionId, state, step, next, null, goalText);
+    await advance(deps, sessionId, state, step, next, null, goal);
     return;
   }
 
@@ -430,9 +481,9 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   const previous = { stage, card, response };
   let grade: Grade | null;
   if (nominalNext) {
-    grade = await produceCard(deps, sessionId, state, step, nominalNext, previous, goalText);
+    grade = await produceCard(deps, sessionId, state, step, nominalNext, previous, goal);
   } else {
-    const result = await runTutorStep(deps.provider, buildTutorInput(db, state, step, previous, null, goalText));
+    const result = await runTutorStep(deps.provider, buildTutorInput(db, state, step, previous, null, goal));
     grade = result.grade;
   }
   if (!grade) throw new Error('the tutor returned no grade');
@@ -440,30 +491,82 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade });
   writeOutcome(db, sessionId, state, step, stage, response, grade);
 
-  const { edge, action } = applyGrade(state.edge, grade.score);
+  const { edge, action } = applyGrade(state.edge, { score: grade.score, confidence: response.confidence, stage, aim: step.aim });
   state.edge = edge;
   if (action === 'support' || action === 'escalate') {
     state.supportAfter = stage;
-    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goalText);
+    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goal);
     return;
   }
-  const next = nextStage(stages, stage, action);
+
+  // the idea's half hour (design §4.3)
+  const missing = stage !== 'predict' && grade.score < PASS_SCORE && grade.missingBackground !== null;
+  const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
+  if (box === 'simplify') {
+    const reason = missing && grade.missingBackground ? `It needs ${grade.missingBackground.name}, which this goal's time does not also cover` : 'It was taking longer than its half hour allows';
+    simplifyStep(db, state, step, SIMPLE_AIM, reason);
+    // start again from a plain explanation of the core idea; the loop goes on from there
+    state.edge = { ...state.edge, consecutiveFailures: 0, jumpedFrom: null };
+    await produceCard(deps, sessionId, state, step, 'explain', null, goal);
+    return;
+  }
+  if (box === 'wrapUp') state.edge = { ...state.edge, wrapping: true };
+  const next = box === 'wrapUp' ? nextStage(stepStages(step), stage, 'wrapUp') : nextStage(stepStages(step), stage, action, edge, step.aim);
   if (next === nominalNext) {
-    if (next === null) await advance(deps, sessionId, state, step, null, null, goalText);
+    if (next === null) await advance(deps, sessionId, state, step, null, null, goal);
     return; // the card for `next` is already showing
   }
-  await advance(deps, sessionId, state, step, next, null, goalText);
+  await advance(deps, sessionId, state, step, next, null, goal);
 }
 
-/** Move to `next` within the node (producing its card) or finish the node and begin the next step. */
-async function advance(deps: SessionDeps, sessionId: string, state: SessionState, step: LessonStep, next: Stage | null, previous: TutorStepInput['previous'], goalText: string): Promise<void> {
+/** "I know this, test me" applies to a prediction or explanation with a deeper question still ahead. */
+function canTestOut(step: LessonStep, stage: Stage, edge: EdgeState): boolean {
+  if (step.aim < 2 || edge.jumpedFrom || (stage !== 'predict' && stage !== 'explain')) return false;
+  const stages = stepStages(step);
+  return stages.indexOf(certifyingStage(step.aim)) > stages.indexOf(stage);
+}
+
+/** Minutes the learner has spent on this idea: in this session, plus what a carried-over idea had before. */
+function minutesOn(db: Database, state: SessionState, sessionId: string, nodeId: string): number {
+  return secondsOnNode(db, [sessionId], nodeId) / 60 + (state.priorMinutes?.[nodeId] ?? 0);
+}
+
+/**
+ * Simplify the step's idea for the goal (capped at `depth`, with the reason), and follow the caps
+ * through the rest of today's plan: dependents planned deeper are capped to explaining.
+ */
+function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth: Depth, reason: string): void {
+  const changed = simplifyIdea(db, state.goalId, step.nodeId, depth, reason);
+  for (const st of state.plan.steps) {
+    const cap = changed.get(st.nodeId);
+    if (cap === undefined) continue;
+    if (state.nodeStatus[st.nodeId] !== 'done') st.aim = Math.min(st.aim, cap) as Depth;
+    st.simplified = st.simplified ?? (st.nodeId === step.nodeId ? reason : `Simplified with ${step.name}`);
+  }
+}
+
+/**
+ * Move to `next` within the node (producing its card) or finish the node and begin the next step. An
+ * idea that ends below its aim (its half hour ran out, or it never came together) is kept at the depth
+ * it reached and marked simplified, so the plan stops counting on more and the learner can go deeper later.
+ */
+async function advance(deps: SessionDeps, sessionId: string, state: SessionState, step: LessonStep, next: Stage | null, previous: TutorStepInput['previous'], goal: TutorGoal): Promise<void> {
   if (next === null) {
+    const reached = getState(deps.db, step.nodeId)?.depth ?? 0;
+    if (step.aim >= 2 && reached < step.aim) simplifyStep(deps.db, state, step, Math.max(1, reached) as Depth, `Learned to ${DEPTH_WORD[reached] ?? 'a first look'} within its half hour; the plan asked ${DEPTH_WORD[step.aim] ?? 'more'}`);
     state.nodeStatus[step.nodeId] = 'done';
     appendSessionEvent(deps.db, sessionId, 'node-done', { nodeId: step.nodeId });
-    await beginStep(deps, sessionId, state, state.stepIndex + 1, goalText);
+    await beginStep(deps, sessionId, state, state.stepIndex + 1, goal);
     return;
   }
-  await produceCard(deps, sessionId, state, step, next, previous, goalText);
+  await produceCard(deps, sessionId, state, step, next, previous, goal);
+}
+
+const DEPTH_WORD = ['a first look', 'recognizing it', 'explaining it', 'deriving it', 'applying it', 'transferring it'];
+
+/** What the tutor needs to know about the goal: its sentence and how the time reads it. */
+function tutorGoal(goal: Goal | undefined): TutorGoal {
+  return { text: goal?.text ?? '', level: goal?.level ?? null, scope: goal?.scope ?? null, assessment: goal?.assessment ?? 'none', focus: goal?.focus ?? [] };
 }
 
 function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade): void {
@@ -492,22 +595,25 @@ function writeOutcome(db: Database, sessionId: string, state: SessionState, step
   }
 }
 
-function buildTutorInput(db: Database, state: SessionState, step: LessonStep, previous: TutorStepInput['previous'], nextStage: Stage | null, goalText: string): TutorStepInput {
+function buildTutorInput(db: Database, state: SessionState, step: LessonStep, previous: TutorStepInput['previous'], nextStage: Stage | null, goal: TutorGoal): TutorStepInput {
   const view = loadKnowledge(db);
   const node = view.nodes.get(step.nodeId);
   if (!node) throw new Error(`unknown node ${step.nodeId}`);
+  const simplified = new Set(listTargets(db, state.goalId, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId));
   const premiseIds = new Set<string>();
   for (const chain of view.index.into.get(node.id) ?? []) for (const p of chain.premises) premiseIds.add(p);
   const premises = [...premiseIds].map((id) => {
     const p = view.nodes.get(id);
     const s = getState(db, id);
-    return { name: p?.name ?? id, statement: p?.statement ?? '', owned: view.owned.has(id), ownStatement: s?.ownStatement ?? null, handle: s?.handle ?? null };
+    return { name: p?.name ?? id, statement: p?.statement ?? '', owned: view.owned.has(id), ownStatement: s?.ownStatement ?? null, handle: s?.handle ?? null, simplified: simplified.has(id) };
   });
   const deps = [...dependents(node.id, view.index, 1, 1).keys()].map((id) => ({ name: view.nodes.get(id)?.name ?? id }));
   return {
-    goalText,
+    goal,
     why: step.why,
     node: { id: node.id, kind: node.kind, name: node.name, statement: node.statement },
+    aim: step.aim,
+    simplified: step.simplified,
     premises,
     dependents: deps,
     bugs: listBugsForNode(db, node.id).map((b) => b.description),
@@ -559,7 +665,7 @@ export function carriedPlace(session: SessionRecord<SessionState>, reached: (nod
   }
   if (!resume) return null;
   const carriedStep = s.plan.steps.find((st) => st.nodeId === resume.nodeId);
-  return carriedStep && !reached(carriedStep.nodeId, carriedStep.targetDepth) ? { step: carriedStep, resume } : null;
+  return carriedStep && !reached(carriedStep.nodeId, carriedStep.aim) ? { step: carriedStep, resume } : null;
 }
 
 /** The carried idea goes first; the planner's own pick of it is dropped. */
@@ -618,7 +724,7 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
 function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSnapshot {
   const s = session.state;
   const step = s.phase === 'teach' ? s.plan.steps[s.stepIndex] : undefined;
-  const stages = step ? stagesFor(step.mode) : [];
+  const stages = step ? stepStages(step) : [];
   return {
     id: session.id,
     goalId: s.goalId,
@@ -634,7 +740,10 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
             nodeId: step.nodeId,
             name: step.name,
             why: step.why,
-            mode: step.mode,
+            aim: step.aim,
+            simplified: step.simplified,
+            note: s.edge.wrapping ? 'This idea has had its half hour: one last step, then on to the next.' : null,
+            canTestOut: canTestOut(step, s.stage, s.edge),
             stage: s.stage,
             stages,
             stageIndex: Math.max(0, stages.indexOf(s.supportAfter ?? s.stage)),

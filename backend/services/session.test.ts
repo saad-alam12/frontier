@@ -6,11 +6,12 @@ import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { FakeEmbedder } from '../ingest/embedder';
 import { openDatabase } from '../store/db';
-import { createGoal, addCapabilities } from '../store/goals';
+import { addCapabilities, capTargets, createGoal, listTargets } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
 import { activeSession, listSessionEvents, listSessions } from '../store/sessions';
+import { logTime } from '../store/activity';
 import { listSources } from '../store/sources';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
@@ -33,7 +34,9 @@ function fakeTutor(scores: number[]) {
     const stage = /Produce the \*\*(\w+)\*\* card|produce the \*\*(\w+)\*\* card/.exec(text);
     const next = stage?.[1] ?? stage?.[2] ?? null;
     const score = grading ? (queue.shift() ?? 0.8) : null;
-    const grade = grading ? { score, feedback: `Scored ${score}.`, misconception: score !== null && score < 0.3 ? 'Thinks equilibrium means best for all.' : null, confidentlyWrong: false } : null;
+    const said = text.split("## Learner's response")[1] ?? '';
+    const missingBackground = /never heard of/.test(said) ? { name: 'best responses', hours: 2 } : null;
+    const grade = grading ? { score, feedback: `Scored ${score}.`, misconception: score !== null && score < 0.3 ? 'Thinks equilibrium means best for all.' : null, confidentlyWrong: false, missingBackground } : null;
     const cards: Record<string, unknown> = {
       predict: { stage: 'predict', prompt: 'What would make a profile stable?' },
       explain: { stage: 'explain', markdown: '## The idea\n\nNo one gains by moving alone, so $u_i(s) \\ge u_i(s_i\', s_{-i})$.' },
@@ -50,7 +53,7 @@ function fakeTutor(scores: number[]) {
   };
 }
 
-async function setup(scores: number[] = []) {
+async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 | 3 | 4 }[] = []) {
   const db = openDatabase(':memory:');
   const ids = seedExampleGraph(db);
   const own = (key: string) => recordEvidence(db, { nodeId: ids.get(key) as string, kind: 'explain', score: 0.95, reasoning: 't' });
@@ -59,6 +62,7 @@ async function setup(scores: number[] = []) {
   addCapabilities(db, goal.id, [
     { statement: 'Can find Nash equilibria', targets: [{ nodeId: ids.get('nash') as string, depth: 3 }, { nodeId: ids.get('profile') as string, depth: 1 }, { nodeId: ids.get('bestResponse') as string, depth: 1 }] },
     { statement: 'Can explain dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 2 }, { nodeId: ids.get('dominantNash') as string, depth: 3 }] },
+    ...(extra.length ? [{ statement: 'Can use it', targets: extra.map((e) => ({ nodeId: ids.get(e.key) as string, depth: e.depth })) }] : []),
   ]);
   refreshGoalFields(db);
   const tutor = fakeTutor(scores);
@@ -129,11 +133,11 @@ describe('stopping an answer (Esc)', () => {
 
 describe('teaching session', () => {
   it('runs a node through the step loop, writing evidence, own words and bugs', async () => {
-    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.9, 0.2, 0.7, 0.7, 0.8, 0.85]);
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.2, 0.7, 0.7, 0.8]);
     let snap = await startSession(deps, goal.id);
     expect(snap.phase).toBe('orient'); // no previous session: no reconstruct
     expect(snap.plan.steps.map((s) => s.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
-    expect(snap.plan.steps.map((s) => s.mode)).toEqual(['index', 'index', 'derive']);
+    expect(snap.plan.steps.map((s) => s.aim)).toEqual([1, 1, 3]);
     snap = await respond(deps, snap.id, answer(''));
     expect(snap.phase).toBe('teach');
     expect(snap.current?.stage).toBe('index');
@@ -147,7 +151,7 @@ describe('teaching session', () => {
     expect(JSON.stringify(snap.card)).not.toContain('answerKey');
     await walk('the move that pays best given the others');
     expect(snap.current?.stage).toBe('explain');
-    expect(snap.history.nodes.find((n) => n.nodeId === brId)?.items.at(-1)?.grade?.score).toBe(0.9);
+    expect(snap.history.nodes.find((n) => n.nodeId === brId)?.items.at(-1)?.grade?.score).toBe(0.8);
     snap = await respond(deps, snap.id, { answer: '', effort: 2 });
     expect(snap.current?.stage).toBe('check');
     await walk('no idea'); // 0.2 → misconception recorded
@@ -158,24 +162,24 @@ describe('teaching session', () => {
     await walk('this requires payoffs'); // 0.7 → link kept for the transcript
     expect(snap.current?.stage).toBe('compress');
     snap = await respond(deps, snap.id, { answer: 'The reply that pays most given what the others do.', handle: 'best reply' });
-    expect(snap.current?.stage).toBe('use');
+    // the plan asks Nash to be derived: the loop stops there, with no use task on top
+    expect(snap.phase).not.toBe('teach');
     expect(getState(db, brId)?.ownStatement).toBe('The reply that pays most given what the others do.');
     expect(getState(db, brId)?.handle).toBe('best reply');
-    await walk('(A,B); the other game has a cycle'); // 0.85 → node done
     // the conversation so far: every earlier card, the answer exactly as given and its rating, rebuilt from events
     const restored = currentSession(db);
     expect(restored?.history.nodes.map((n) => n.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
     expect(restored?.history.nodes.slice(0, 2).every((n) => n.status === 'done' && n.score !== null)).toBe(true);
     const nashItems = restored?.history.nodes[2]?.items ?? [];
-    expect(nashItems.map((h) => h.stage)).toEqual(['predict', 'explain', 'check', 'derive', 'connect', 'compress', 'use']);
+    expect(nashItems.map((h) => h.stage)).toEqual(['predict', 'explain', 'check', 'derive', 'connect', 'compress']);
     expect(nashItems[0]?.response?.answer).toBe('the move that pays best given the others');
-    expect(nashItems[0]?.grade?.feedback).toBe('Scored 0.9.');
+    expect(nashItems[0]?.grade?.feedback).toBe('Scored 0.8.');
     expect(nashItems[2]?.card).toEqual({ stage: 'check', question: 'Is (A,B) stable here?' });
     expect(JSON.stringify(restored?.history)).not.toContain('answerKey');
     const evidence = listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === brId);
-    expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'derive', 'explain', 'predict', 'use'].sort());
+    expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'derive', 'explain', 'predict'].sort());
     expect(evidence.find((e) => e.kind === 'check')?.effort).toBe(2);
-    expect(getState(db, brId)?.depth).toBe(4);
+    expect(getState(db, brId)?.depth).toBe(3);
   });
 
   it('resumes at the same card after a restart and closes with recall, preview and transcript ingestion', async () => {
@@ -227,7 +231,7 @@ describe('teaching session', () => {
   });
 
   it('ending a session keeps the place: the next one recalls finished ideas and continues the half-done one', async () => {
-    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.9, 0.8]);
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.8]);
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, answer(''));
     const nashId = ids.get('nash') as string;
@@ -304,8 +308,8 @@ describe('teaching session', () => {
     expect(snap.phase).toBe('close');
   });
 
-  it('drops to a worked example after three failures and skips ahead after easy successes', async () => {
-    const { ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.95, 0.95, 0.9]);
+  it('drops to a worked example after three failures; an idea that ends below its aim is marked simplified', async () => {
+    const { db, ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.95, 0.95]);
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, answer(''));
     const nashId = ids.get('nash') as string;
@@ -323,8 +327,119 @@ describe('teaching session', () => {
     expect(snap.current?.stage).toBe('connect'); // resumes after the stage that triggered support
     snap = await respond(deps, snap.id, answer('this requires payoffs')); // 0.95
     expect(snap.current?.stage).toBe('compress');
-    snap = await respond(deps, snap.id, answer('own words')); // 0.95 → skip ahead; compress is the last before use, so use follows
-    expect(snap.current?.stage).toBe('use');
+    snap = await respond(deps, snap.id, answer('own words')); // 0.95: explained, never derived
+    expect(snap.phase).not.toBe('teach');
+    expect(getState(db, nashId)?.depth).toBe(2);
+    const target = listTargets(db, goal.id, { all: true }).find((t) => t.nodeId === nashId);
+    expect(target?.simplified).toBe('Learned to explaining it within its half hour; the plan asked deriving it');
+    expect(target?.approvedDepth).toBe(2);
+  });
+
+  it('checks off an idea the learner knows: a strong prediction goes straight to the question that shows the aim', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.95, 0.9]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const nashId = ids.get('nash') as string;
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    expect(snap.current?.canTestOut).toBe(true);
+    snap = await respond(deps, snap.id, answer('nobody gains by moving alone: each plays a best reply', 0.9));
+    expect(snap.current?.stage).toBe('derive');
+    snap = await respond(deps, snap.id, answer('mutual best responses, both directions', 0.9));
+    expect(snap.phase).not.toBe('teach');
+    expect(listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === nashId).map((e) => e.kind)).toEqual(['predict', 'derive']);
+    expect(getState(db, nashId)?.depth).toBe(3);
+  });
+
+  it('"Test me" jumps to the aim\u2019s question, and failing it goes back to teaching', async () => {
+    const { ids, goal, deps } = await setup([0.8, 0.8, 0.3, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const nashId = ids.get('nash') as string;
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    snap = await respond(deps, snap.id, { answer: '', testMe: true });
+    expect(snap.current?.stage).toBe('derive');
+    expect(snap.current?.canTestOut).toBe(false);
+    snap = await respond(deps, snap.id, answer('something vague')); // 0.3
+    expect(snap.current?.stage).toBe('explain');
+    const items = snap.history.nodes.find((n) => n.nodeId === nashId)?.items ?? [];
+    expect(items.map((h) => [h.stage, h.response?.testMe ?? false])).toEqual([
+      ['predict', true],
+      ['derive', false],
+    ]);
+  });
+
+  it('an idea the plan asks to explain runs four cards and is never derived or applied', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.8, 0.8]);
+    const nashId = ids.get('nash') as string;
+    for (const t of listTargets(db, goal.id, { all: true }).filter((x) => x.nodeId === nashId)) capTargets(db, goal.id, t.nodeId, 2, 'test cap');
+    refreshGoalFields(db);
+    let snap = await startSession(deps, goal.id);
+    expect(snap.plan.steps.find((st) => st.nodeId === nashId)?.aim).toBe(2);
+    snap = await respond(deps, snap.id, answer(''));
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    expect(snap.current?.stages).toEqual(['predict', 'explain', 'check', 'compress']);
+    let guard = 0;
+    while (snap.phase === 'teach' && guard++ < 10) snap = await respond(deps, snap.id, answer('an answer', 0.66));
+    const stages = currentSession(db)?.history.nodes.find((n) => n.nodeId === nashId)?.items.map((h) => h.stage);
+    expect(stages).toEqual(['predict', 'explain', 'check', 'compress']);
+  });
+
+  it('simplifies an idea when the learner lacks what it needs, and the ideas built on it', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.6, 0.2, 0.8], [{ key: 'nashMutualBr', depth: 3 }]);
+    const nashId = ids.get('nash') as string;
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    snap = await respond(deps, snap.id, answer('a guess about stability')); // predict 0.6
+    snap = await respond(deps, snap.id, { answer: '' }); // explain read
+    expect(snap.current?.stage).toBe('check');
+    snap = await respond(deps, snap.id, answer("I've never heard of a best reply")); // 0.2 and a missing prerequisite
+    expect(snap.current?.stage).toBe('explain'); // a fresh, plain explanation of the core idea
+    expect(snap.current?.aim).toBe(2);
+    expect(snap.current?.simplified).toBe("It needs best responses, which this goal's time does not also cover");
+    expect(snap.current?.stages).toEqual(['predict', 'explain', 'check', 'compress']);
+    const last = deps.provider.calls.at(-1)?.messages[0]?.content ?? '';
+    expect(last).toContain('## Simplified for this learner');
+    const targets = listTargets(db, goal.id, { all: true });
+    expect(targets.find((t) => t.nodeId === nashId)?.approvedDepth).toBe(2);
+    const built = targets.find((t) => t.nodeId === ids.get('nashMutualBr'));
+    expect(built?.simplified).toBe('Simplified with Nash equilibrium');
+    expect(built?.depth).toBeLessThanOrEqual(2);
+  });
+
+  it('gives an idea its half hour: past it, one last step in the learner\u2019s own words, then on', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.6, 0.6, 0.8]);
+    const nashId = ids.get('nash') as string;
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    snap = await respond(deps, snap.id, answer('a guess')); // predict 0.6
+    snap = await respond(deps, snap.id, { answer: '' }); // explain read → check
+    logTime(db, 'session', { goalId: goal.id, sessionId: snap.id, nodeId: nashId }, 31 * 60);
+    snap = await respond(deps, snap.id, answer('partly')); // check 0.6, past the half hour
+    expect(snap.current?.stage).toBe('compress');
+    expect(snap.current?.note).toMatch(/half hour/);
+    snap = await respond(deps, snap.id, answer('in my words')); // 0.8
+    expect(snap.phase).not.toBe('teach');
+    expect(listTargets(db, goal.id, { all: true }).find((t) => t.nodeId === nashId)?.simplified).toMatch(/^Learned to explaining it/);
+  });
+
+  it('fits a session into 45 minutes: the planner may pick more, code keeps what fits', async () => {
+    const { db, ids, goal, deps } = await setup([], [{ key: 'nashMutualBr', depth: 3 }, { key: 'findPureNash', depth: 3 }, { key: 'spe', depth: 3 }]);
+    recordEvidence(db, { nodeId: ids.get('nash') as string, kind: 'derive', score: 1, reasoning: 'known' });
+    recordEvidence(db, { nodeId: ids.get('bestResponse') as string, kind: 'derive', score: 1, reasoning: 'known' });
+    recordEvidence(db, { nodeId: ids.get('profile') as string, kind: 'derive', score: 1, reasoning: 'known' });
+    refreshGoalFields(db);
+    deps.provider.script('planner', (req: CompleteRequest<unknown>) => {
+      const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+      expect(text).toMatch(/the session has about 45 minutes/);
+      const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1] as string);
+      return { title: 'Big day', orientation: 'Everything at once, which will not fit.', steps: all.slice(0, 6).map((nodeId) => ({ nodeId, why: 'needed' })) };
+    });
+    const snap = await startSession(deps, goal.id);
+    const minutes = snap.plan.steps.reduce((sum, st) => sum + st.minutes, 0);
+    expect(snap.plan.steps.length).toBeGreaterThan(0);
+    expect(minutes <= 45 || snap.plan.steps.length === 1).toBe(true);
   });
 
   it('escalates to a fresh explanation from the escalation model when the learner fails after a worked example', async () => {

@@ -8,9 +8,11 @@ const DICTATED = 'i think you multiply the three jacobeans h times g times f so 
 
 function stepInput(answer: string): TutorStepInput {
   return {
-    goalText: 'Pass Deep Learning in Physics',
+    goal: { text: 'Pass Deep Learning in Physics', level: 'rigorous', scope: null, assessment: 'written_exam', focus: [] },
     why: 'the reverse pass is built on it',
     node: { id: 'node_jac', kind: 'claim', name: 'Jacobian of a composition', statement: 'The Jacobian of $h \\circ g \\circ f$ is $J_h J_g J_f$.' },
+    aim: 3,
+    simplified: null,
     premises: [],
     dependents: [],
     bugs: [],

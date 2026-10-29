@@ -685,6 +685,14 @@ select.role-tag {
   align-items: center;
   gap: 12px;
 }
+/* A quiet line above a card: the idea was simplified, or its half hour is up. */
+.session-note {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 .thinking-row {
   display: flex;
   flex-wrap: wrap;

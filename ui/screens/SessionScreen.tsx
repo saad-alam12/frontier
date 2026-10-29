@@ -15,6 +15,8 @@ import { STAGE_LABEL } from '../lib/stages';
 
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
+/** What a step does with its idea, by its aim. */
+const AIM_LABEL = ['', 'Overview', 'Explain', 'Explain and derive', 'Explain, derive and apply'];
 
 type CardDraft = { answer: string; confidence: number | null; handle: string };
 const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' };
@@ -270,7 +272,7 @@ function HistoryNodeView({ node, open, onToggle }: { node: HistoryNode; open: bo
 
 /** One past step: the card as shown, the learner's answer exactly as given, then the rating. */
 function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryItem; thinking?: boolean; onStop?: () => void }) {
-  const read = isReading(item.card.stage);
+  const read = isReading(item.card.stage) && !item.response?.testMe;
   const effort = item.response?.effort;
   const meta = item.response
     ? [item.response.confidence !== undefined ? capitalize(confidenceLabel(item.response.confidence)) : null, item.response.handle ? `Handle: ${item.response.handle}` : null].filter(Boolean).join(' · ')
@@ -281,7 +283,11 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
       <CardText card={item.card} past />
       {!read && item.response && (
         <div className="answer-block flex flex-col gap-[8px]">
-          {item.response.answer.trim() ? <div className="learner-text whitespace-pre-wrap">{item.response.answer}</div> : <div className="learner-text text-muted">No idea</div>}
+          {item.response.answer.trim() ? (
+            <div className="learner-text whitespace-pre-wrap">{item.response.answer}</div>
+          ) : (
+            <div className="learner-text text-muted">{item.response.testMe ? 'I know this, test me' : 'No idea'}</div>
+          )}
           {meta && <div className="t-caption text-muted">{meta}</div>}
         </div>
       )}
@@ -456,9 +462,18 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
     onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined }, draftKey);
   };
 
+  const testMe = current.canTestOut ? () => onSend({ answer: '', testMe: true }) : undefined;
+  const notes = (current.simplified || current.note) && (
+    <div className="flex flex-col gap-[6px]">
+      {current.simplified && <p className="session-note m-0">Simplified to the core idea. {current.simplified}.</p>}
+      {current.note && <p className="session-note m-0">{current.note}</p>}
+    </div>
+  );
+
   if (isReading(card.stage)) {
     return (
       <section className="flex flex-col gap-[32px]">
+        {notes}
         <CardText card={card} />
         <div className="flex flex-col gap-[12px]">
           <span className="text-[15px] text-secondary">How hard was that to follow?</span>
@@ -474,6 +489,11 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
           <Button kind="primary" onClick={() => onSend({ answer: '', effort: effort ?? undefined })} disabled={busy}>
             Continue
           </Button>
+          {testMe && (
+            <Button kind="quiet" onClick={testMe} disabled={busy}>
+              I know this, test me
+            </Button>
+          )}
         </div>
       </section>
     );
@@ -482,6 +502,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
   const asksConfidence = card.stage !== 'compress' && card.stage !== 'connect';
   return (
     <section className="flex flex-col gap-[32px]">
+      {notes}
       <CardText card={card} />
       <div className="flex flex-col gap-[14px]">
         <AnswerSurface
@@ -499,7 +520,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
           <input className="input" aria-label="Handle" placeholder="A handle, if you like: a short phrase, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />
         )}
       </div>
-      <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} disabled={busy} />
+      <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} onTestMe={testMe} disabled={busy} />
     </section>
   );
 }
@@ -538,7 +559,9 @@ function PlanPanel({ snap }: { snap: SessionSnapshot }) {
           children: (
             <div className="flex flex-col gap-[2px]">
               <Markdown text={s.name} inline className={s.status === 'pending' ? 'text-secondary' : ''} />
-              <span className="t-small text-muted">{s.mode === 'index' ? 'Index pass' : s.mode === 'derive' ? 'Teach and derive' : 'Teach'}</span>
+              <span className="t-small text-muted">
+                {AIM_LABEL[Math.min(4, s.aim)]} · about {s.minutes} min{s.simplified ? ' · simplified' : ''}
+              </span>
             </div>
           ),
         })),

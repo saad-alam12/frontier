@@ -21,6 +21,7 @@ import {
   addTargets,
   approveGoal,
   approvePlannedDepths,
+  capTargets,
   clearApprovedDepths,
   createGoal,
   deleteCapabilities,
@@ -179,6 +180,29 @@ export function approveGoalPlan(db: Database, goalId: string): void {
   });
   refreshGoalFields(db);
   approvePlannedDepths(db, goalId);
+}
+
+/** A simplified idea aims to be explained; its dependents can then be explained, not derived. */
+const SIMPLE_DEPTH: Depth = 2;
+
+/**
+ * Simplify an idea for a goal (design §4.3): the learner is missing what it needs, or its half hour
+ * ran out. The goal's targets on it are capped at `depth` with the reason, and so are the goal's ideas
+ * that use it as a direct premise and are planned to be derived or deeper (a derivation cannot rest on
+ * an intuition): they are capped at explaining. Returns every idea that changed, with its new cap.
+ */
+export function simplifyIdea(db: Database, goalId: string, nodeId: string, depth: Depth, reason: string): Map<string, Depth> {
+  const view = loadKnowledge(db);
+  const name = view.nodes.get(nodeId)?.name ?? nodeId;
+  const planned = new Map<string, number>();
+  for (const t of listTargets(db, goalId)) planned.set(t.nodeId, Math.max(planned.get(t.nodeId) ?? 0, t.depth));
+  const changed = new Map<string, Depth>([[nodeId, depth]]);
+  for (const chain of view.index.outOf.get(nodeId) ?? []) if ((planned.get(chain.conclusion) ?? 0) > SIMPLE_DEPTH) changed.set(chain.conclusion, SIMPLE_DEPTH);
+  transaction(db, () => {
+    for (const [id, cap] of changed) capTargets(db, goalId, id, cap, id === nodeId ? reason : `Simplified with ${name}`);
+  });
+  refreshGoalFields(db);
+  return changed;
 }
 
 /** Add the current depth of every idea the goal targets that is not in its baseline yet. */

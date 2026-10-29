@@ -43,6 +43,7 @@ interface TargetRow {
   planned_depth: number | null;
   core: number;
   approved_depth: number | null;
+  simplified: string | null;
 }
 
 const toGoal = (r: GoalRow): Goal => ({
@@ -79,6 +80,7 @@ const toTarget = (r: TargetRow): Target => ({
   idealDepth: r.depth as Depth,
   core: r.core === 1,
   approvedDepth: r.approved_depth as Depth | null,
+  simplified: r.simplified,
 });
 
 /** What the learner states about a goal; everything else is derived. */
@@ -259,9 +261,16 @@ export function approvePlannedDepths(db: Database, goalId: string): void {
   db.prepare('UPDATE targets SET approved_depth = COALESCE(planned_depth, depth) WHERE approved_depth IS NULL AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
 }
 
-/** Lift the caps before the plan is approved again (a new time re-plans from the ideal depths). */
+/** Lift the caps before the plan is approved again (a new time re-plans from the ideal depths). Simplified ideas keep theirs. */
 export function clearApprovedDepths(db: Database, goalId: string): void {
-  db.prepare('UPDATE targets SET approved_depth = NULL WHERE capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
+  db.prepare('UPDATE targets SET approved_depth = NULL WHERE simplified IS NULL AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
+}
+
+/** Simplify an idea for a goal: cap its targets at `depth` and say why (the first reason stays). */
+export function capTargets(db: Database, goalId: string, nodeId: string, depth: Depth, reason: string): void {
+  db.prepare(
+    'UPDATE targets SET approved_depth = MIN(COALESCE(approved_depth, depth), ?), simplified = COALESCE(simplified, ?) WHERE node_id = ? AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)',
+  ).run(depth, reason, nodeId, goalId);
 }
 
 export function deleteCapabilities(db: Database, ids: string[]): void {

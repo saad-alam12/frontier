@@ -96,8 +96,21 @@ export function AnswerSurface({
   );
 }
 
-/** Submit, "No idea" (submits empty) and the keyboard hint, under every answer field. */
-export function AnswerActions({ onSubmit, onNoIdea, submitLabel = 'Submit', disabled }: { onSubmit: () => void; onNoIdea: () => void; submitLabel?: string; disabled?: boolean }) {
+/** Submit, "No idea" (submits empty), "test me" where offered, and the keyboard hint, under every answer field. */
+export function AnswerActions({
+  onSubmit,
+  onNoIdea,
+  onTestMe,
+  submitLabel = 'Submit',
+  disabled,
+}: {
+  onSubmit: () => void;
+  onNoIdea: () => void;
+  /** "I know this, test me": skip to the question that shows the idea is yours. */
+  onTestMe?: () => void;
+  submitLabel?: string;
+  disabled?: boolean;
+}) {
   return (
     <div className="answer-actions">
       <Button kind="primary" onClick={onSubmit} disabled={disabled}>
@@ -106,6 +119,11 @@ export function AnswerActions({ onSubmit, onNoIdea, submitLabel = 'Submit', disa
       <Button onClick={onNoIdea} disabled={disabled}>
         I have no idea
       </Button>
+      {onTestMe && (
+        <Button kind="quiet" onClick={onTestMe} disabled={disabled}>
+          I know this, test me
+        </Button>
+      )}
       <span className="keyboard-hint">⌘↵ to submit</span>
     </div>
   );

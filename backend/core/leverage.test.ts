@@ -22,10 +22,10 @@ const goals: GoalContext = {
     ['cap3', { id: 'cap3', goalId: 'g2', statement: 's', order: 0, masteredAt: null }],
   ]),
   targets: [
-    { capabilityId: 'cap1', nodeId: 'c', depth: 3, idealDepth: 3, core: true, approvedDepth: null },
-    { capabilityId: 'cap2', nodeId: 'c', depth: 2, idealDepth: 2, core: false, approvedDepth: null },
-    { capabilityId: 'cap3', nodeId: 'a', depth: 5, idealDepth: 5, core: false, approvedDepth: null },
-    { capabilityId: 'cap1', nodeId: 'd', depth: 1, idealDepth: 1, core: false, approvedDepth: null },
+    { capabilityId: 'cap1', nodeId: 'c', depth: 3, idealDepth: 3, core: true, approvedDepth: null, simplified: null },
+    { capabilityId: 'cap2', nodeId: 'c', depth: 2, idealDepth: 2, core: false, approvedDepth: null, simplified: null },
+    { capabilityId: 'cap3', nodeId: 'a', depth: 5, idealDepth: 5, core: false, approvedDepth: null, simplified: null },
+    { capabilityId: 'cap1', nodeId: 'd', depth: 1, idealDepth: 1, core: false, approvedDepth: null, simplified: null },
   ],
 };
 

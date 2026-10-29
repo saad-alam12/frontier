@@ -41,7 +41,7 @@ const answers: Record<string, string> = {
 };
 
 let snap = await startSession(deps, goal.id);
-console.log(`plan: ${snap.plan.title} — ${snap.plan.steps.map((s) => `${s.name} [${s.mode}]`).join(', ')}`);
+console.log(`plan: ${snap.plan.title} — ${snap.plan.steps.map((s) => `${s.name} [aim ${s.aim}, ${s.minutes} min]`).join(', ')}`);
 snap = await respond(deps, snap.id, { answer: '' });
 let cards = 0;
 while (snap.phase === 'teach' && snap.card && cards < maxCards) {

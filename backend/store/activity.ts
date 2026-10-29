@@ -134,3 +134,12 @@ export function listActivity(db: Database, options: { kinds?: ActivityKind[]; si
   const sql = `SELECT * FROM activity${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY at, rowid`;
   return (db.prepare(sql).all(...args) as unknown as ActivityRow[]).map(toActivity);
 }
+
+/** Active seconds booked to an idea within the given sessions (its time so far). */
+export function secondsOnNode(db: Database, sessionIds: string[], nodeId: string): number {
+  if (sessionIds.length === 0) return 0;
+  const row = db
+    .prepare(`SELECT COALESCE(SUM(seconds), 0) AS s FROM activity WHERE kind = 'time' AND node_id = ? AND session_id IN (${sessionIds.map(() => '?').join(', ')})`)
+    .get(nodeId, ...sessionIds) as { s: number };
+  return row.s;
+}

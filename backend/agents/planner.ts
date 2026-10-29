@@ -7,13 +7,14 @@ export interface PlannerCandidate {
   kind: string;
   name: string;
   statement: string;
-  tier: string;
   onFringe: boolean;
   layer: number;
   dependsOn: string[];
   unlocksTargets: number;
   targetDepth: number;
   currentDepth: number;
+  /** Minutes it takes at that depth for this learner. */
+  minutes: number;
 }
 
 export interface PlannerInput {
@@ -25,6 +26,8 @@ export interface PlannerInput {
   candidates: PlannerCandidate[];
   ownedNames: string[];
   maxNodes: number;
+  /** Minutes the session has for new ideas. */
+  sessionMinutes: number;
 }
 
 export function buildPlanSchema(candidateIds: Set<string>, maxNodes: number) {
@@ -50,7 +53,7 @@ export async function runPlanner(provider: LlmProvider, input: PlannerInput): Pr
   const candidates = input.candidates
     .map(
       (c) =>
-        `- [${c.nodeId}] ${c.name} (${c.kind}, ${c.tier}${c.onFringe ? ', on the fringe now' : `, layer ${c.layer}`}) — unlocks ${c.unlocksTargets} target${c.unlocksTargets === 1 ? '' : 's'}; depth ${c.currentDepth} → ${c.targetDepth}\n  ${c.statement}${c.dependsOn.length ? `\n  after: ${c.dependsOn.join(', ')}` : ''}`,
+        `- [${c.nodeId}] ${c.name} (${c.kind}${c.onFringe ? ', on the fringe now' : `, layer ${c.layer}`}) — unlocks ${c.unlocksTargets} target${c.unlocksTargets === 1 ? '' : 's'}; depth ${c.currentDepth} → ${c.targetDepth}; about ${c.minutes} min\n  ${c.statement}${c.dependsOn.length ? `\n  after: ${c.dependsOn.join(', ')}` : ''}`,
     )
     .join('\n');
   const targets = input.targets.map((t) => `- [${t.nodeId}] ${t.name}: depth ${t.currentDepth} → ${t.targetDepth}`).join('\n');
@@ -59,7 +62,7 @@ export async function runPlanner(provider: LlmProvider, input: PlannerInput): Pr
     `## Capabilities\n${input.capabilities.map((c) => `- ${c}`).join('\n')}`,
     `## Targets\n${targets || '(none)'}`,
     `## Owned already\n${input.ownedNames.length ? input.ownedNames.join('; ') : '(nothing yet)'}`,
-    `## Candidates for this session (pick at most ${input.maxNodes})\n${candidates}`,
+    `## Candidates for this session (pick at most ${input.maxNodes}; the session has about ${Math.max(10, Math.round(input.sessionMinutes))} minutes)\n${candidates}`,
   ].join('\n\n');
   const result = await provider.complete({
     role: 'planner',

@@ -207,6 +207,8 @@ export interface Target {
   core: boolean;
   /** The depth of the plan the learner approved; automatic re-plans never go deeper. Null: not capped. */
   approvedDepth: Depth | null;
+  /** Why the idea was simplified for this goal (taught as its core intuition); null when it was not. */
+  simplified: string | null;
 }
 
 /**

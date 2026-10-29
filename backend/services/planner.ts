@@ -8,26 +8,43 @@ import { dependents } from '../core/graph';
 import { targetDepthFor } from '../core/leverage';
 import { computeFringe, doneSet } from '../core/ownership';
 import { orderByDependencies, planCandidates } from '../core/plan';
-import type { Depth, Tier } from '../core/types';
+import { SESSION_MINUTES, ideaMinutes } from '../core/budget';
+import { IDEA_MAX_MINUTES } from '../core/session';
+import { OWNED_DEPTH } from '../core/types';
+import type { Depth, NodeKind } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { getGoal, listCapabilities, listMaterials, listTargets } from '../store/goals';
+import { learnerSpeedNow } from './budget';
 import { loadKnowledge } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 
 export const MAX_PLAN_NODES = 6;
-
-export type StepMode = 'teach' | 'index' | 'derive';
 
 export interface LessonStep {
   nodeId: string;
   name: string;
   kind: string;
   why: string;
-  mode: StepMode;
-  tier: Tier;
-  targetDepth: Depth;
+  /** The depth this session takes the idea to: the deepest planned depth an active goal holds (2 for a premise no goal targets). */
+  aim: Depth;
+  /** Its depth when planned; 2 or more means deepening an idea the learner already explains. */
+  fromDepth: Depth;
+  /** Minutes the plan prices it at for this learner (at most 30); the session's time box allows at least 10. */
+  minutes: number;
+  /** Why the idea was simplified for this goal, once it was. */
+  simplified: string | null;
   dependsOn: string[];
+}
+
+/** The aim of an idea in a session: what the plan asks of it; a premise no goal targets is learned to be owned. */
+function aimFor(nodeId: string, view: KnowledgeView): Depth {
+  return targetDepthFor(nodeId, view.goals) || OWNED_DEPTH;
+}
+
+/** Minutes an idea takes this session, from the cost model and the learner's speed; never more than its half hour. */
+export function stepMinutes(kind: NodeKind, fromDepth: number, aim: number, speed: number): number {
+  return Math.max(1, Math.round(Math.min(IDEA_MAX_MINUTES, ideaMinutes(kind, fromDepth, aim, speed))));
 }
 
 export interface LessonPlan {
@@ -60,15 +77,17 @@ export function candidatesForGoal(db: Database, goalId: string, view: KnowledgeV
   return { targetIds, candidates, unreachable };
 }
 
-export function modeFor(tier: Tier, targetDepth: Depth): StepMode {
-  if (tier === 'index') return 'index';
-  return targetDepth >= 3 ? 'derive' : 'teach';
-}
-
-export async function planSession(db: Database, provider: LlmProvider, goalId: string, maxNodes = MAX_PLAN_NODES): Promise<LessonPlan> {
+/**
+ * Plan a session: the planner picks and orders up to `maxNodes` ideas; code keeps them in order while
+ * they fit the session's 45 minutes (always at least one), counting `reservedMinutes` already taken
+ * (an idea carried over from last time).
+ */
+export async function planSession(db: Database, provider: LlmProvider, goalId: string, options: { maxNodes?: number; reservedMinutes?: number } = {}): Promise<LessonPlan> {
+  const maxNodes = options.maxNodes ?? MAX_PLAN_NODES;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const view = loadKnowledge(db);
+  const speed = learnerSpeedNow(db);
   const { targetIds, candidates, unreachable } = candidatesForGoal(db, goalId, view);
   if (candidates.length === 0) {
     return { goalId, title: 'Nothing to plan yet', orientation: targetIds.length ? 'Every target is owned or unreachable from what you know.' : 'Compile the goal first.', steps: [], candidateCount: 0, unreachableTargets: unreachable };
@@ -84,13 +103,13 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
       kind: node?.kind ?? 'claim',
       name: node?.name ?? c.nodeId,
       statement: node?.statement ?? '',
-      tier: state?.tier ?? 'archive',
       onFringe: c.onFringe,
       layer: c.layer,
       dependsOn: c.dependsOn,
       unlocksTargets: unlocks,
-      targetDepth: targetDepthFor(c.nodeId, view.goals),
+      targetDepth: aimFor(c.nodeId, view),
       currentDepth: state?.depth ?? 0,
+      minutes: stepMinutes(node?.kind ?? 'claim', state?.depth ?? 0, aimFor(c.nodeId, view), speed),
     };
   });
   const result = await runPlanner(provider, {
@@ -101,8 +120,11 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
     candidates: plannerCandidates,
     ownedNames: [...view.owned].map((id) => view.nodes.get(id)?.name ?? id).slice(0, 60),
     maxNodes,
+    sessionMinutes: SESSION_MINUTES - (options.reservedMinutes ?? 0),
   });
   const byId = new Map(candidates.map((c) => [c.nodeId, c]));
+  const simplified = new Map<string, string>();
+  for (const t of listTargets(db, goalId, { all: true })) if (t.simplified && !simplified.has(t.nodeId)) simplified.set(t.nodeId, t.simplified);
   const whyById = new Map(result.steps.map((s) => [s.nodeId, s.why]));
   const ordered = orderByDependencies(
     result.steps.map((s) => s.nodeId),
@@ -110,19 +132,34 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
   );
   const steps: LessonStep[] = ordered.map((id) => {
     const node = view.nodes.get(id);
-    const state = view.states.get(id);
-    const tier = state?.tier ?? 'archive';
-    const targetDepth = targetDepthFor(id, view.goals);
+    const fromDepth = view.states.get(id)?.depth ?? 0;
+    const aim = aimFor(id, view);
     return {
       nodeId: id,
       name: node?.name ?? id,
       kind: node?.kind ?? 'claim',
       why: whyById.get(id) ?? '',
-      mode: modeFor(tier, targetDepth),
-      tier,
-      targetDepth,
+      aim,
+      fromDepth,
+      minutes: stepMinutes(node?.kind ?? 'claim', fromDepth, aim, speed),
+      simplified: simplified.get(id) ?? null,
       dependsOn: (byId.get(id)?.dependsOn ?? []).filter((d) => ordered.includes(d)),
     };
   });
-  return { goalId, title: result.title, orientation: result.orientation, steps, candidateCount: candidates.length, unreachableTargets: unreachable };
+  const fitted: LessonStep[] = [];
+  let minutes = options.reservedMinutes ?? 0;
+  for (const step of steps) {
+    if (fitted.length > 0 && minutes + step.minutes > SESSION_MINUTES) break;
+    fitted.push(step);
+    minutes += step.minutes;
+  }
+  const kept = new Set(fitted.map((st) => st.nodeId));
+  return {
+    goalId,
+    title: result.title,
+    orientation: result.orientation,
+    steps: fitted.map((st) => ({ ...st, dependsOn: st.dependsOn.filter((d) => kept.has(d)) })),
+    candidateCount: candidates.length,
+    unreachableTargets: unreachable,
+  };
 }

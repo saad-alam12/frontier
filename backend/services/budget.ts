@@ -173,6 +173,11 @@ export function replan(db: Database): Allocation {
   return allocation;
 }
 
+/** How fast this learner learns against the cost model (1 until there is enough to go on). */
+export function learnerSpeedNow(db: Database): number {
+  return planInputs(db).speed;
+}
+
 export interface PlanPreview {
   plan: GoalPlan;
   /** Ideas in the preview with the depth the plan gives each (0: left out). */

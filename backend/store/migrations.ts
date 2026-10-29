@@ -322,6 +322,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE targets ADD COLUMN approved_depth INTEGER;
     `,
   },
+  {
+    version: 8,
+    sql: `
+      -- R3: why an idea was simplified for a goal (taught as its core intuition, capped below the ideal).
+      ALTER TABLE targets ADD COLUMN simplified TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {
