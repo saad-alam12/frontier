@@ -52,7 +52,6 @@ export function Screen({
   aside,
   asideLabel,
   asideGap = 28,
-  asideNarrow,
   wide,
   mainRef,
 }: {
@@ -61,8 +60,6 @@ export function Screen({
   asideLabel?: string;
   /** 22 for the session's map panel, 28 elsewhere (visual-design §4). */
   asideGap?: 22 | 28;
-  /** The Map gives the canvas the room: a 400 px panel. */
-  asideNarrow?: boolean;
   /** Stats and the goal wizard use the full width. */
   wide?: boolean;
   mainRef?: React.Ref<HTMLElement>;
@@ -73,7 +70,7 @@ export function Screen({
         {children}
       </main>
       {aside && (
-        <aside className={asideNarrow ? 'side-panel is-narrow' : 'side-panel'} aria-label={asideLabel} style={{ gap: asideGap }}>
+        <aside className="side-panel" aria-label={asideLabel} style={{ gap: asideGap }}>
           {aside}
         </aside>
       )}

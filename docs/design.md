@@ -287,7 +287,12 @@ Per-source chunks run in order (each extractor sees the digest); different sourc
 
 - **Lookup.** A question ("difference between SPE and Nash?") returns node cards: (1) the learner's own statement and handle, (2) neighbourhood via chains, (3) the derivation path from solidly owned nodes down to this one, (4) the trail of the session where it was learned. Archive details hang under their parent node. Search is semantic (local embeddings) plus fuzzy name match. A lookup records `lookup` evidence (a weak retrieval signal).
 - **Trails.** Every session is stored as a timeline: predictions, answers, think-aloud text, errors, explanations that landed, nodes created. Browsable by date, goal or node; the system can narrate a trail ("how did I get from linear algebra to attention?").
-- **Map.** Zoomable graph of the world layer, laid out left to right from roots to results, coloured by the learner's depth, faded by FSRS freshness, goals outlined, fringe highlighted. Chains with several premises meet at a small implication marker before their conclusion.
+- **Map.** The world layer as a living graph that fills the window, in the manner of Obsidian's graph view. A force layout pulls ideas together along their chains and pushes them apart, so related ideas settle into clusters; foundations (ideas many others are built on) draw larger, and chains with several premises meet at a small implication marker before their conclusion. By default ideas are coloured by the learner's edge (yours in ivory, faded by FSRS freshness; learnable now ringed; beyond your edge muted), with simplified ideas underlined.
+  - **Reading it.** Hovering an idea lights it, its neighbours and their links and fades the rest, with a tooltip (name, where it stands, its goals, simplified). Labels fade in as you zoom and never overlap; the hovered, selected, neighbouring and searched ideas are always labelled. Ideas can be dragged.
+  - **Finding and focusing.** Search by name (Enter goes to the first match). Clicking an idea opens its card (statement, depth, built on, leads to, the path from what you own, Go deeper) beside the graph, and "Only its neighbourhood" shows just the ideas 1–3 chain steps away (the local graph).
+  - **View panel.** Filters: yours, learnable now, beyond your edge; one goal (its targets and everything they are built on); only simplified ideas; hide ideas with no links. Colour by your edge, goal, topic (clusters from the chains) or depth. Display: when labels appear, idea size, link thickness, arrows. Forces: centre, repel, link strength, link distance, and "Prerequisites left to right", which pulls each idea to a column by how far it sits from a root. The settings are remembered on this device.
+  - **Full screen** (button or F) covers the screen; Esc leaves it. **Replay how it grew** shows ideas appearing in the order they were first learned.
+  - The camera stays where the learner left it when the data refreshes; it fits the map when a filter or the flow changes and follows it while it settles. With reduced motion the layout settles at once and nothing glides.
 - **Bridges** (post-MVP). A background agent proposes structural analogies between distant areas; accepted bridges become explicit `analogous` notes the tutor uses for anchoring.
 
 ---
@@ -306,7 +311,7 @@ A desktop app (macOS first, then Windows/Linux). The rail has the four places yo
 | --- | --- |
 | Today | One next action (session, practice, or a draft plan to approve), goals with their time bars and pace, what's fading (three shown, the rest on request), the preview question, the two-week forecast and the last seven days against the goals' rhythm |
 | Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel |
-| Map | The knowledge graph view |
+| Map | The knowledge graph as a living, full-window graph: hover to see what an idea connects to, search, a card per idea with its local neighbourhood, a view panel (filters, colour, display, forces), full screen and a replay of how it grew (section 8) |
 | Goals | New goal as a four-step flow (goal, material, time, plan to approve; section 3.2); a goal page that leads with where it stands (ideas ready, time against budget, this week, sessions left, a time bar with a marker where the rhythm puts you, pace) and one action, then the probe, the lecture timeline with time per lecture, the skills (each opening to its ideas with depth pips: known, planned, asked beyond the time), skills left out for this time and expected ideas behind disclosures; the time can be changed in place with the plan re-computed live; Edit goal has every field on one page |
 | Stats | How you learn, filtered by time range, goal and topic (ideas clustered by chains): a few plain sentences on what stands out, then time per week by goal against the budgets' rhythm, every day for twelve weeks, what you know over time, what you keep (projected recall), how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget |
 | Lookup | Search, node cards, derivation path |
@@ -332,7 +337,7 @@ The interface uses cards and controls, not a raw chat log, wherever the step loo
 | Vector search | cosine similarity over embeddings stored in SQLite; sqlite-vec (MIT / Apache-2.0) if the graph outgrows that | — |
 | Local embeddings | transformers.js with a small model (e.g. bge-small-en-v1.5) | Apache-2.0 (check model license) |
 | Spaced-repetition math | ts-fsrs | MIT |
-| Graph view | Own layered layout and canvas renderer (no dependency); Cytoscape.js or sigma.js if it ever needs more | — |
+| Graph view | d3-force for the layout (with d3-dispatch, d3-quadtree, d3-timer) and an own canvas renderer | ISC |
 | Math rendering | KaTeX | MIT |
 | Markdown | react-markdown + remark/rehype plugins | MIT |
 | PDF text | pdfjs-dist | Apache-2.0 |

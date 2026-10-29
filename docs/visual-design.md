@@ -117,7 +117,15 @@ Past steps render above the current one in the same column: the card text in bod
 - Labels: owned 11 px `text-muted`, learnable 12 px `accent-text`, current 15 px `text`, beyond 11 px `text-faint`.
 - Legend below: Yours · Learnable now · Beyond your edge.
 - Then a "Why this now" card (`surface-raised`, radius 14): 12 px label, 16 px weight 300 sentence.
-- In the side panel the map shows the neighbourhood of the current idea (about 10–15 nodes) in two stacks of rows, laid out deterministically so it does not jump between steps: ideas you own on the left with labels ending at their point, the current and learnable ideas on the right with labels starting at their point, ideas beyond the edge one step further out. The dashed edge line runs down the gap and bends only to pass through the current idea. Labels have fixed boxes with an ellipsis (two lines for the current idea), so nothing ever overlaps; links touching the current idea are drawn in the accent at low opacity. The full Map screen (M6) uses the same node styles.
+- In the side panel the map shows the neighbourhood of the current idea (about 10–15 nodes) in two stacks of rows, laid out deterministically so it does not jump between steps: ideas you own on the left with labels ending at their point, the current and learnable ideas on the right with labels starting at their point, ideas beyond the edge one step further out. The dashed edge line runs down the gap and bends only to pass through the current idea. Labels have fixed boxes with an ellipsis (two lines for the current idea), so nothing ever overlaps; links touching the current idea are drawn in the accent at low opacity. The Map screen uses the same node styles.
+
+### Map screen (new in R3)
+- The graph fills the content area on `bg` (in full screen, the whole screen). Everything else floats over it: the title, counts and search top left; View, Replay how it grew and Full screen as quiet pills top right (`map-button`: `bg-panel` at 90%, inset 1px `border-strong`, 13 px `text-secondary`); Fit, + and − bottom right; the legend bottom left in 12 px.
+- Ideas: radius 3 px plus 1.6 px per √(ideas built on it), owned ones a little larger by depth, scaled gently with zoom. Links 1 px `node-muted` at 18–43% opacity by zoom; junctions are 5 px diamonds. A simplified idea has a 6 × 1.6 px `text-secondary` bar under it.
+- Hover lens: the hovered (or selected) idea, its neighbours and their links stay at full strength, links in the accent; everything else drops to about 14% (links 5%). The selected idea gets a 7 px accent halo; search matches a 1.5 px accent ring.
+- Labels: 12 px, placed to the right of the idea, most important first and never overlapping each other or an overlay. Ordinary labels fade in over 35% of the zoom threshold; the lens and matches are always labelled on an 80% `bg` plate.
+- Colour by goal or topic uses the Stats series colours in their fixed order, with `node-muted` for the rest; by depth, a ramp from `node-muted` to `text`.
+- Tooltip and idea card: the tooltip is the shared chart tooltip (`surface-selected`, radius 10, at most 260 px). The idea card is a 380 px floating panel on the left (`bg-panel` at 95%, radius 18, inset `border-strong`, blur 10 px, a soft shadow) with the neighbourhood chips (Off, 1 step, 2 steps, 3 steps) above the card content. The view panel floats top right, 300 px, in the same style, with four folding groups (Filters, Colour, Display, Forces), mini-chip switches, accent sliders and "Reset to defaults".
 
 ### Empty states
 One plain sentence in `text-secondary` and, where useful, one action. No dashed boxes.
@@ -137,7 +145,7 @@ Cards on `surface` with an 18 px heading and a 13 px muted note saying how to re
 
 ## 6. Motion
 - Default transitions 150–200 ms ease-out (hover, selection, expanding history).
-- The only looping animations: the current map node's pulse, the listening bars, the live Session dot in the rail and the dots while a goal is being mapped. Steps of the goal wizard and the welcome fade in once (260–400 ms). Respect `prefers-reduced-motion` (disable all of them).
+- The only looping animations: the current map node's pulse, the listening bars, the live Session dot in the rail and the dots while a goal is being mapped. The Map's layout moves while it settles (a second or two after a change, or while an idea is dragged), the camera glides 360 ms to a chosen idea, and Replay how it grew runs about 6 s when asked; with reduced motion the layout settles at once and the camera jumps. Steps of the goal wizard and the welcome fade in once (260–400 ms). Respect `prefers-reduced-motion` (disable all of them).
 
 ## 7. Accessibility
-Real buttons, links, inputs and labels; visible focus rings (2 px accent outline, 2 px offset); icon-only controls get labels; all text AA; the map has a text alternative (the list of nodes by state).
+Real buttons, links, inputs and labels; visible focus rings (2 px accent outline, 2 px offset); icon-only controls get labels; all text AA; the map has a text alternative (the ideas shown, listed by state, each one selectable), and the search reaches any idea by name.

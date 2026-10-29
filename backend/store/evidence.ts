@@ -82,6 +82,12 @@ export function listEvidenceSince(db: Database, sinceIso: string): Evidence[] {
   return (db.prepare('SELECT * FROM evidence WHERE at >= ? ORDER BY at, id').all(sinceIso) as unknown as EvidenceRow[]).map(rowToEvidence);
 }
 
+/** When each idea was first shown at some depth (its first passing evidence). */
+export function firstPasses(db: Database, passScore: number): Map<string, string> {
+  const rows = db.prepare('SELECT node_id, MIN(at) AS at FROM evidence WHERE score >= ? GROUP BY node_id').all(passScore) as { node_id: string; at: string }[];
+  return new Map(rows.map((r) => [r.node_id, r.at]));
+}
+
 export function countEvidence(db: Database): number {
   return (db.prepare('SELECT count(*) AS n FROM evidence').get() as { n: number }).n;
 }

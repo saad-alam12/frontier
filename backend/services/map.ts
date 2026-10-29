@@ -4,10 +4,14 @@
  * idea everything known about it, including the derivation path from what the learner owns.
  */
 import { derivationPath } from '../core/derivation';
+import { topics } from '../core/clusters';
 import { recallProbability } from '../core/fsrs';
+import { centrality } from '../core/leverage';
+import { PASS_SCORE } from '../core/types';
 import type { Depth, KnowledgeNode, Tier } from '../core/types';
 import type { Database } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
+import { firstPasses } from '../store/evidence';
 import { listGoals, listTargets } from '../store/goals';
 import { getSession } from '../store/sessions';
 import { getSource } from '../store/sources';
@@ -31,12 +35,18 @@ export interface MapNodeView {
   goals: string[];
   /** An active goal simplified it (taught as its core intuition). */
   simplified: boolean;
+  /** The group of ideas it hangs together with through chains (null when its group is small). */
+  topic: string | null;
+  /** When the learner first showed it at some depth; null when not yet. */
+  learnedAt: string | null;
 }
 
 export interface MapView {
   nodes: MapNodeView[];
   chains: { id: string; premises: string[]; conclusion: string }[];
   goals: { id: string; title: string }[];
+  /** Groups of ideas that hang together through chains, largest first, named after their most central idea. */
+  topics: { id: string; name: string; size: number }[];
   counts: Record<MapState, number>;
 }
 
@@ -51,6 +61,15 @@ export function mapView(db: Database, now = new Date()): MapView {
     if (t.simplified) simplified.add(t.nodeId);
     if (t.depth > 0) targetGoals.set(t.nodeId, [...new Set([...(targetGoals.get(t.nodeId) ?? []), goalId])]);
   }
+  const groups = topics(
+    [...view.nodes.keys()],
+    view.index,
+    new Map([...view.nodes.values()].map((n) => [n.id, n.name])),
+    (id) => centrality(id, view.index),
+  ).sort((a, b) => b.nodeIds.length - a.nodeIds.length);
+  const topicOf = new Map<string, string>();
+  for (const t of groups) for (const id of t.nodeIds) topicOf.set(id, t.id);
+  const learned = firstPasses(db, PASS_SCORE);
   const nodes: MapNodeView[] = [...view.nodes.values()].map((n) => {
     const state = view.states.get(n.id);
     return {
@@ -63,11 +82,19 @@ export function mapView(db: Database, now = new Date()): MapView {
       unverified: n.status === 'unverified',
       goals: targetGoals.get(n.id) ?? [],
       simplified: simplified.has(n.id),
+      topic: topicOf.get(n.id) ?? null,
+      learnedAt: learned.get(n.id) ?? null,
     };
   });
   const counts: Record<MapState, number> = { owned: 0, fringe: 0, beyond: 0 };
   for (const n of nodes) counts[n.state] += 1;
-  return { nodes, chains: view.chains.map((c) => ({ id: c.id, premises: c.premises, conclusion: c.conclusion })), goals: goals.map((g) => ({ id: g.id, title: g.title ?? g.text })), counts };
+  return {
+    nodes,
+    chains: view.chains.map((c) => ({ id: c.id, premises: c.premises, conclusion: c.conclusion })),
+    goals: goals.map((g) => ({ id: g.id, title: g.title ?? g.text })),
+    topics: groups.map((t) => ({ id: t.id, name: t.name, size: t.nodeIds.length })),
+    counts,
+  };
 }
 
 export interface NodeCard {

@@ -25,19 +25,13 @@ export function NodeCardView({
   onGoDeeper?: (goalId: string, nodeIds: string[]) => Promise<void>;
   compact?: boolean;
 }) {
-  const link = (r: IdeaRef) => (
-    <button key={r.id} type="button" className="link-button idea-link" onClick={() => onSelect(r.id)}>
+  const link = (r: IdeaRef, sep?: string) => (
+    <button key={r.id} type="button" className="link-button idea-link" data-sep={sep} onClick={() => onSelect(r.id)}>
       <Markdown text={r.name} inline />
     </button>
   );
-  /** Separators stay attached to the link before them, so a wrapped list never starts a line with one. */
-  const joined = (refs: IdeaRef[], sep: string) =>
-    refs.map((r, i) => (
-      <span key={r.id} className="idea-item">
-        {link(r)}
-        {i < refs.length - 1 && <span className="text-muted">{sep}</span>}
-      </span>
-    ));
+  /** Separators follow the last word of the link before them, so a wrapped name keeps its comma beside it. */
+  const joined = (refs: IdeaRef[], sep: string) => refs.map((r, i) => link(r, i < refs.length - 1 ? sep : undefined));
   const showPath = card.derivation.length > 1 && card.state !== 'owned';
   return (
     <article className="node-card">

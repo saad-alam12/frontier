@@ -44,6 +44,12 @@ describe('map', () => {
     expect(at.get(id('nash'))?.goals).toEqual([goal.id]);
     expect(map.counts.owned).toBe(2);
     expect(map.chains.length).toBeGreaterThan(20);
+    // when each idea was first learned, for the replay; topics from the chains, for colouring
+    expect(at.get(id('strategy'))?.learnedAt).toEqual(expect.any(String));
+    expect(at.get(id('nash'))?.learnedAt).toBeNull();
+    expect(map.topics.length).toBeGreaterThan(0);
+    expect(map.topics.map((t) => t.size)).toEqual([...map.topics.map((t) => t.size)].sort((a, b) => b - a));
+    for (const t of map.topics) expect(map.nodes.some((n) => n.topic === t.id)).toBe(true);
   });
 
   it('gives a card with chains, the derivation path from what you own, and no lookup evidence', async () => {
