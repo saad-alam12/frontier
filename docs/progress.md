@@ -1,5 +1,38 @@
 # Progress
 
+## Summary of R3: plans that fit the time and the learner, a living map, Esc to edit (2026-10-29, cloud session)
+
+**What works.** All four points from your R3 request are built (one commit per section, `R3 §1`–`§7`).
+- **The time you give is respected.** The "34 ideas, about 15 hours, for 10 hours" plan came from a bug: the time picker showed 10 h while sending no budget at all. With that fixed, an idea now costs what it really takes, about 30 minutes all-in to understand. The plan prefers a few ideas understood to many skimmed: 10 hours plans about 18–20 ideas in depth, 2 hours about 5.
+- **The map is sized to you.** The compiler chooses a level from the time, the purpose and an optional "What do you already know about it?" line: the big picture in plain words, working knowledge, or in full. It writes the ideas in that level's language and states in one sentence what the goal means in your time. It marks the core ideas, which the plan keeps first.
+- **The plan never goes deeper than you approved.** Learning faster finishes the goal early instead of deepening it.
+- **A session follows each idea's planned depth.** An overview is one card; understanding is four.
+- **What you know is checked off fast.** A strong, confident answer, or "I know this, test me", jumps straight to the deciding question.
+- **Every idea gets at most half an hour.** If you lack the background, or keep struggling past 60% of that time, the idea is taught again as its core intuition, and so are the ideas built directly on it. The idea is then marked simplified.
+- **A big missing background leads to a proposal.** If the probe or a session shows a gap your time cannot cover, a new map is proposed for you to approve or keep your own. When the gap is large, it also suggests a separate goal for the background.
+- **Simplified ideas can be deepened later.** They are marked on the plan dots, the goal page, the map and Today. "Go deeper" opens a session on them and adds its estimated minutes to the goal's time.
+- **Esc (or Stop) while Thinking… or Judging… stops the model** and puts your answer back to edit.
+- **Hovering or tabbing to a plan dot names the idea** and says whether it is in depth, an overview, already yours or left out.
+- **The Map is now a living graph** in the manner of Obsidian. It fills the window, lights up an idea's neighbours on hover, and has search, an idea card with its 1–3 step neighbourhood, and a view panel (filters, colour by edge, goal, topic or depth, display, forces, and "Prerequisites left to right"). It also has full screen (F) and a replay of how the map grew. It stays at 60 frames a second with 600 ideas in the packaged app.
+
+186 tests pass. Typecheck and lint are clean, and the Linux build was packaged and launched. Every changed screen was checked in Electron screenshots.
+
+**Try first.** Make a 10-hour "Understand how LLMs work" goal with one background line, then the same goal at 200 hours, and compare. Then do a session on it where you answer badly on purpose, press Esc once while it is thinking, and open the Map in full screen. Steps are under "Next step".
+
+**Blocked or untested here.** Everything the model now decides ran only on the fake provider:
+- the level and scope sentence;
+- ideas that fit in half an hour;
+- the core marks;
+- the tutor flagging missing background;
+- the prober naming gaps;
+- re-map proposals.
+
+So the real sizes and the moment simplification kicks in are yours to judge. Stopping was tested on the fake provider and on a hung real-provider call. Your data migrates automatically:
+- goals mapped before R3 have no level and keep their maps, with "Draw a map for your time" on the goal page to propose one sized to the time;
+- their depths are uncapped until you approve a plan or change the time;
+- ideas now take their session loop from the planned depth, so a goal's depth-2 ideas get the full explain loop rather than one overview card;
+- a session saved mid-way reopens at the same card.
+
 ## Summary of R2: time budgets, Stats and a clearer app (2026-10-28, cloud session)
 
 **What works.** The time you give a goal now decides its plan. You give it as a total ("20 hours"), a rhythm for a length ("10 h a week for 6 months", "6 h a day for 2 weeks") or per lecture ("2 h per lecture"); it always resolves to one true total. Code spends each goal's remaining time on ideas, most useful first (80/20): with little time, many ideas at overview depth; with more, deeper. An idea two goals need (calculus for physics and for deep learning) is learned once, paid once (cost split), never probed again, and goals assume it from then on. The plan re-fits after every session, so you never lose what you know. Each goal shows ideas ready against its plan, time against its total, this week against its rhythm, time per lecture, sessions left, and a pace verdict that speaks only when it is clear. A new goal is a four-step flow (goal, material, time, plan) ending in a plan preview you approve, with the time slider re-planning live. Everything you do is logged (time spans, sessions, lookups, depth changes, budget changes), and a new **Stats** tab turns it into plain sentences and charts, filterable by range, goal and topic. The app was reworked for a first-time user: a welcome on an empty app, a quieter rail, Today leading with one action, progressive disclosure on the goal page. 160 tests pass; typecheck and lint are clean; every changed screen was checked in Electron screenshots.
@@ -39,23 +72,63 @@
 | R1 Feedback round 1 and visual design | Done, checkpoint ready | All sections of `docs/feedback-round-1.md`; 106 tests; owner checkpoint now |
 | M5 Practice, scheduler and Today | Done | Scheduler in core, problem generator and grader on the fake provider, practice in sessions and from Today; 125 tests at the time |
 | M6 Map, Lookup, Trails, packaging | Done | Canvas map (16 ms per frame at 636 ideas in the packaged app), lookup, trails with replay; Linux build packaged and launched; 137 tests |
-| R2 Time budgets, Stats, clearer app | Done, checkpoint ready | Owner's request after M6 (see Owner feedback); 160 tests |
+| R2 Time budgets, Stats, clearer app | Done | Owner's request after M6 (see Owner feedback); 160 tests; reviewed by the owner (R3 request) |
+| R3 Plans that fit the time and the learner, living map, Esc | Done, checkpoint ready | Owner's request after R2 (see Owner feedback); 186 tests; Linux build packaged and launched |
 
 ## Next step
 
-**CHECKPOINT R2 READY.** Waiting for the owner's feedback on time budgets, Stats and the reworked screens under "Owner feedback".
+**CHECKPOINT R3 READY.** Waiting for the owner's feedback on plans that fit the time, sessions that adapt, re-maps, Esc and the new Map, under "Owner feedback".
 
 Exact steps for the owner, on the Mac:
 
-1. `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. The database migrates on first start: an "hours per week" becomes a weekly rhythm to the goal's date (or twelve weeks), and every existing goal counts as approved.
-2. **Change the time of a goal.** Goals → your goal. The panel at the top shows ideas ready, time spent of the total, this week, sessions left, and a bar (ivory: spent; striped: planned ahead; the tick: where your rhythm puts you by now). Press "Change the time", switch between In total, Per week, Per day and Per lecture, drag the slider: the dots (in depth, overview, already yours, left out) and "About N sessions · M ideas" change live. Save, then open a skill: the pips show what you know, what is planned, and what the goal asks beyond your time.
-3. **A short goal.** New goal → "Understand the paper 'Attention is all you need'" (on your own, not assessed, "Understand the ideas"), add the PDF if you have it (or skip), give it 2 hours in total, "Map my goal". Check the plan is about one or two sessions and a handful of ideas, and that the compiler judged the paper a fragment (the plan step says the rest of the map comes from what the goal needs).
-4. **A big goal.** New goal → "Learn machine learning, from the maths to building models", rigour + practice, 10 hours a week for 6 months. Compare the plan. If a goal you already have shares ideas (calculus, probability), the plan step says how many are shared, and they cost this goal only its share.
-5. **Approve** one of them ("Start with this plan"); it moves from draft to active and appears on Today with its time bar. Drafts you leave stay under Goals and on Today as "Plan ready", to finish later.
-6. **Cramming.** On a course goal, change the time to Per day, 6 hours, for 2 weeks. The plan re-spends what is left of the time; ideas you know stay yours.
-7. **Study, then Stats.** Do a session and some practice, then open Stats: "Worth knowing" sentences, time per week by goal against the rhythm your goals ask for, every day for twelve weeks, what you know over time, what you keep, how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget. Use the range, goal and topic filters. Hover bars and lines for detail.
-8. **First run (optional).** `HOME=$(mktemp -d) npm run dev` starts the app on an empty data folder, with the welcome screen (the model login is not available there, so only look around).
-9. Write what you think under "Owner feedback": especially whether real plans fit the time (too many or too few ideas for 2 hours, for 240 hours), whether the pace sentences are fair, and what else you want from Stats. Commit and push.
+1. **Install and start.**
+   - Run `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. `npm install` matters this time: the map adds `d3-force`.
+   - The database migrates on first start. Your goals keep their maps; a goal mapped before R3 shows "This goal was mapped before plans fitted the time" with **Draw a map for your time** on its page.
+2. **Esc to edit.**
+   - Open a session (or start one from Today), write an answer and send it.
+   - While "Thinking…" shows, press Esc (or Stop). Your answer, confidence and handle come back in the field. Change it and send again.
+   - The same works in a goal's "Ask me a few questions" while "Judging your answers…" shows.
+3. **A 10-hour goal.**
+   - Goals → New goal → "Understand how LLMs work". Choose on your own and not assessed, "Understand the ideas".
+   - In "What do you already know about it?" write "I know some Python, no linear algebra". Skip material, give it 10 hours in total, then **Map my goal**.
+   - Check the plan step:
+     - the level says "The big picture, in plain words", with one plain sentence on what the goal means in 10 hours;
+     - about 18–20 ideas or fewer, nearly all in depth, with names that are ideas rather than formulas;
+     - "About N sessions" fits 10 hours.
+   - Hover the dots, or tab to them and use the arrow keys: each names the idea and says "In depth", "Overview", "Already yours" or "Left out for this time".
+   - Drag the time slider: the plan changes live.
+   - Press **Start with this plan**.
+4. **The same goal at 200 hours.**
+   - Make the same goal again with 200 hours in total. Afterwards you can remove it under Edit goal → Remove goal.
+   - Expect many more ideas, deeper, and a higher level ("Working knowledge, with the key formulas" or "In full").
+5. **A session that adapts.** Start a session on the 10-hour goal.
+   - **An idea you know:** press **I know this, test me** on the prediction or explanation. One question, and if you answer it well the idea is done.
+   - **An idea you don't know:** answer the check badly, for example "I have never heard of this, I don't know what a vector is".
+     - Expect a line "Simplified to the core idea. …" and a fresh, plainer explanation. The idea finishes within about half an hour of work.
+     - Afterwards the goal page shows it as simplified with **Go deeper · adds about N min**.
+   - Press **Go deeper**: the goal's time grows by that much and a session opens on that idea, after any premise it still needs.
+6. **A re-map proposal.**
+   - On a goal page, under "Check where you stand", press **Ask me a few questions** and answer in a way that shows a real missing background (for example, no idea what a matrix or a derivative is).
+   - When the gaps add up to an hour or more, a minute or two later the goal page shows **A new map for your time**: your map against the new one, the new level and scope, and its dots. Today shows "A new map" with **Look at it**.
+   - Choose **Use the new map** or **Keep my map**. Where a background goal is suggested, **Start it as a goal** creates it as a draft.
+   - On an older goal, **Draw a map for your time** gives the same proposal without the probe.
+7. **The Map.**
+   - Open Map and hover an idea: it, its neighbours and their links light up, and the rest fades.
+   - Scroll to pan; pinch or ⌘-scroll to zoom. Drag an idea.
+   - Click one to open its card, then try **Only its neighbourhood** with 1, 2 or 3 steps.
+   - Open **View**:
+     - turn states off;
+     - pick a goal;
+     - colour by Goal, Topic or Depth;
+     - turn on **Prerequisites left to right**;
+     - play with the forces;
+     - use Reset to defaults.
+   - Press F (or Full screen) for full screen; Esc leaves it. Press **Replay how it grew**.
+8. **Write what you think under "Owner feedback", then commit and push.** I'd most like your view on:
+   - whether the real 10-hour and 200-hour maps are the right size and level;
+   - whether simplification kicks in at the right moment and the simplified teaching is good;
+   - whether the re-map proposal made sense;
+   - whether the Map is now readable.
 
 ## Owner feedback
 
