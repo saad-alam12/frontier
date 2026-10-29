@@ -9,7 +9,7 @@ import { NodeCardView } from '../components/NodeCard';
 const STATE_WORD = { owned: 'Yours', fringe: 'Learnable now', beyond: 'Beyond your edge' } as const;
 
 /** Look things up in your own map: by meaning or name, answered from your own cards. */
-export function LookupScreen({ onOpenTrail }: { onOpenTrail: (sessionId: string) => void }) {
+export function LookupScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void> }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<(LookupAnswer & { query: string }) | null>(null);
   const [card, setCard] = useState<NodeCard | null>(null);
@@ -34,7 +34,7 @@ export function LookupScreen({ onOpenTrail }: { onOpenTrail: (sessionId: string)
   const open = async (nodeId: string) => setCard(await call('lookup.open', { nodeId }));
 
   const aside = card ? (
-    <NodeCardView card={card} onSelect={(id) => void open(id)} onTrail={onOpenTrail} />
+    <NodeCardView card={card} onSelect={(id) => void open(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} />
   ) : (
     <>
       <h2 className="t-title">Ask your map</h2>

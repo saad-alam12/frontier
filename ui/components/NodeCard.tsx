@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
 import { VerticalPath } from './paths';
@@ -10,7 +11,20 @@ const KIND_WORD = { claim: 'Claim', procedure: 'Procedure', term: 'Term' } as co
  * Everything about one idea (design §8): your own words first, depth and freshness, what it is built
  * on and leads to, how you get there from what you own, and where it came from. Used by Map and Lookup.
  */
-export function NodeCardView({ card, onSelect, onTrail, compact }: { card: NodeCard; onSelect: (nodeId: string) => void; onTrail?: (sessionId: string) => void; compact?: boolean }) {
+export function NodeCardView({
+  card,
+  onSelect,
+  onTrail,
+  onGoDeeper,
+  compact,
+}: {
+  card: NodeCard;
+  onSelect: (nodeId: string) => void;
+  onTrail?: (sessionId: string) => void;
+  /** Go deeper on this idea for a goal that simplified it. */
+  onGoDeeper?: (goalId: string, nodeIds: string[]) => Promise<void>;
+  compact?: boolean;
+}) {
   const link = (r: IdeaRef) => (
     <button key={r.id} type="button" className="link-button idea-link" onClick={() => onSelect(r.id)}>
       <Markdown text={r.name} inline />
@@ -56,6 +70,10 @@ export function NodeCardView({ card, onSelect, onTrail, compact }: { card: NodeC
           {card.depth > 0 ? ` · ${Math.round(card.recall * 100)}% recall now` : ''}
         </div>
       </div>
+
+      {card.simplified.map((s) => (
+        <SimplifiedNote key={s.goalId} entry={s} onGoDeeper={onGoDeeper ? () => onGoDeeper(s.goalId, [card.id]) : undefined} />
+      ))}
 
       {(card.builtOn.length > 0 || card.leadsTo.length > 0) && (
         <dl className="def-grid">
@@ -119,4 +137,34 @@ export function NodeCardView({ card, onSelect, onTrail, compact }: { card: NodeC
 
 function formatDay(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+}
+
+/** "Simplified for <goal>": why, and going deeper when the learner wants it. */
+function SimplifiedNote({ entry, onGoDeeper }: { entry: NodeCard['simplified'][number]; onGoDeeper?: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="simplified-note">
+      <div className="t-caption text-muted">Simplified for {entry.goalTitle}</div>
+      <p className="t-small m-0 text-secondary">{entry.reason}.</p>
+      {onGoDeeper && (
+        <button
+          type="button"
+          className="link-button self-start"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            onGoDeeper().catch((e: unknown) => {
+              setError(e instanceof Error ? e.message : String(e));
+              setBusy(false);
+            });
+          }}
+        >
+          Go deeper · adds about {entry.minutes} min to the goal
+        </button>
+      )}
+      {error && <p className="t-small m-0 text-danger">{error}</p>}
+    </div>
+  );
 }

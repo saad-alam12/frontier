@@ -27,7 +27,7 @@ import { noteBackgroundGaps } from './remap';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
-import { MAX_PLAN_NODES, candidatesForGoal, planSession } from './planner';
+import { MAX_PLAN_NODES, candidatesForGoal, planFocusSession, planSession } from './planner';
 import { practiceView, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps, PracticeView } from './practice';
 import type { LessonPlan, LessonStep } from './planner';
@@ -193,7 +193,8 @@ function normalized(session: SessionRecord<SessionState>): SessionRecord<Session
   return { ...session, state: { ...session.state, plan: { ...session.state.plan, steps }, edge: normalizeEdge(session.state.edge) } };
 }
 
-export async function startSession(deps: SessionDeps, goalId: string): Promise<SessionSnapshot> {
+/** Open a session on the goal (or return the open one). `focus`: a session the learner chose, going deeper on those ideas. */
+export async function startSession(deps: SessionDeps, goalId: string, focus?: string[]): Promise<SessionSnapshot> {
   const { db } = deps;
   const active = activeSession<SessionState>(db);
   if (active) return snapshot(db, normalized(active));
@@ -201,8 +202,8 @@ export async function startSession(deps: SessionDeps, goalId: string): Promise<S
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
   const view = loadKnowledge(db);
-  const carried = ended[0] ? carriedPlace(ended[0], (id, depth) => (view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id))) : null;
-  const planned = await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
+  const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => (view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id))) : null;
+  const planned = focus?.length ? planFocusSession(db, goalId, focus) : await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
   const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
   const previousNodes = previouslyTaughtNodes(ended);

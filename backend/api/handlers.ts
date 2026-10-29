@@ -6,7 +6,7 @@ import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { deltaForSource, listSourceSummaries } from '../services/library';
-import { approveGoalPlan, createGoalFromForm, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
+import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
@@ -112,6 +112,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
       refreshGoalFields(ctx.db());
       return undefined;
     },
+    'goals.goDeeper': ({ goalId, nodeIds }) => {
+      if (currentSession(ctx.db())) throw new Error('Finish or end the open session first, then go deeper.');
+      return goDeeper(ctx.db(), goalId, nodeIds);
+    },
     'goals.remapView': ({ goalId }) => remapView(ctx.db(), goalId),
     'goals.remapApprove': ({ goalId }) => {
       approveRemap(ctx.db(), goalId);
@@ -150,7 +154,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'probe.cancel': ({ probeId }) => cancelProbe(probeId),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db()),
-    'session.start': ({ goalId }) => startSession(ctx.practiceDeps(), goalId),
+    'session.start': ({ goalId, focus }) => startSession(ctx.practiceDeps(), goalId, focus),
     'session.respond': async ({ sessionId, response }) => {
       const snap = await respond(ctx.practiceDeps(), sessionId, response);
       if (snap.status !== 'active') ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map

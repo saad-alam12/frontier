@@ -176,6 +176,8 @@ export interface Goal {
   gaps: BackgroundGap[];
   /** A re-map waiting to be made or approved; null when there is none. */
   remap: GoalRemap | null;
+  /** Minutes added by going deeper on simplified ideas, on top of the time as the learner gave it. */
+  extraMinutes: number;
 }
 
 /** A prerequisite the learner showed they lack (design §3.2), as the tutor or the prober named it. */

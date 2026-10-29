@@ -9,7 +9,7 @@ import { NodeCardView } from '../components/NodeCard';
 import { layoutMap } from '../lib/mapLayout';
 
 /** The whole knowledge map: every idea, where your edge runs, and a card for the one you pick. */
-export function MapScreen({ onOpenTrail }: { onOpenTrail: (sessionId: string) => void }) {
+export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void> }) {
   const [map, setMap] = useState<MapView | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [card, setCard] = useState<NodeCard | null>(null);
@@ -75,7 +75,7 @@ export function MapScreen({ onOpenTrail }: { onOpenTrail: (sessionId: string) =>
 
   const fringe = map.nodes.filter((n) => n.state === 'fringe' && (!scope || scope.has(n.id)));
   const aside = card ? (
-    <NodeCardView card={card} onSelect={(id) => select(id)} onTrail={onOpenTrail} />
+    <NodeCardView card={card} onSelect={(id) => select(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} />
   ) : (
     <>
       <h2 className="t-title">Your map</h2>

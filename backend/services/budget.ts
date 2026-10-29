@@ -29,8 +29,10 @@ export function teachingResources(db: Database, goalId: string): string[] {
     .map((m) => m.sourceId);
 }
 
-export function goalBudgetMinutes(db: Database, goal: Goal): number | null {
-  return budgetMinutes(goal.budget, teachingResources(db, goal.id).length);
+/** The goal's true total: its time as given (or `budget`, for a preview), plus minutes added by going deeper. */
+export function goalBudgetMinutes(db: Database, goal: Goal, budget: GoalBudget | null = goal.budget): number | null {
+  const base = budgetMinutes(budget, teachingResources(db, goal.id).length);
+  return base === null ? null : base + goal.extraMinutes;
 }
 
 interface TimeShare {
@@ -157,7 +159,7 @@ function learnedMinutes(goal: Goal, targets: PlanTarget[], nodes: Map<string, Kn
 function runAllocation(db: Database, inputs: PlanInputs, override?: { goalId: string; budget: GoalBudget | null }): Allocation {
   const planGoals: PlanGoal[] = inputs.goals.map((g) => {
     const budget = override && override.goalId === g.id ? override.budget : g.budget;
-    return { id: g.id, budgetMinutes: budgetMinutes(budget, teachingResources(db, g.id).length), spentMinutes: inputs.spent.get(g.id) ?? 0, priority: g.priority };
+    return { id: g.id, budgetMinutes: goalBudgetMinutes(db, g, budget), spentMinutes: inputs.spent.get(g.id) ?? 0, priority: g.priority };
   });
   return allocate(planGoals, inputs.targets, inputs.planNodes, inputs.speed);
 }
@@ -181,7 +183,7 @@ export function learnerSpeedNow(db: Database): number {
 export interface PlanPreview {
   plan: GoalPlan;
   /** Ideas in the preview with the depth the plan gives each (0: left out). */
-  ideas: { nodeId: string; name: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[] }[];
+  ideas: { nodeId: string; name: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[]; simplified: string | null }[];
   /** True when the plan reaches every target at its full depth with time to spare: a bigger map would use it. */
   roomForMore: boolean;
 }
@@ -198,6 +200,8 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
   if (!plan) return null;
   const titles = new Map(inputs.goals.map((g) => [g.id, g.title ?? g.text]));
   const skillOf = new Map(listCapabilities(db, goalId).map((c) => [c.id, c.statement]));
+  const simplified = new Map<string, string>();
+  for (const t of listTargets(db, goalId, { all: true })) if (t.simplified && !simplified.has(t.nodeId)) simplified.set(t.nodeId, t.simplified);
   const byNode = new Map<string, { ideal: number; goals: Set<string>; skills: string[] }>();
   for (const t of inputs.targets) {
     const entry = byNode.get(t.nodeId) ?? { ideal: 0, goals: new Set<string>(), skills: [] };
@@ -218,6 +222,7 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
       currentDepth: (inputs.states.get(nodeId)?.depth ?? 0) as Depth,
       sharedWith: [...e.goals].filter((g) => g !== goalId).map((g) => titles.get(g) ?? g),
       skills: e.skills,
+      simplified: simplified.get(nodeId) ?? null,
     }))
     .sort((a, b) => b.plannedDepth - a.plannedDepth || b.idealDepth - a.idealDepth || a.name.localeCompare(b.name));
   const total = plan.budgetMinutes;

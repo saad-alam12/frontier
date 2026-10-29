@@ -21,7 +21,22 @@ const LECTURE_DONE = 0.8;
 const ROLE_PLURAL: Record<MaterialRole, string> = { teaching: 'Teaching content', practice: 'Practice', assessment: 'Past exams', scope: 'Scope', reference: 'Reference' };
 
 /** A goal's page: where it stands against its time and plan, one next action, then the detail. */
-export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: { detail: GoalDetail; onBack: () => void; onEdit: () => void; onStartSession: () => Promise<void>; onChanged: () => void }) {
+export function GoalPage({
+  detail,
+  onBack,
+  onEdit,
+  onStartSession,
+  onGoDeeper,
+  onChanged,
+}: {
+  detail: GoalDetail;
+  onBack: () => void;
+  onEdit: () => void;
+  onStartSession: () => Promise<void>;
+  /** Go deeper on simplified ideas (all, or these): their time joins the goal and a session on them opens. */
+  onGoDeeper: (nodeIds?: string[]) => Promise<void>;
+  onChanged: () => void;
+}) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
   const [outcomes, setOutcomes] = useState<ProbeOutcome[] | null>(null);
@@ -60,6 +75,7 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
   const leftOut = detail.capabilities.filter((c) => !c.planned);
   const skills = allSkills ? planned : planned.slice(0, SKILLS_SHOWN);
   const progress = detail.progress;
+  const deeper = new Map(detail.simplified.ideas.map((i) => [i.nodeId, i]));
 
   const aside = (
     <>
@@ -184,6 +200,20 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
               <ProgressFigures progress={progress} />
               <BudgetBar progress={{ ...progress, plannedMinutes: progress.plan.plannedMinutes }} />
               <PaceNotes progress={progress} />
+              {detail.simplified.ideas.length > 0 && (
+                <div className="simplified-note">
+                  <p className="m-0 text-soft">
+                    {isExam(goal.assessment)
+                      ? detail.simplified.ideas.length === 1
+                        ? '1 idea is simpler than your exam asks: it was taught as its core intuition.'
+                        : `${detail.simplified.ideas.length} ideas are simpler than your exam asks: they were taught as their core intuition.`
+                      : `${plural(detail.simplified.ideas.length, 'idea')} ${detail.simplified.ideas.length === 1 ? 'was' : 'were'} taught as ${detail.simplified.ideas.length === 1 ? 'its' : 'their'} core intuition, to fit your time and background.`}
+                  </p>
+                  <button type="button" className="link-button self-start" disabled={busy !== null} onClick={() => void run('deeper', () => onGoDeeper())}>
+                    {busy === 'deeper' ? 'Opening a session…' : `Go deeper on ${detail.simplified.ideas.length === 1 ? 'it' : 'all'} · adds about ${formatHours(detail.simplified.minutes)} to this goal`}
+                  </button>
+                </div>
+              )}
               <div className="button-row">
                 <Button kind="primary" onClick={() => void run('session', onStartSession)} disabled={!compiled || busy !== null}>
                   {busy === 'session' ? 'Planning…' : "Start today's session"}
@@ -246,7 +276,7 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
         >
           <ul className="list-card skill-list">
             {skills.map((c) => (
-              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} />
+              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} />
             ))}
           </ul>
           {leftOut.length > 0 && (
@@ -256,7 +286,7 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
               </summary>
               <ul className="list-card skill-list is-muted">
                 {leftOut.map((c) => (
-                  <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} />
+                  <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} />
                 ))}
               </ul>
             </details>
@@ -405,7 +435,19 @@ function TimeEditor({ detail, onClose, onSaved }: { detail: GoalDetail; onClose:
 }
 
 /** A skill, with its ideas and how deep each is planned when opened. */
-function SkillRow({ skill, open, onToggle }: { skill: GoalDetail['capabilities'][number]; open: boolean; onToggle: () => void }) {
+function SkillRow({
+  skill,
+  open,
+  onToggle,
+  deeper,
+  onGoDeeper,
+}: {
+  skill: GoalDetail['capabilities'][number];
+  open: boolean;
+  onToggle: () => void;
+  deeper: Map<string, GoalDetail['simplified']['ideas'][number]>;
+  onGoDeeper: (nodeId: string) => void;
+}) {
   return (
     <li className="flex flex-col gap-[12px]">
       <button type="button" className="row skill-head" aria-expanded={open} onClick={onToggle}>
@@ -418,12 +460,25 @@ function SkillRow({ skill, open, onToggle }: { skill: GoalDetail['capabilities']
       {open && (
         <div className="flex flex-col gap-[10px]">
           <ul className="skill-ideas">
-            {skill.targets.map((t) => (
-              <li key={t.nodeId}>
-                <Markdown text={t.name} inline />
-                <DepthPips current={t.currentDepth} planned={t.depth} ideal={t.idealDepth} />
-              </li>
-            ))}
+            {skill.targets.map((t) => {
+              const simple = deeper.get(t.nodeId);
+              return (
+                <li key={t.nodeId}>
+                  <span className="flex min-w-0 flex-col gap-[2px]">
+                    <Markdown text={t.name} inline />
+                    {simple && (
+                      <span className="t-small text-muted">
+                        Simplified: {simple.reason}.{' '}
+                        <button type="button" className="link-button" onClick={() => onGoDeeper(t.nodeId)}>
+                          Go deeper · adds about {simple.minutes} min
+                        </button>
+                      </span>
+                    )}
+                  </span>
+                  <DepthPips current={t.currentDepth} planned={t.depth} ideal={t.idealDepth} />
+                </li>
+              );
+            })}
           </ul>
           <div className="pip-legend">
             <span>

@@ -227,6 +227,7 @@ function DotTip({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
         <Markdown text={idea.name} inline />
       </div>
       <div className="tip-line">{dotLine(idea, kind)}</div>
+      {idea.simplified && <div className="tip-line">Simplified: {idea.simplified}</div>}
       {idea.skills.length > 0 && <div className="tip-meta">For: {idea.skills.join('; ')}</div>}
       {idea.sharedWith.length > 0 && <div className="tip-meta">Shared with {idea.sharedWith.join(', ')}</div>}
     </>
@@ -260,13 +261,14 @@ export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
               key={i.nodeId}
               className={`idea-dot is-${kind}`}
               tabIndex={0}
-              aria-label={`${i.name}: ${dotLine(i, kind)}`}
+              aria-label={`${i.name}: ${dotLine(i, kind)}${i.simplified ? `. Simplified: ${i.simplified}` : ''}`}
               onPointerEnter={(e) => tip.show(e, content)}
               onPointerMove={(e) => tip.show(e, content)}
               onFocus={(e) => tip.showAt(e.currentTarget, content)}
               onBlur={tip.hide}
             >
               {i.sharedWith.length > 0 && <span className="shared-mark" aria-hidden="true" />}
+              {i.simplified && <span className="simplified-mark" aria-hidden="true" />}
             </li>
           );
         })}
@@ -285,6 +287,14 @@ export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
         <span>
           <i className="idea-dot is-cut" /> Left out
         </span>
+        {ideas.some((i) => i.simplified) && (
+          <span>
+            <i className="idea-dot is-deep">
+              <span className="simplified-mark" />
+            </i>{' '}
+            Simplified
+          </span>
+        )}
         {ideas.some((i) => i.sharedWith.length > 0) && (
           <span>
             <i className="idea-dot is-overview">

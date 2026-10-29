@@ -30,6 +30,7 @@ interface GoalRow {
   background: string | null;
   gaps: string;
   remap: string | null;
+  extra_minutes: number;
 }
 interface CapabilityRow {
   id: string;
@@ -75,6 +76,7 @@ const toGoal = (r: GoalRow): Goal => ({
   background: r.background,
   gaps: parseJson<BackgroundGap[]>(r.gaps, []),
   remap: parseJson<GoalRemap | null>(r.remap, null),
+  extraMinutes: r.extra_minutes,
 });
 const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
 const toTarget = (r: TargetRow): Target => ({
@@ -276,6 +278,16 @@ export function approvePlannedDepths(db: Database, goalId: string): void {
 /** Lift the caps before the plan is approved again (a new time re-plans from the ideal depths). Simplified ideas keep theirs. */
 export function clearApprovedDepths(db: Database, goalId: string): void {
   db.prepare('UPDATE targets SET approved_depth = NULL WHERE simplified IS NULL AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)').run(goalId);
+}
+
+/** Going deeper: the ideas are no longer simplified, and the plan may take them to their ideal depth again. */
+export function clearSimplified(db: Database, goalId: string, nodeIds: string[]): void {
+  const stmt = db.prepare('UPDATE targets SET simplified = NULL, approved_depth = depth WHERE node_id = ? AND capability_id IN (SELECT id FROM capabilities WHERE goal_id = ?)');
+  for (const id of nodeIds) stmt.run(id, goalId);
+}
+
+export function addExtraMinutes(db: Database, goalId: string, minutes: number): void {
+  db.prepare('UPDATE goals SET extra_minutes = extra_minutes + ? WHERE id = ?').run(Math.round(minutes), goalId);
 }
 
 /** Simplify an idea for a goal: cap its targets at `depth` and say why (the first reason stays). */

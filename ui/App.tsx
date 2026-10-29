@@ -45,16 +45,22 @@ export function App() {
     setTrailId(sessionId);
     setScreen('trails');
   };
+  /** Go deeper on simplified ideas: their time joins the goal, and a session on them opens. */
+  const goDeeper = async (goalId: string, nodeIds?: string[]) => {
+    const deeper = await call('goals.goDeeper', { goalId, nodeIds });
+    if (deeper.nodeIds.length) await call('session.start', { goalId, focus: deeper.nodeIds });
+    navigate('session');
+  };
   return (
     <div className="app">
       <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} />
       {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
       {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} />}
       {screen === 'session' && <SessionScreen onNavigate={navigate} />}
-      {screen === 'map' && <MapScreen onOpenTrail={openTrail} />}
-      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} />}
+      {screen === 'map' && <MapScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
+      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} />}
       {screen === 'stats' && <StatsScreen />}
-      {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} />}
+      {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
       {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
       {screen === 'library' && <LibraryScreen />}
       {screen === 'settings' && <SettingsScreen />}

@@ -18,11 +18,13 @@ import { transaction } from '../store/db';
 import { getState } from '../store/evidence';
 import {
   addCapabilities,
+  addExtraMinutes,
   addTargets,
   approveGoal,
   approvePlannedDepths,
   capTargets,
   clearApprovedDepths,
+  clearSimplified,
   createGoal,
   deleteCapabilities,
   extendBaseline,
@@ -41,7 +43,8 @@ import { logEvent } from '../store/activity';
 import { newId } from '../store/ids';
 import { coveredNodeIds, getSource, listChunks } from '../store/sources';
 import { createUnverifiedNodes, getNodes } from '../store/world';
-import { attributeTime, goalBudgetMinutes, goalProgress, spentByGoal } from './budget';
+import { ideaMinutes } from '../core/budget';
+import { attributeTime, goalBudgetMinutes, goalProgress, learnerSpeedNow, spentByGoal } from './budget';
 import type { GoalProgress } from './budget';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
@@ -75,6 +78,8 @@ export interface GoalDetail {
     /** Every target; `depth` is the planned depth (0 when the budget leaves it out), `idealDepth` what the goal asks. */
     targets: (Target & { name: string; kind: KnowledgeNode['kind']; status: KnowledgeNode['status']; currentDepth: Depth })[];
   })[];
+  /** Ideas simplified for this goal, and the minutes going deeper on each (and on all) would add. */
+  simplified: { ideas: { nodeId: string; name: string; reason: string; minutes: number }[]; minutes: number };
   /** Targets no source covers yet ("expected, not in your material"). */
   expected: { nodeId: string; name: string; statement: string; started: boolean }[];
   materials: MaterialView[];
@@ -107,6 +112,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
     return { ...cap, status: skillStatus(cap.masteredAt, planned), planned: planned.length > 0, targets: capTargets };
   });
   const expectedIds = [...new Set(targets.filter((t) => t.depth > 0).map((t) => t.nodeId))].filter((id) => nodes.get(id)?.status === 'unverified');
+  const deeper = deeperMinutes(db, goalId);
   const materials = listMaterials(db, goalId).map((m) => {
     const source = getSource(db, m.sourceId);
     const covered = coveredNodeIds(db, m.sourceId);
@@ -128,6 +134,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
     expected: expectedIds.map((id) => ({ nodeId: id, name: nodes.get(id)?.name ?? id, statement: nodes.get(id)?.statement ?? '', started: goal.startedUnverified.includes(id) })),
     materials,
     nextIdeas: candidates.filter((c) => c.onFringe).slice(0, 3).map((c) => view.nodes.get(c.nodeId)?.name ?? c.nodeId),
+    simplified: deeper,
     schedule: capabilities.length && goal.status === 'active' ? goalSchedule(db, goalId) : null,
     progress: capabilities.length ? goalProgress(db, goalId) : null,
     work,
@@ -201,6 +208,50 @@ export function simplifyIdea(db: Database, goalId: string, nodeId: string, depth
   });
   refreshGoalFields(db);
   return changed;
+}
+
+/** Going deeper costs at least this much, so the time it adds is visible and worth a session. */
+const MIN_DEEPER_MINUTES = 5;
+
+/**
+ * What going deeper on a goal's simplified ideas would take (design §3.4): for each, the cost model's
+ * minutes from what the learner knows to the depth the goal asks, at this learner's speed, rounded up to
+ * five minutes; and in all.
+ */
+export function deeperMinutes(db: Database, goalId: string, only?: string[]): { ideas: { nodeId: string; name: string; reason: string; minutes: number }[]; minutes: number } {
+  const ideal = new Map<string, { depth: number; reason: string }>();
+  for (const t of listTargets(db, goalId, { all: true })) {
+    if (!t.simplified || (only && !only.includes(t.nodeId))) continue;
+    const prev = ideal.get(t.nodeId);
+    ideal.set(t.nodeId, { depth: Math.max(prev?.depth ?? 0, t.idealDepth), reason: prev?.reason ?? t.simplified });
+  }
+  if (ideal.size === 0) return { ideas: [], minutes: 0 };
+  const speed = learnerSpeedNow(db);
+  const nodes = getNodes(db, [...ideal.keys()]);
+  const ideas = [...ideal.entries()].map(([nodeId, { depth, reason }]) => {
+    const node = nodes.get(nodeId);
+    const raw = ideaMinutes(node?.kind ?? 'claim', getState(db, nodeId)?.depth ?? 0, depth, speed);
+    return { nodeId, name: node?.name ?? nodeId, reason, minutes: Math.max(MIN_DEEPER_MINUTES, Math.ceil(raw / 5) * 5) };
+  });
+  return { ideas, minutes: ideas.reduce((sum, i) => sum + i.minutes, 0) };
+}
+
+/**
+ * Go deeper on simplified ideas (all of the goal's, or the given ones): their time is added to the
+ * goal, on top of what the learner gave it, so the rest of the plan stays; the ideas are no longer
+ * simplified and the plan may take them to the depth the goal asks. The caller starts a session on them.
+ */
+export function goDeeper(db: Database, goalId: string, nodeIds?: string[]): { minutes: number; nodeIds: string[] } {
+  const { ideas, minutes } = deeperMinutes(db, goalId, nodeIds);
+  if (ideas.length === 0) return { minutes: 0, nodeIds: [] };
+  const ids = ideas.map((i) => i.nodeId);
+  transaction(db, () => {
+    addExtraMinutes(db, goalId, minutes);
+    clearSimplified(db, goalId, ids);
+    logEvent(db, 'budget.changed', { goalId }, { deeper: ids, addedMinutes: minutes });
+  });
+  refreshGoalFields(db);
+  return { minutes, nodeIds: ids };
 }
 
 /** Add the current depth of every idea the goal targets that is not in its baseline yet. */

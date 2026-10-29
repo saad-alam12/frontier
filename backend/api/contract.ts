@@ -91,6 +91,8 @@ export interface ApiMethods {
   'goals.remapApprove': { input: { goalId: string }; output: GoalDetail };
   /** Keep the current map; the gaps behind the proposal are not proposed again. */
   'goals.remapDismiss': { input: { goalId: string }; output: GoalDetail };
+  /** Go deeper on simplified ideas (all of the goal's, or these): their minutes are added to the goal. Start a focus session on `nodeIds` next. */
+  'goals.goDeeper': { input: { goalId: string; nodeIds?: string[] }; output: { minutes: number; nodeIds: string[] } };
   /** Ask for a new map for the goal's time (drawn in the background, then proposed). */
   'goals.remapRequest': { input: { goalId: string }; output: GoalDetail };
   /** Learn an expected (unverified) idea anyway. */
@@ -108,7 +110,7 @@ export interface ApiMethods {
   'plan.preview': { input: { goalId: string }; output: LessonPlan };
   'session.current': { input: undefined; output: SessionSnapshot | null };
   /** Plans and opens a session for the goal, or returns the active one. */
-  'session.start': { input: { goalId: string }; output: SessionSnapshot };
+  'session.start': { input: { goalId: string; focus?: string[] }; output: SessionSnapshot };
   'session.respond': { input: { sessionId: string; response: LearnerResponse }; output: SessionSnapshot };
   /** Stop the answer being judged (Esc); the respond then fails with "cancelled". False when too late. */
   'session.cancel': { input: { sessionId: string }; output: boolean };

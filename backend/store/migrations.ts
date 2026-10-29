@@ -337,6 +337,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE goals ADD COLUMN remap TEXT;
     `,
   },
+  {
+    version: 10,
+    sql: `
+      -- R3: minutes the learner added to a goal by going deeper on simplified ideas, on top of its time.
+      ALTER TABLE goals ADD COLUMN extra_minutes INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

@@ -293,6 +293,7 @@ function GoalRow({ goal, busy, onOpen, onMock }: { goal: TodayGoal; busy: string
             p ? `${formatHours(p.spentMinutes)}${p.totalMinutes ? ` of ${formatHours(p.totalMinutes)}` : ''}` : null,
             p && p.weeklyTarget ? `${formatHours(p.weekMinutes)} of ${formatHours(p.weeklyTarget)} this week` : null,
             s.due.length ? `${s.due.length} fading` : null,
+            goal.simplified ? `${goal.simplified} simplified` : null,
             pace && pace.tone !== 'calm' ? <span className={`pace-${pace.tone}`}>{pace.tone === 'warn' ? 'Needs attention' : 'Ahead'}</span> : null,
           ]}
         />

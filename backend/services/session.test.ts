@@ -15,6 +15,7 @@ import { logTime } from '../store/activity';
 import { listSources } from '../store/sources';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
+import { deeperMinutes, goDeeper } from './goals';
 import { recordEvidence } from './evidence';
 import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from './session';
 import { settleGrading } from './practice';
@@ -424,6 +425,31 @@ describe('teaching session', () => {
     snap = await respond(deps, snap.id, answer('in my words')); // 0.8
     expect(snap.phase).not.toBe('teach');
     expect(listTargets(db, goal.id, { all: true }).find((t) => t.nodeId === nashId)?.simplified).toMatch(/^Learned to explaining it/);
+  });
+
+  it('goes deeper on a simplified idea: its minutes join the goal, and a session takes it to the depth the goal asks', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8]);
+    const nashId = ids.get('nash') as string;
+    // Nash was learned as an intuition: explained, and capped below the derivation the goal asks
+    recordEvidence(db, { nodeId: nashId, kind: 'explain', score: 0.9, reasoning: 'own words' });
+    capTargets(db, goal.id, nashId, 2, 'It needs best responses, which this goal does not also cover');
+    refreshGoalFields(db);
+    const estimate = deeperMinutes(db, goal.id);
+    expect(estimate.ideas.map((i) => [i.nodeId, i.minutes])).toEqual([[nashId, 5]]); // a term from explain to derive, at least five minutes
+    expect(goDeeper(db, goal.id, [nashId])).toEqual({ minutes: 5, nodeIds: [nashId] });
+    expect(getGoal(db, goal.id)?.extraMinutes).toBe(5);
+    expect(listTargets(db, goal.id, { all: true }).find((t) => t.nodeId === nashId)?.simplified).toBeNull();
+    expect(deeperMinutes(db, goal.id).ideas).toHaveLength(0);
+
+    const callsBefore = deps.provider.calls.filter((c) => c.role === 'planner').length;
+    let snap = await startSession(deps, goal.id, [nashId]);
+    expect(deps.provider.calls.filter((c) => c.role === 'planner')).toHaveLength(callsBefore); // chosen, not planned
+    expect(snap.plan.title).toBe('Going deeper');
+    const step = snap.plan.steps.find((st) => st.nodeId === nashId);
+    expect(step).toMatchObject({ aim: 3, fromDepth: 2 });
+    snap = await respond(deps, snap.id, answer(''));
+    while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
+    expect(snap.current?.stages).toEqual(['predict', 'explain', 'derive']);
   });
 
   it('fits a session into 45 minutes: the planner may pick more, code keeps what fits', async () => {

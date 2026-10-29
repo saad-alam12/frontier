@@ -1919,6 +1919,24 @@ button.map-label:hover {
   background: #c98500;
   box-shadow: 0 0 0 2px var(--surface);
 }
+/* A simplified idea: taught as its core intuition, below what the goal asks. */
+.simplified-mark {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 6px;
+  height: 2px;
+  margin-left: -3px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+}
+.simplified-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
 .idea-legend {
   display: flex;
   flex-wrap: wrap;

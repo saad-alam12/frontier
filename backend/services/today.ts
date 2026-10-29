@@ -20,6 +20,8 @@ import type { SessionState } from './session';
 export interface TodayGoal {
   goalId: string;
   title: string;
+  /** Ideas simplified for this goal (taught as their core intuition); worth going deeper on before an exam. */
+  simplified: number;
   assessment: Assessment;
   date: string | null;
   skills: { ready: number; learning: number; notStarted: number };
@@ -72,6 +74,7 @@ export function todayView(db: Database, now = new Date()): TodayView {
     return {
       goalId: g.id,
       title: g.title ?? g.text,
+      simplified: new Set(listTargets(db, g.id, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId)).size,
       assessment: g.assessment,
       date: g.date,
       skills: { ready: caps.filter((c) => c === 'ready').length, learning: caps.filter((c) => c === 'learning').length, notStarted: caps.filter((c) => c === 'not_started').length },
