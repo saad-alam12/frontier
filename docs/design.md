@@ -199,7 +199,7 @@ Index-tier nodes get a 30-second **index pass** instead: gist, where it sits on 
 
 ### 4.4 Answering
 
-Every answer (probe, session card, practice) goes into **one field**. The learner answers naturally: a bare answer, an answer with reasoning, reasoning without a conclusion, or nothing. An empty field (or the "No idea" button) means "I don't know" and is graded as such, never as an error. Confidence is optional and has three choices: a guess · fairly sure · sure (stored as 0.33 / 0.66 / 0.9). ⌘↵ submits.
+Every answer (probe, session card, practice) goes into **one field**. The learner answers naturally: a bare answer, an answer with reasoning, reasoning without a conclusion, or nothing. An empty field (or the "No idea" button) means "I don't know" and is graded as such, never as an error. Confidence is optional and has three choices: a guess · fairly sure · sure (stored as 0.33 / 0.66 / 0.9). ⌘↵ submits. While an answer is being judged, Esc (or Stop) stops the model and puts the answer back in the field to edit and send again; nothing about the answer is written until the model has judged it. This covers session cards, free recall and the probe; practice shows its solution on submit, so it has nothing to stop.
 
 Answers are often dictated by a speech-to-text tool that types into the focused field. The field is a plain text input so this works; every model that reads answers is told to read spoken math ("d a i by d x j"), fix obvious transcription slips from context ("Jack's" = JAX) and never penalize notation or spelling. A bare answer means the reasoning is unknown, not absent.
 

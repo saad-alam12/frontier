@@ -22,6 +22,7 @@ export function AnswerSurface({
   rows = 4,
   disabled,
   label = 'Your answer',
+  autoFocus,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -33,6 +34,8 @@ export function AnswerSurface({
   rows?: number;
   disabled?: boolean;
   label?: string;
+  /** Focus the field on mount, as after stopping a judged answer to edit it. */
+  autoFocus?: boolean;
 }) {
   const [listening, noteInput] = useListening();
   return (
@@ -44,6 +47,7 @@ export function AnswerSurface({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(e) => {
           noteInput(e.target.value.length - value.length);
           onChange(e.target.value);
@@ -103,6 +107,23 @@ export function AnswerActions({ onSubmit, onNoIdea, submitLabel = 'Submit', disa
         I have no idea
       </Button>
       <span className="keyboard-hint">⌘↵ to submit</span>
+    </div>
+  );
+}
+
+/** While an answer is being judged: Esc (or Stop) stops the model and gives the answer back to edit. */
+export function Thinking({ label = 'Thinking…', onStop }: { label?: string; onStop?: () => void }) {
+  return (
+    <div className="thinking-row">
+      <span className="t-small text-muted">{label}</span>
+      {onStop && (
+        <>
+          <Button kind="quiet" onClick={onStop}>
+            Stop
+          </Button>
+          <span className="keyboard-hint">Esc to stop and edit</span>
+        </>
+      )}
     </div>
   );
 }

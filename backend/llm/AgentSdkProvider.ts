@@ -8,7 +8,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { CompleteRequest, CompleteResult, HelperTool, LlmProvider, Role } from './provider';
 import type { ModelChoice } from '../settings/schema';
-import { NoSubmitError } from './provider';
+import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, flattenMessages, runHelperTool } from './submitLoop';
 
 export interface AgentSdkProviderOptions {
@@ -26,10 +26,11 @@ export class AgentSdkProvider implements LlmProvider {
   constructor(private readonly options: AgentSdkProviderOptions) {}
 
   async complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
+    if (req.signal?.aborted) throw new CancelledError();
     const { model, effort } = this.options.modelForRole(req.role);
     const tracker = new SubmitTracker(req);
     const abort = new AbortController();
-    if (req.signal) req.signal.addEventListener('abort', () => abort.abort(), { once: true });
+    req.signal?.addEventListener('abort', () => abort.abort(), { once: true });
     let fatal: Error | null = null;
 
     const helperTools = (req.tools ?? []).map((t) => toSdkTool(t));
@@ -96,6 +97,8 @@ export class AgentSdkProvider implements LlmProvider {
       if (!(error instanceof AbortError) && !isAbortLike(error)) throw error;
     }
 
+    // the learner stopped it: whatever the model managed to submit is dropped
+    if (req.signal?.aborted) throw new CancelledError();
     if (fatal) throw fatal;
     if (!tracker.accepted) throw new NoSubmitError(req.role);
     return { data: tracker.accepted.data, usage, attempts: tracker.attempts, model };

@@ -6,6 +6,7 @@ import { assessProbeAnswers, generateProbeQuestions } from '../agents/prober';
 import type { Assessment, ProbeCandidate } from '../agents/prober';
 import type { ProbeQuestionKind } from '../store/probes';
 import { impliedPremiseScores, rankByInformation } from '../core/probe';
+import { CommitGate } from '../llm/cancel';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
@@ -94,7 +95,25 @@ export interface ProbeAnswerInput {
   confidence: number | null;
 }
 
+/** Probes being judged. Esc stops the judging; nothing is written before it answers, so the answers stay open. */
+const judging = new Map<string, CommitGate>();
+
+export function cancelProbe(probeId: string): boolean {
+  return judging.get(probeId)?.cancel() ?? false;
+}
+
 export async function submitProbe(db: Database, provider: LlmProvider, probeId: string, answers: ProbeAnswerInput[]): Promise<ProbeOutcome[]> {
+  if (judging.has(probeId)) throw new Error('These answers are already being judged.');
+  const gate = new CommitGate();
+  judging.set(probeId, gate);
+  try {
+    return await judgeProbe(db, gate.wrap(provider), probeId, answers);
+  } finally {
+    judging.delete(probeId);
+  }
+}
+
+async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, answers: ProbeAnswerInput[]): Promise<ProbeOutcome[]> {
   const set = getProbeSet(db, probeId);
   if (!set) throw new Error(`unknown probe ${probeId}`);
   const goalId = set.goalId ?? 'unknown';

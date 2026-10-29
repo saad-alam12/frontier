@@ -685,6 +685,16 @@ select.role-tag {
   align-items: center;
   gap: 12px;
 }
+.thinking-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+.thinking-row .keyboard-hint {
+  margin-left: 0;
+}
 
 /* A short single-line text surface (handle, goal sentence) that matches the answer surface. */
 .answer-block {

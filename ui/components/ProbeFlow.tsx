@@ -1,19 +1,34 @@
 import { useState } from 'react';
 import type { ProbeOutcome, ProbeView } from '../../backend/api/contract';
-import { AnswerSurface } from './AnswerSurface';
+import { AnswerSurface, Thinking } from './AnswerSurface';
 import { Button } from './controls';
 import { Markdown } from './Markdown';
 import { useDrafts } from '../hooks/useDrafts';
+import { useEscape } from '../hooks/useEscape';
 
 export type ProbeDraft = { answer: string; confidence: number | null };
 const EMPTY: ProbeDraft = { answer: '', confidence: null };
 
 export const probeDraftKey = (problemId: string) => `probe:${problemId}`;
 
-/** The probe, one question at a time with back and next. Answers are drafts until the last question is submitted. */
-export function ProbeFlow({ probe, busy, onSubmit }: { probe: ProbeView; busy: boolean; onSubmit: (answers: { problemId: string; answer: string; confidence: number | null }[]) => void }) {
+/**
+ * The probe, one question at a time with back and next. Answers are drafts until the last question is
+ * submitted; Esc while they are judged stops the model and leaves them open to edit.
+ */
+export function ProbeFlow({
+  probe,
+  busy,
+  onSubmit,
+  onStop,
+}: {
+  probe: ProbeView;
+  busy: boolean;
+  onSubmit: (answers: { problemId: string; answer: string; confidence: number | null }[]) => void;
+  onStop: () => void;
+}) {
   const drafts = useDrafts<ProbeDraft>(probe.questions.map((q) => probeDraftKey(q.problemId)), EMPTY);
   const [index, setIndex] = useState(0);
+  useEscape(busy, onStop);
   const question = probe.questions[index];
   if (!question) return null;
   const key = probeDraftKey(question.problemId);
@@ -42,17 +57,17 @@ export function ProbeFlow({ probe, busy, onSubmit }: { probe: ProbeView; busy: b
         onConfidence={(confidence) => drafts.set(key, { ...draft, confidence })}
         disabled={busy}
       />
-      <div className="answer-actions">
-        <Button kind="primary" onClick={next} disabled={busy}>
-          {last ? (busy ? 'Judging…' : 'Submit answers') : 'Next'}
-        </Button>
-        {index > 0 && (
-          <Button onClick={() => setIndex(index - 1)} disabled={busy}>
-            Back
+      {busy ? (
+        <Thinking label="Judging your answers…" onStop={onStop} />
+      ) : (
+        <div className="answer-actions">
+          <Button kind="primary" onClick={next}>
+            {last ? 'Submit answers' : 'Next'}
           </Button>
-        )}
-        <span className="keyboard-hint">{last ? '⌘↵ to submit' : '⌘↵ for the next question'}. Empty means no idea.</span>
-      </div>
+          {index > 0 && <Button onClick={() => setIndex(index - 1)}>Back</Button>}
+          <span className="keyboard-hint">{last ? '⌘↵ to submit' : '⌘↵ for the next question'}. Empty means no idea.</span>
+        </div>
+      )}
     </section>
   );
 }

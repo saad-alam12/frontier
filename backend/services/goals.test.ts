@@ -12,7 +12,7 @@ import { listNodes } from '../store/world';
 import { compileGoal, goalDetail } from './goals';
 import { recordEvidence } from './evidence';
 import { loadKnowledge } from './knowledge';
-import { createProbe, openProbe, probeDraftKey, submitProbe } from './probe';
+import { cancelProbe, createProbe, openProbe, probeDraftKey, submitProbe } from './probe';
 import { getDrafts, setDraft } from '../store/drafts';
 import { candidatesForGoal, planSession } from './planner';
 
@@ -129,12 +129,19 @@ describe('probe', () => {
     expect(openProbe(db, goal.id)).toEqual(probe);
     expect(getDrafts(db, [firstKey])[firstKey]).toContain('half typed');
 
-    const outcomes = await submitProbe(
-      db,
-      provider,
-      probe.id,
-      probe.questions.map((q) => ({ problemId: q.problemId, answer: 'an answer', confidence: 0.66 })),
-    );
+    const answers = probe.questions.map((q) => ({ problemId: q.problemId, answer: 'an answer', confidence: 0.66 }));
+    // Esc while judging: nothing is written and the probe stays open with its drafts
+    const slow = new FakeProvider({ prober: () => new Promise(() => undefined) });
+    const stopped = submitProbe(db, slow, probe.id, answers);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelProbe(probe.id)).toBe(true);
+    await expect(stopped).rejects.toThrow('cancelled');
+    expect(slow.calls).toHaveLength(1);
+    expect(openProbe(db, goal.id)).toEqual(probe);
+    expect(getDrafts(db, [firstKey])[firstKey]).toContain('half typed');
+    expect(listEvidenceForNode(db, ids.get('nash') as string)).toHaveLength(0);
+
+    const outcomes = await submitProbe(db, provider, probe.id, answers);
     expect(outcomes).toHaveLength(2);
     expect(openProbe(db, goal.id)).toBeNull();
     expect(getDrafts(db, [firstKey])).toEqual({});

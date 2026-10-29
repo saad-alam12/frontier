@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { call } from '../../api';
+import { call, isCancelled } from '../../api';
 import type { GoalBudget, GoalDetail, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
 import { BudgetBar, IdeaField, TimePicker, paceSentence, planSummary, trimSentence } from '../../components/budget';
@@ -43,7 +43,7 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!isCancelled(e)) setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
@@ -192,6 +192,7 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
                     onChanged();
                   })
                 }
+                onStop={() => void call('probe.cancel', { probeId: probe.id })}
               />
             </ProbeSurface>
           ) : outcomes ? (

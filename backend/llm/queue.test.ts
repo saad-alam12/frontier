@@ -17,4 +17,21 @@ describe('Semaphore', () => {
     expect(peak).toBe(3);
     expect(active).toBe(0);
   });
+
+  it('drops a waiter whose request is cancelled', async () => {
+    const sem = new Semaphore(1);
+    let release: () => void = () => undefined;
+    const first = sem.run(() => new Promise<void>((resolve) => (release = resolve)));
+    const controller = new AbortController();
+    let ran = false;
+    const second = sem.run(async () => {
+      ran = true;
+    }, controller.signal);
+    controller.abort();
+    await expect(second).rejects.toThrow('cancelled');
+    release();
+    await first;
+    expect(ran).toBe(false);
+    await sem.run(async () => undefined); // the slot is free again
+  });
 });

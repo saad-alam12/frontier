@@ -1,10 +1,11 @@
 import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
-import { NoSubmitError } from './provider';
+import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
 
 /**
  * One scripted step: a submit payload (any plain value), `{ callTool: { name, input } }` to run a helper
- * tool, `{ submit: value }` to be explicit, or a function deriving one of these from the request.
+ * tool, `{ submit: value }` to be explicit, or a function deriving one of these from the request. A
+ * function may return a promise, to hold the call open; the request's signal cancels it.
  */
 export type FakeStep = unknown;
 
@@ -48,9 +49,11 @@ export class FakeProvider implements LlmProvider {
     const anyReq = req as CompleteRequest<unknown>;
 
     for (;;) {
+      if (req.signal?.aborted) throw new CancelledError();
       const step = this.nextStep(anyReq);
       if (step === undefined) throw new NoSubmitError(req.role);
-      const resolved: unknown = typeof step === 'function' ? (step as (r: CompleteRequest<unknown>) => unknown)(anyReq) : step;
+      const produced: unknown = typeof step === 'function' ? (step as (r: CompleteRequest<unknown>) => unknown)(anyReq) : step;
+      const resolved = produced instanceof Promise ? await untilAborted(produced, req.signal) : produced;
       if (isToolStep(resolved)) {
         const tool = req.tools?.find((t) => t.name === resolved.callTool.name);
         if (!tool) throw new Error(`fake script called unknown tool ${resolved.callTool.name}`);
@@ -63,6 +66,7 @@ export class FakeProvider implements LlmProvider {
       if (verdict.ok) break;
       if (verdict.giveUp) throw tracker.failure();
     }
+    if (req.signal?.aborted) throw new CancelledError();
     if (!tracker.accepted) throw new NoSubmitError(req.role);
     return { data: tracker.accepted.data, usage: { inputTokens: 0, outputTokens: 0 }, attempts: tracker.attempts, model: 'fake' };
   }
@@ -77,6 +81,24 @@ export class FakeProvider implements LlmProvider {
     if (fn) return fn;
     return undefined;
   }
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new CancelledError());
+    signal.addEventListener('abort', stop, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', stop);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', stop);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
 }
 
 function isToolStep(step: unknown): step is { callTool: { name: string; input: unknown } } {

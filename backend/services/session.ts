@@ -7,6 +7,7 @@ import type { Grade, LearnerResponse, TutorCard, TutorStepInput } from '../agent
 import { dependents, neighbourhood } from '../core/graph';
 import { applyGrade, emptyEdge, evidenceKindFor, isGraded, nextStage, stagesFor } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
+import { CommitGate } from '../llm/cancel';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
@@ -216,12 +217,41 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   await ingestTranscript(deps, sessionId, session.state);
 }
 
+/**
+ * Requests in flight per session. Answers to questions carry a gate: until the tutor's first call
+ * answers, Esc stops the request and nothing has been written (every write comes after that call).
+ */
+const inflight = new Map<string, CommitGate | null>();
+
+/** Stop the answer being judged, if it can still stop. True when it will. */
+export function cancelRespond(sessionId: string): boolean {
+  return inflight.get(sessionId)?.cancel() ?? false;
+}
+
 /** Advance the session with the learner's response to the current card (or an acknowledgement). */
 export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse): Promise<SessionSnapshot> {
-  const { db } = deps;
-  const session = getSession<SessionState>(db, sessionId);
+  const session = getSession<SessionState>(deps.db, sessionId);
   if (!session) throw new Error(`unknown session ${sessionId}`);
-  if (session.status !== 'active') return snapshot(db, session);
+  if (session.status !== 'active') return snapshot(deps.db, session);
+  if (inflight.has(sessionId)) throw new Error('Still working on your last answer.');
+  const gate = answersQuestion(session.state) ? new CommitGate() : null;
+  inflight.set(sessionId, gate);
+  try {
+    return await respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, response);
+  } finally {
+    inflight.delete(sessionId);
+  }
+}
+
+/** A free recall or an answer to a graded card: the learner may stop it and edit. */
+function answersQuestion(state: SessionState): boolean {
+  if (state.phase === 'reconstruct' || state.phase === 'close') return true;
+  return state.phase === 'teach' && state.stage !== null && isGraded(state.stage);
+}
+
+async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<SessionSnapshot> {
+  const { db } = deps;
+  const sessionId = session.id;
   const state = session.state;
   const goal = getGoal(db, state.goalId);
   const goalText = goal?.text ?? '';

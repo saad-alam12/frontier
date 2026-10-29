@@ -10,9 +10,9 @@ import { approveGoalPlan, createGoalFromForm, goalDetail, guessRole, updateGoalF
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
-import { createProbe, openProbe, submitProbe } from '../services/probe';
+import { cancelProbe, createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
-import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
+import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
@@ -125,10 +125,12 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'probe.create': ({ goalId }) => createProbe(ctx.db(), ctx.provider(), goalId),
     'probe.open': ({ goalId }) => openProbe(ctx.db(), goalId),
     'probe.submit': ({ probeId, answers }) => submitProbe(ctx.db(), ctx.provider(), probeId, answers),
+    'probe.cancel': ({ probeId }) => cancelProbe(probeId),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db()),
     'session.start': ({ goalId }) => startSession(ctx.practiceDeps(), goalId),
     'session.respond': ({ sessionId, response }) => respond(ctx.practiceDeps(), sessionId, response),
+    'session.cancel': ({ sessionId }) => cancelRespond(sessionId),
     'session.pause': ({ sessionId }) => {
       pauseSession(ctx.db(), sessionId);
       return undefined;

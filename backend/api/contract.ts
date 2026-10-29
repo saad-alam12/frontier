@@ -94,11 +94,15 @@ export interface ApiMethods {
   /** The goal's unsubmitted probe, if any. */
   'probe.open': { input: { goalId: string }; output: ProbeView | null };
   'probe.submit': { input: { probeId: string; answers: ProbeAnswerInput[] }; output: ProbeOutcome[] };
+  /** Stop judging (Esc); the submit then fails with "cancelled" and the answers stay open. False when too late. */
+  'probe.cancel': { input: { probeId: string }; output: boolean };
   'plan.preview': { input: { goalId: string }; output: LessonPlan };
   'session.current': { input: undefined; output: SessionSnapshot | null };
   /** Plans and opens a session for the goal, or returns the active one. */
   'session.start': { input: { goalId: string }; output: SessionSnapshot };
   'session.respond': { input: { sessionId: string; response: LearnerResponse }; output: SessionSnapshot };
+  /** Stop the answer being judged (Esc); the respond then fails with "cancelled". False when too late. */
+  'session.cancel': { input: { sessionId: string }; output: boolean };
   /** Leave the session for now; it stays active and resumes at the same card. */
   'session.pause': { input: { sessionId: string }; output: undefined };
   /** End the session for good. */

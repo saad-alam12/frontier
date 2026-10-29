@@ -89,4 +89,16 @@ export class NoSubmitError extends Error {
   }
 }
 
+/** The learner stopped the call (Esc). The message is what the renderer checks for. */
+export class CancelledError extends Error {
+  constructor() {
+    super('cancelled');
+    this.name = 'CancelledError';
+  }
+}
+
+export function isCancelled(error: unknown): boolean {
+  return error instanceof CancelledError || (error instanceof Error && error.message === 'cancelled');
+}
+
 export const DEFAULT_MAX_RETRIES = 3;

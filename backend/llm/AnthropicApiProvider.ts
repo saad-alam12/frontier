@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
 import type { ModelChoice } from '../settings/schema';
-import { NoSubmitError } from './provider';
+import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
 
 export interface AnthropicApiProviderOptions {
@@ -21,6 +21,15 @@ export class AnthropicApiProvider implements LlmProvider {
   }
 
   async complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
+    try {
+      return await this.run(req);
+    } catch (error) {
+      if (req.signal?.aborted || error instanceof Anthropic.APIUserAbortError) throw new CancelledError();
+      throw error;
+    }
+  }
+
+  private async run<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
     const { model, effort } = this.options.modelForRole(req.role);
     const tracker = new SubmitTracker(req);
     const helperTools = req.tools ?? [];

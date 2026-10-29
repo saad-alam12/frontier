@@ -15,7 +15,7 @@ import { listSources } from '../store/sources';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { recordEvidence } from './evidence';
-import { abandonSession, currentSession, pauseSession, respond, startSession } from './session';
+import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from './session';
 import { settleGrading } from './practice';
 import type { SessionState } from './session';
 
@@ -77,6 +77,55 @@ async function setup(scores: number[] = []) {
 }
 
 const answer = (text: string, confidence = 0.66) => ({ answer: text, confidence });
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('stopping an answer (Esc)', () => {
+  it('stops the tutor before anything is written, and the edited answer goes through', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('index');
+    const events = listSessionEvents(db, snap.id).length;
+    const evidence = listEvidenceForSession(db, snap.id).length;
+
+    const tutor = fakeTutor([0.8, 0.8]);
+    deps.provider.script('tutor', (req: CompleteRequest<unknown>) => new Promise(() => void req), tutor);
+    const first = respond(deps, snap.id, answer('first try'));
+    await settle();
+    await expect(respond(deps, snap.id, answer('impatient'))).rejects.toThrow('Still working');
+    expect(cancelRespond(snap.id)).toBe(true);
+    await expect(first).rejects.toThrow('cancelled');
+    expect(listSessionEvents(db, snap.id)).toHaveLength(events);
+    expect(listEvidenceForSession(db, snap.id)).toHaveLength(evidence);
+    expect(currentSession(db)?.current?.stage).toBe('index');
+    expect(currentSession(db)?.card).toEqual(snap.card);
+
+    snap = await respond(deps, snap.id, answer('second try'));
+    expect(snap.history.nodes[0]?.items[0]?.response?.answer).toBe('second try');
+    expect(listEvidenceForSession(db, snap.id)).toHaveLength(evidence + 1);
+    expect(cancelRespond(snap.id)).toBe(false); // nothing in flight
+  });
+
+  it('cannot stop once the tutor has answered: the request runs to the end', async () => {
+    const { goal, deps } = await setup([0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    let release: () => void = () => undefined;
+    const tutor = fakeTutor([0.8, 0.8]);
+    let calls = 0;
+    deps.provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      calls += 1;
+      // the first call answers; the second (the next idea's first card) waits
+      return calls === 1 ? tutor(req) : new Promise((resolve) => (release = () => resolve(tutor(req))));
+    });
+    const pending = respond(deps, snap.id, answer('one strategy per player'));
+    await settle();
+    expect(cancelRespond(snap.id)).toBe(false);
+    release();
+    snap = await pending;
+    expect(snap.history.nodes[0]?.status).toBe('done');
+  });
+});
 
 describe('teaching session', () => {
   it('runs a node through the step loop, writing evidence, own words and bugs', async () => {

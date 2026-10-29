@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { call, onEvent } from '../api';
+import { call, isCancelled, onEvent } from '../api';
 import type { GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
 import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
-import { AnswerActions, AnswerSurface } from '../components/AnswerSurface';
+import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
 import { FrontierPanel } from '../components/FrontierPanel';
 import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
 import { useDrafts } from '../hooks/useDrafts';
+import { useEscape } from '../hooks/useEscape';
 import { STAGE_LABEL } from '../lib/stages';
 
 
@@ -28,6 +29,8 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  /** Set after Esc stopped an answer, so the field comes back focused for editing. */
+  const [stopped, setStopped] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const mainRef = useRef<HTMLElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
@@ -57,12 +60,26 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
   };
 
   const start = (goalId: string) => run('start', async () => setSnap(await call('session.start', { goalId })));
-  const send = (response: LearnerResponse) =>
+  /** The draft stays saved until the answer is accepted, so Esc (or an error) gives it back to edit. */
+  const send = (response: LearnerResponse, draftKey?: string) =>
     run('respond', async () => {
       if (!snap) return;
+      setStopped(false);
       setPending({ card: snap.card, stage: snap.current?.stage ?? null, response });
-      setSnap(await call('session.respond', { sessionId: snap.id, response }));
+      try {
+        setSnap(await call('session.respond', { sessionId: snap.id, response }));
+      } catch (e) {
+        if (!isCancelled(e)) throw e;
+        setStopped(true);
+        return;
+      }
+      if (draftKey) void call('drafts.set', { key: draftKey, value: '' });
     });
+  const stoppable = snap && pending ? (pending.card ? !isReading(pending.card.stage) : snap.phase === 'reconstruct' || snap.phase === 'close') : false;
+  const stop = () => {
+    if (snap && stoppable) void call('session.cancel', { sessionId: snap.id });
+  };
+  useEscape(stoppable, stop);
   const pause = () =>
     run('pause', async () => {
       if (!snap) return;
@@ -149,11 +166,11 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
-      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} thinking />}
+      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking />}
 
       <div ref={currentRef} className="flex flex-col gap-[36px]">
-        {pending && !pending.card && <p className="t-small m-0 text-muted">Thinking…</p>}
-        {!pending && <PhaseView snap={snap} busy={isBusy} onSend={send} onDone={() => void refresh()} />}
+        {pending && !pending.card && <Thinking onStop={stoppable ? stop : undefined} />}
+        {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onDone={() => void refresh()} />}
       </div>
 
       {snap.status === 'active' && (
@@ -252,7 +269,7 @@ function HistoryNodeView({ node, open, onToggle }: { node: HistoryNode; open: bo
 }
 
 /** One past step: the card as shown, the learner's answer exactly as given, then the rating. */
-function Exchange({ id, item, thinking }: { id: string; item: HistoryItem; thinking?: boolean }) {
+function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryItem; thinking?: boolean; onStop?: () => void }) {
   const read = isReading(item.card.stage);
   const effort = item.response?.effort;
   const meta = item.response
@@ -279,7 +296,7 @@ function Exchange({ id, item, thinking }: { id: string; item: HistoryItem; think
           {item.grade.misconception && <p className="t-small m-0 text-secondary">Noted to repair: {item.grade.misconception}</p>}
         </div>
       )}
-      {thinking && <p className="t-small m-0 text-muted">Thinking…</p>}
+      {thinking && <Thinking onStop={onStop} />}
     </article>
   );
 }
@@ -322,7 +339,9 @@ function CardText({ card, past }: { card: PublicCard; past?: boolean }) {
   }
 }
 
-function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy: boolean; onSend: (r: LearnerResponse) => void; onDone: () => void }) {
+type Send = (response: LearnerResponse, draftKey?: string) => void;
+
+function PhaseView({ snap, busy, refocus, onSend, onDone }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send; onDone: () => void }) {
   switch (snap.phase) {
     case 'reconstruct':
       return (
@@ -331,6 +350,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
           prompt={`Before anything new: last session covered ${snap.previousNodes.length} idea${snap.previousNodes.length === 1 ? '' : 's'}. From memory, list or sketch what you remember. Two or three minutes, no looking back.`}
           submitLabel="Compare with the map"
           busy={busy}
+          refocus={refocus}
           onSend={onSend}
         />
       );
@@ -357,7 +377,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
         </section>
       );
     case 'teach':
-      return <TeachStep snap={snap} busy={busy} onSend={onSend} />;
+      return <TeachStep snap={snap} busy={busy} refocus={refocus} onSend={onSend} />;
     case 'practice':
       return snap.practice ? (
         <section className="flex flex-col gap-[28px]">
@@ -369,7 +389,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
         </section>
       ) : null;
     case 'close':
-      return <RecallStep sessionId={snap.id} prompt="Every idea from today, from memory, as a list or a map. Then one line on what you can now do." submitLabel="Finish recall" busy={busy} onSend={onSend} />;
+      return <RecallStep sessionId={snap.id} prompt="Every idea from today, from memory, as a list or a map. Then one line on what you can now do." submitLabel="Finish recall" busy={busy} refocus={refocus} onSend={onSend} />;
     case 'preview':
       return (
         <section className="flex flex-col gap-[36px]">
@@ -416,7 +436,7 @@ function PhaseView({ snap, busy, onSend, onDone }: { snap: SessionSnapshot; busy
   }
 }
 
-function TeachStep({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolean; onSend: (r: LearnerResponse) => void }) {
+function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send }) {
   const card = snap.card;
   const current = snap.current;
   const [effort, setEffort] = useState<number | null>(null);
@@ -433,8 +453,7 @@ function TeachStep({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
   const set = (patch: Partial<CardDraft>) => drafts.set(draftKey, { ...draft, ...patch });
   const send = (answer: string) => {
     if (busy) return;
-    drafts.set(draftKey, EMPTY_CARD_DRAFT);
-    onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined });
+    onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined }, draftKey);
   };
 
   if (isReading(card.stage)) {
@@ -474,6 +493,7 @@ function TeachStep({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
           placeholder={card.stage === 'compress' ? 'In your own words, at most two sentences.' : undefined}
           rows={card.stage === 'compress' ? 3 : 4}
           disabled={busy}
+          autoFocus={refocus}
         />
         {card.stage === 'compress' && (
           <input className="input" aria-label="Handle" placeholder="A handle, if you like: a short phrase, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />
@@ -484,19 +504,18 @@ function TeachStep({ snap, busy, onSend }: { snap: SessionSnapshot; busy: boolea
   );
 }
 
-function RecallStep({ sessionId, prompt, submitLabel, busy, onSend }: { sessionId: string; prompt: string; submitLabel: string; busy: boolean; onSend: (r: LearnerResponse) => void }) {
+function RecallStep({ sessionId, prompt, submitLabel, busy, refocus, onSend }: { sessionId: string; prompt: string; submitLabel: string; busy: boolean; refocus: boolean; onSend: Send }) {
   const key = `session:${sessionId}:recall:${submitLabel}`;
   const drafts = useDrafts<CardDraft>([key], EMPTY_CARD_DRAFT);
   const text = (drafts.values[key] ?? EMPTY_CARD_DRAFT).answer;
   const submit = () => {
     if (busy) return;
-    drafts.set(key, EMPTY_CARD_DRAFT);
-    onSend({ answer: text });
+    onSend({ answer: text }, key);
   };
   return (
     <section className="flex flex-col gap-[32px]">
       <p className="t-question">{prompt}</p>
-      <AnswerSurface value={text} onChange={(answer) => drafts.set(key, { ...EMPTY_CARD_DRAFT, answer })} onSubmit={submit} placeholder="From memory, however it comes." rows={6} disabled={busy} />
+      <AnswerSurface value={text} onChange={(answer) => drafts.set(key, { ...EMPTY_CARD_DRAFT, answer })} onSubmit={submit} placeholder="From memory, however it comes." rows={6} disabled={busy} autoFocus={refocus} />
       <div className="answer-actions">
         <Button kind="primary" onClick={submit} disabled={busy}>
           {busy ? 'Comparing…' : submitLabel}
