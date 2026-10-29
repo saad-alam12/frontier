@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { GoalBudget, GoalPlan, GoalProgress, PlanPreview } from '../../backend/api/contract';
 import { budgetMinutes, formatHours } from '../../backend/core/budget';
+import { depthName } from '../lib/stages';
+import { Markdown } from './Markdown';
+import { useTip } from './tooltip';
 
 type Mode = 'total' | 'week' | 'day' | 'resource';
 
@@ -195,21 +198,81 @@ export function BudgetBar({ progress, compact, caption }: { progress: Pick<GoalP
   );
 }
 
-/** The ideas of a plan as a field of dots: deep, overview, already yours, left out. */
-export function IdeaField({ ideas }: { ideas: PlanPreview['ideas'] }) {
+type PlanIdea = PlanPreview['ideas'][number];
+type DotKind = 'deep' | 'overview' | 'known' | 'cut';
+
+function dotKind(i: PlanIdea): DotKind {
+  if (i.plannedDepth > 0 && i.currentDepth >= i.plannedDepth) return 'known';
+  return i.plannedDepth >= 3 ? 'deep' : i.plannedDepth >= 1 ? 'overview' : 'cut';
+}
+
+/** One line on what the plan does with an idea, and why when the time trims it. */
+function dotLine(i: PlanIdea, kind: DotKind): string {
+  const trimmed = i.plannedDepth < i.idealDepth ? `. The goal asks ${depthName(i.idealDepth).toLowerCase()}; trimmed to fit your time` : '';
+  switch (kind) {
+    case 'known':
+      return `Already yours: ${depthName(i.currentDepth).toLowerCase()}`;
+    case 'deep':
+      return `In depth: ${depthName(i.plannedDepth).toLowerCase()}${trimmed}`;
+    case 'overview':
+      return `Overview: ${depthName(i.plannedDepth).toLowerCase()}${trimmed}`;
+    case 'cut':
+      return `Left out for this time. The goal asks ${depthName(i.idealDepth).toLowerCase()}`;
+  }
+}
+
+function DotTip({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
   return (
-    <div className="idea-field-wrap">
-      <ul className="idea-field" aria-label="Ideas in the plan">
+    <>
+      <div className="tip-title">
+        <Markdown text={idea.name} inline />
+      </div>
+      <div className="tip-line">{dotLine(idea, kind)}</div>
+      {idea.skills.length > 0 && <div className="tip-meta">For: {idea.skills.join('; ')}</div>}
+      {idea.sharedWith.length > 0 && <div className="tip-meta">Shared with {idea.sharedWith.join(', ')}</div>}
+    </>
+  );
+}
+
+/**
+ * The ideas of a plan as a field of dots: deep, overview, already yours, left out. Hovering or
+ * focusing a dot says which idea it is and what the plan does with it; arrow keys move between dots.
+ */
+export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
+  const tip = useTip();
+  const moveFocus = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    const dots = [...e.currentTarget.querySelectorAll<HTMLLIElement>('li.idea-dot')];
+    const at = dots.indexOf(document.activeElement as HTMLLIElement);
+    const next = dots[Math.max(0, Math.min(dots.length - 1, at + step))];
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+  };
+  return (
+    <div className="idea-field-wrap" ref={tip.ref}>
+      <ul className="idea-field" aria-label="Ideas in the plan" onKeyDown={moveFocus} onPointerLeave={tip.hide}>
         {ideas.map((i) => {
-          const known = i.plannedDepth > 0 && i.currentDepth >= i.plannedDepth;
-          const kind = known ? 'known' : i.plannedDepth >= 3 ? 'deep' : i.plannedDepth >= 1 ? 'overview' : 'cut';
+          const kind = dotKind(i);
+          const content = <DotTip idea={i} kind={kind} />;
           return (
-            <li key={i.nodeId} className={`idea-dot is-${kind}`} title={`${i.name}: ${DOT_LABEL[kind]}${i.plannedDepth > 0 && i.plannedDepth < i.idealDepth ? ` (the goal asks depth ${i.idealDepth}, the time allows ${i.plannedDepth})` : ''}${i.sharedWith.length ? `. Shared with ${i.sharedWith.join(', ')}` : ''}`}>
+            <li
+              key={i.nodeId}
+              className={`idea-dot is-${kind}`}
+              tabIndex={0}
+              aria-label={`${i.name}: ${dotLine(i, kind)}`}
+              onPointerEnter={(e) => tip.show(e, content)}
+              onPointerMove={(e) => tip.show(e, content)}
+              onFocus={(e) => tip.showAt(e.currentTarget, content)}
+              onBlur={tip.hide}
+            >
               {i.sharedWith.length > 0 && <span className="shared-mark" aria-hidden="true" />}
             </li>
           );
         })}
       </ul>
+      {tip.layer}
       <div className="idea-legend">
         <span>
           <i className="idea-dot is-deep" /> In depth
@@ -235,8 +298,6 @@ export function IdeaField({ ideas }: { ideas: PlanPreview['ideas'] }) {
     </div>
   );
 }
-
-const DOT_LABEL = { deep: 'learned in depth', overview: 'an overview', known: 'already yours', cut: 'left out for this time' } as const;
 
 /** "About 6 sessions · 14 ideas" and what they are. */
 export function planSummary(plan: GoalPlan): { headline: string; detail: string } {

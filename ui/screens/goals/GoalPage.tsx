@@ -4,6 +4,7 @@ import type { GoalBudget, GoalDetail, GoalProgress, MaterialRole, MaterialView, 
 import { formatHours } from '../../../backend/core/budget';
 import { BudgetBar, IdeaField, TimePicker, paceSentence, planSummary, trimSentence } from '../../components/budget';
 import { useSurface } from '../../lib/activity';
+import { depthName } from '../../lib/stages';
 import { Breadcrumb, Screen } from '../../components/Shell';
 import { Button, DefGrid, Meter, MetaLine, Notice, Section } from '../../components/controls';
 import { Markdown } from '../../components/Markdown';
@@ -286,7 +287,6 @@ export function GoalPage({ detail, onBack, onEdit, onStartSession, onChanged }: 
 }
 
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
-const DEPTH_NAME = ['Not yet', 'Recognize', 'Explain', 'Derive', 'Apply', 'Transfer'];
 
 /** Ideas ready against the plan, time against the budget, and this week against the rhythm. */
 function ProgressFigures({ progress }: { progress: GoalProgress }) {
@@ -428,7 +428,7 @@ function SkillRow({ skill, open, onToggle }: { skill: GoalDetail['capabilities']
 
 /** Five pips: filled up to what you know, ringed up to what the plan holds, faint up to what the goal asks. */
 function DepthPips({ current, planned, ideal }: { current: number; planned: number; ideal: number }) {
-  const label = `${DEPTH_NAME[current]} now; planned: ${planned ? DEPTH_NAME[planned] : 'left out'}${planned < ideal ? `; the goal asks ${DEPTH_NAME[ideal]}` : ''}`;
+  const label = `${depthName(current)} now; planned: ${planned ? depthName(planned) : 'left out'}${planned < ideal ? `; the goal asks ${depthName(ideal)}` : ''}`;
   return (
     <span className="depth-pips" role="img" aria-label={label} title={label}>
       {[1, 2, 3, 4, 5].map((d) => (

@@ -164,7 +164,7 @@ export function replan(db: Database): Allocation {
 export interface PlanPreview {
   plan: GoalPlan;
   /** Ideas in the preview with the depth the plan gives each (0: left out). */
-  ideas: { nodeId: string; name: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[] }[];
+  ideas: { nodeId: string; name: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[] }[];
   /** True when the plan reaches every target at its full depth with time to spare: a bigger map would use it. */
   roomForMore: boolean;
 }
@@ -180,10 +180,13 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
   const plan = allocation.goals.get(goalId);
   if (!plan) return null;
   const titles = new Map(inputs.goals.map((g) => [g.id, g.title ?? g.text]));
-  const byNode = new Map<string, { ideal: number; goals: Set<string> }>();
+  const skillOf = new Map(listCapabilities(db, goalId).map((c) => [c.id, c.statement]));
+  const byNode = new Map<string, { ideal: number; goals: Set<string>; skills: string[] }>();
   for (const t of inputs.targets) {
-    const entry = byNode.get(t.nodeId) ?? { ideal: 0, goals: new Set<string>() };
+    const entry = byNode.get(t.nodeId) ?? { ideal: 0, goals: new Set<string>(), skills: [] };
+    const skill = skillOf.get(t.capabilityId);
     if (t.goalId === goalId) entry.ideal = Math.max(entry.ideal, t.idealDepth);
+    if (skill && !entry.skills.includes(skill)) entry.skills.push(skill);
     entry.goals.add(t.goalId);
     byNode.set(t.nodeId, entry);
   }
@@ -197,6 +200,7 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
       idealDepth: e.ideal as Depth,
       currentDepth: (inputs.states.get(nodeId)?.depth ?? 0) as Depth,
       sharedWith: [...e.goals].filter((g) => g !== goalId).map((g) => titles.get(g) ?? g),
+      skills: e.skills,
     }))
     .sort((a, b) => b.plannedDepth - a.plannedDepth || b.idealDepth - a.idealDepth || a.name.localeCompare(b.name));
   const total = plan.budgetMinutes;

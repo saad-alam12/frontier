@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useState } from 'react';
+import { useTip } from './tooltip';
 
 /**
  * Small SVG charts for Stats, drawn to the Atlas tokens: thin marks, rounded data ends on the
@@ -12,43 +12,6 @@ export const OTHER = '#5a554c';
 
 export function seriesColor(index: number): string {
   return index >= 0 && index < SERIES.length ? (SERIES[index] as string) : OTHER;
-}
-
-interface Tip {
-  x: number;
-  y: number;
-  content: ReactNode;
-}
-
-/**
- * A chart frame: its measured width (charts draw in real pixels, so text stays at its size), and the
- * tooltip: marks call `show` with content near the pointer.
- */
-function useTip() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [tip, setTip] = useState<Tip | null>(null);
-  const [width, setWidth] = useState(640);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setWidth(Math.max(280, Math.round(el.clientWidth)));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  const show = (e: React.PointerEvent, content: ReactNode) => {
-    const box = ref.current?.getBoundingClientRect();
-    if (!box) return;
-    setTip({ x: e.clientX - box.left, y: e.clientY - box.top, content });
-  };
-  const hide = () => setTip(null);
-  const layer = tip && (
-    <div className="chart-tip" style={{ left: Math.min(tip.x + 12, (ref.current?.clientWidth ?? 400) - 180), top: Math.max(0, tip.y - 12) }}>
-      {tip.content}
-    </div>
-  );
-  return { ref, show, hide, layer, width };
 }
 
 /** A bar with 4 px rounded data end, square on the baseline. */

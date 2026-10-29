@@ -121,7 +121,7 @@ Only `teaching` and `reference` material is read into ideas; the rest is kept as
 
 Goals have priority weights and can change anytime; recompiling reuses everything already learned.
 
-A new goal is set up in four steps, one decision each: the goal (sentence, kind, assessment, date and grade, focus), its material (optional), its time, and the plan that time buys. After the time step the goal exists as a draft and is compiled in the background; the plan step shows how many sessions and ideas the plan comes to, the ideas as a field of dots (in depth, overview, already yours, left out, shared with another goal), and the time control, which re-plans live. The learner approves the plan, or maps more ideas when the time holds more than the map.
+A new goal is set up in four steps, one decision each: the goal (sentence, kind, assessment, date and grade, focus), its material (optional), its time, and the plan that time buys. After the time step the goal exists as a draft and is compiled in the background; the plan step shows how many sessions and ideas the plan comes to, the ideas as a field of dots (in depth, overview, already yours, left out, shared with another goal; hovering or focusing a dot names the idea, its skill and what the plan does with it), and the time control, which re-plans live. The learner approves the plan, or maps more ideas when the time holds more than the map.
 
 ### 3.3 How the assessment changes behaviour
 

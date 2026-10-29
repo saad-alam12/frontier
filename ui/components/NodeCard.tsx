@@ -1,10 +1,10 @@
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
 import { VerticalPath } from './paths';
+import { depthName } from '../lib/stages';
 
 const STATE_WORD: Record<MapState, string> = { owned: 'Yours', fringe: 'Learnable now', beyond: 'Beyond your edge' };
 const KIND_WORD = { claim: 'Claim', procedure: 'Procedure', term: 'Term' } as const;
-const DEPTH_NAME = ['Unknown', 'Recognize', 'Explain', 'Derive', 'Apply', 'Transfer'];
 
 /**
  * Everything about one idea (design §8): your own words first, depth and freshness, what it is built
@@ -51,8 +51,8 @@ export function NodeCardView({ card, onSelect, onTrail, compact }: { card: NodeC
           ))}
         </div>
         <div className="t-small text-secondary">
-          {DEPTH_NAME[card.depth]}
-          {card.targetDepth > card.depth ? `, aiming for ${DEPTH_NAME[card.targetDepth]?.toLowerCase()}` : ''}
+          {depthName(card.depth)}
+          {card.targetDepth > card.depth ? `, aiming for ${depthName(card.targetDepth).toLowerCase()}` : ''}
           {card.depth > 0 ? ` · ${Math.round(card.recall * 100)}% recall now` : ''}
         </div>
       </div>

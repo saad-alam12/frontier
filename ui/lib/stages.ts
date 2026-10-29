@@ -1,5 +1,12 @@
 import type { PublicCard, Stage } from '../../backend/api/contract';
 
+/** The depth ladder (design §2.3), by level. */
+export const DEPTH_NAME = ['Not yet', 'Recognize', 'Explain', 'Derive', 'Apply', 'Transfer'] as const;
+
+export function depthName(depth: number): string {
+  return DEPTH_NAME[Math.max(0, Math.min(5, depth))] ?? 'Not yet';
+}
+
 export const STAGE_LABEL: Record<Stage, string> = {
   predict: 'Predict',
   explain: 'Explain',

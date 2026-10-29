@@ -1818,6 +1818,7 @@ button.map-label:hover {
 /* ---------- Idea field (plan preview) ---------- */
 
 .idea-field-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1857,8 +1858,16 @@ button.map-label:hover {
   border: 1.5px dashed var(--node-muted);
   transform: scale(0.8);
 }
-.idea-field li.idea-dot:hover {
+.idea-field li.idea-dot {
+  cursor: default;
+  outline: none;
+}
+.idea-field li.idea-dot:hover,
+.idea-field li.idea-dot:focus-visible {
   transform: scale(1.25);
+}
+.idea-field li.idea-dot:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-halo), 0 0 0 4px var(--accent);
 }
 .shared-mark {
   position: absolute;
@@ -2479,7 +2488,7 @@ button.map-label:hover {
 .legend-line.is-dashed {
   border-top-style: dashed;
 }
-.chart-tip {
+.tip {
   position: absolute;
   z-index: 5;
   min-width: 140px;
@@ -2495,6 +2504,19 @@ button.map-label:hover {
   margin-bottom: 6px;
   color: var(--text);
   font-weight: 500;
+}
+.tip-line {
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.tip-meta {
+  margin-top: 6px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .tip-row {
   display: grid;
