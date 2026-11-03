@@ -1,13 +1,16 @@
 /** Read models for the Library screen: sources with chunk progress, and the delta view per source. */
 import { classifyDelta } from '../core/delta';
 import type { DeltaClass } from '../core/delta';
-import { EXTRACTED_ROLES } from '../core/types';
+import { EXTRACTED_ROLES, EXTRACTION } from '../core/types';
 import type { Depth, MaterialRole, Source } from '../core/types';
 import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
+import { activeSession } from '../store/sessions';
 import { coveredNodeIds, listChunks, listSources } from '../store/sources';
 import type { SourceChunk } from '../store/sources';
-import { loadKnowledge } from './knowledge';
+import { afterSourceReread } from './goals';
+import type { IngestionService } from './ingestion';
+import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { targetDepthFor } from '../core/leverage';
 
 export interface SourceSummary extends Source {
@@ -17,6 +20,21 @@ export interface SourceSummary extends Source {
   roles: MaterialRole[];
   /** False when every goal uses it only for practice, assessment or scope: it is kept as text, not read into ideas. */
   readsIdeas: boolean;
+  /** Read with the old extraction (many small ideas); reading it again gives lesson-sized ones. */
+  readOld: boolean;
+}
+
+/**
+ * Read a source again with the current extraction (design §7): its ideas that nothing depends on are
+ * retired, goals using it compile it afresh, and it is queued. Refused while a session is open.
+ */
+export async function readSourceAgain(db: Database, ingestion: IngestionService, sourceId: string): Promise<{ retired: number }> {
+  if (activeSession(db)) throw new Error('End or finish the open session first, then read this source again.');
+  const { retired } = await ingestion.prepareReread(sourceId);
+  afterSourceReread(db, sourceId);
+  refreshGoalFields(db);
+  ingestion.start(sourceId);
+  return { retired: retired.length };
 }
 
 export function listSourceSummaries(db: Database): SourceSummary[] {
@@ -27,6 +45,7 @@ export function listSourceSummaries(db: Database): SourceSummary[] {
       ...s,
       roles,
       readsIdeas: roles.length === 0 || roles.some((r) => EXTRACTED_ROLES.includes(r)),
+      readOld: s.extraction < EXTRACTION && s.chunksDone > 0,
       nodeCount: coveredNodeIds(db, s.id).length,
       chunks: chunks.map((c) => ({ idx: c.idx, locator: c.locator, status: c.status, error: c.error, nodeCount: c.nodeIds.length })),
     };

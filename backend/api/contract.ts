@@ -68,6 +68,8 @@ export interface ApiMethods {
   'library.addFiles': { input: undefined; output: { added: SourceSummary[]; skipped: string[] } };
   'library.run': { input: { sourceId: string }; output: undefined };
   'library.remove': { input: { sourceId: string }; output: undefined };
+  /** Read a source again into lesson-sized ideas; returns how many of its old ideas were retired. */
+  'library.reread': { input: { sourceId: string }; output: { retired: number } };
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
   'goals.list': { input: undefined; output: GoalDetail[] };
   'goals.get': { input: { goalId: string }; output: GoalDetail };

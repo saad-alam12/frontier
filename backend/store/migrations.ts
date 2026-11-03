@@ -344,6 +344,14 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE goals ADD COLUMN extra_minutes INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 11,
+    sql: `
+      -- Which extraction read a source: 1 = many small chunks into many small ideas, 2 = whole documents
+      -- into lesson-sized ideas. Sources read before stay at 1 until they are read again.
+      ALTER TABLE sources ADD COLUMN extraction INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

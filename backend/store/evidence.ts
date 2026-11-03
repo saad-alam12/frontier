@@ -88,6 +88,11 @@ export function firstPasses(db: Database, passScore: number): Map<string, string
   return new Map(rows.map((r) => [r.node_id, r.at]));
 }
 
+/** Every idea with any evidence at all: these are never retired. */
+export function nodesWithEvidence(db: Database): Set<string> {
+  return new Set((db.prepare('SELECT DISTINCT node_id FROM evidence').all() as { node_id: string }[]).map((r) => r.node_id));
+}
+
 export function countEvidence(db: Database): number {
   return (db.prepare('SELECT count(*) AS n FROM evidence').get() as { n: number }).n;
 }

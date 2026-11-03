@@ -28,8 +28,10 @@ import {
   createGoal,
   deleteCapabilities,
   extendBaseline,
+  forgetCompiledSource,
   getGoal,
   listCapabilities,
+  listGoals,
   listMaterials,
   listTargets,
   markCompiled,
@@ -259,6 +261,25 @@ function recordBaseline(db: Database, goalId: string): void {
   const depths: Record<string, Depth> = {};
   for (const t of listTargets(db, goalId, { all: true })) depths[t.nodeId] = getState(db, t.nodeId)?.depth ?? 0;
   extendBaseline(db, goalId, depths);
+}
+
+/**
+ * A source was read again into larger ideas and some of its old ideas retired (their targets went with
+ * them). Every goal that uses it compiles it afresh once it is read, and drops the capabilities left
+ * with no ideas, unless mastered.
+ */
+export function afterSourceReread(db: Database, sourceId: string): void {
+  for (const goal of listGoals(db)) {
+    if (!listMaterials(db, goal.id).some((m) => m.sourceId === sourceId)) continue;
+    const targeted = new Set(listTargets(db, goal.id, { all: true }).map((t) => t.capabilityId));
+    deleteCapabilities(
+      db,
+      listCapabilities(db, goal.id)
+        .filter((c) => c.masteredAt === null && !targeted.has(c.id))
+        .map((c) => c.id),
+    );
+    forgetCompiledSource(db, goal.id, sourceId);
+  }
 }
 
 /** Sources whose text is read into ideas for this goal (teaching and reference material). */

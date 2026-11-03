@@ -275,7 +275,12 @@ export interface Source {
   chunkCount: number;
   chunksDone: number;
   error: string | null;
+  /** Which extraction read it; below `EXTRACTION` it was read into many small ideas and can be read again. */
+  extraction: number;
 }
+
+/** The current extraction: whole documents into lesson-sized ideas (1 was small chunks into small ideas). */
+export const EXTRACTION = 2;
 
 /** The three confidence choices next to every answer (optional; none means not given). */
 export const CONFIDENCE_LEVELS = [

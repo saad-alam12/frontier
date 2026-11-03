@@ -3,7 +3,7 @@ import { readMarkdown } from './readers/markdown';
 import { readHtml } from './readers/html';
 import { readPdf } from './readers/pdf';
 import { kindForFile } from './readers';
-import { chunkBlocks, collapseBuildPages, estimateTokens } from './chunker';
+import { blocksFromParts, chunkBlocks, collapseBuildPages, estimateTokens } from './chunker';
 
 /** Builds a tiny valid PDF with one text line per page (Helvetica, no compression). */
 export function makePdf(pages: string[]): Buffer {
@@ -126,6 +126,18 @@ describe('chunker', () => {
     expect(chunks.length).toBeGreaterThan(2);
     expect(chunks.every((c) => c.locator === 'p1')).toBe(true);
     expect(chunks.map((c) => c.text).join('')).toContain('Paragraph 29');
+  });
+
+  it('marks where each block starts so ideas can cite pages, and gives the blocks back from stored parts', () => {
+    const blocks = [
+      { text: 'First page.', locator: 'p1' },
+      { text: 'Second page.', locator: 'p2' },
+    ];
+    const [part] = chunkBlocks(blocks);
+    expect(part).toEqual({ text: '[p1]\nFirst page.\n\n[p2]\nSecond page.', locator: 'p1–p2' });
+    expect(blocksFromParts(part ? [part] : [])).toEqual(blocks);
+    // parts stored before markers existed come back as one block each
+    expect(blocksFromParts([{ text: 'Old text.', locator: 'p3–p4' }])).toEqual([{ text: 'Old text.', locator: 'p3–p4' }]);
   });
 
   it('folds a tiny trailing chunk into the previous one', () => {

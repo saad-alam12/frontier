@@ -127,6 +127,20 @@ export function applyMergePlan(db: Database, plan: MergePlan): void {
   }
 }
 
+/**
+ * Remove ideas nothing depends on any more (a source read again into larger ideas). Every chain that
+ * uses one goes too; worked examples, embeddings and goal targets on them go by cascade. The caller
+ * makes sure none has evidence: evidence is never deleted.
+ */
+export function retireNodes(db: Database, ids: Iterable<string>): void {
+  const dropChains = db.prepare('DELETE FROM chains WHERE conclusion = ? OR id IN (SELECT chain_id FROM chain_premises WHERE node_id = ?)');
+  const dropNode = db.prepare('DELETE FROM nodes WHERE id = ?');
+  for (const id of ids) {
+    dropChains.run(id, id);
+    dropNode.run(id);
+  }
+}
+
 /** Goal compiles may create placeholder nodes that a source has yet to ground. */
 export function createUnverifiedNodes(db: Database, nodes: Omit<KnowledgeNode, 'status' | 'sources'>[]): void {
   const now = nowIso();

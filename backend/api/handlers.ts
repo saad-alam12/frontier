@@ -5,7 +5,7 @@ import type { AppContext } from '../context';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { deltaForSource, listSourceSummaries } from '../services/library';
+import { deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
 import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -85,6 +85,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       ctx.ingestion().start(sourceId);
       return undefined;
     },
+    'library.reread': ({ sourceId }) => readSourceAgain(ctx.db(), ctx.ingestion(), sourceId),
     'library.remove': ({ sourceId }) => {
       deleteSource(ctx.db(), sourceId);
       return undefined;

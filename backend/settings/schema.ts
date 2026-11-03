@@ -20,7 +20,11 @@ export interface ModelChoice {
   effort: Effort;
 }
 
-/** The owner's defaults (feedback round 1, §7.3): Opus at xhigh only for rare, high-stakes calls. */
+/**
+ * The owner's defaults (feedback round 1, §7.3): Opus at xhigh only for rare, high-stakes calls. The
+ * extractor's effort was left to be confirmed; reading a whole paper at max took 340 s against 27 s at
+ * medium for the same ideas (2026-11-03), so it is medium.
+ */
 export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   goalCompiler: { model: 'claude-opus-5-5', effort: 'xhigh' },
   tutor: { model: 'claude-opus-5-5', effort: 'medium' },
@@ -28,7 +32,7 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   prober: { model: 'claude-opus-5-5', effort: 'medium' },
   problemGenerator: { model: 'claude-sonnet-5-5', effort: 'high' },
   grader: { model: 'claude-sonnet-5-5', effort: 'high' },
-  extractor: { model: 'claude-haiku-5-5', effort: 'max' },
+  extractor: { model: 'claude-haiku-5-5', effort: 'medium' },
   matcher: { model: 'claude-haiku-5-5', effort: 'max' },
   planner: { model: 'claude-haiku-5-5', effort: 'max' },
   librarian: { model: 'claude-haiku-5-5', effort: 'medium' },

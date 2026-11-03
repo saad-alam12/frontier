@@ -12,7 +12,8 @@ import { SettingsSchema } from '../backend/settings/schema';
 import { IngestionService } from '../backend/services/ingestion';
 import { deltaForSource } from '../backend/services/library';
 import { openDatabase } from '../backend/store/db';
-import { listChains, countNodes } from '../backend/store/world';
+import { coveredNodeIds } from '../backend/store/sources';
+import { getNodes, listChains, countNodes } from '../backend/store/world';
 
 const file = process.argv[2];
 if (!file) {
@@ -31,8 +32,13 @@ const service = new IngestionService({
 });
 
 const { source, existed } = await service.addFile(resolve(file));
-console.log(`${existed ? 'already added' : 'added'}: ${source.title} (${source.chunkCount} chunks) → ${dbPath}`);
+console.log(`${existed ? 'already added' : 'added'}: ${source.title} (${source.chunkCount} ${source.chunkCount === 1 ? 'part' : 'parts'}) → ${dbPath}`);
+const started = Date.now();
 await service.runSource(source.id);
+console.log(`read in ${Math.round((Date.now() - started) / 1000)} s`);
+const ideas = [...getNodes(db, coveredNodeIds(db, source.id)).values()];
+console.log(`${ideas.length} ideas from this source:`);
+for (const n of ideas) console.log(`- ${n.name} (${n.sources.find((r) => r.sourceId === source.id)?.locator ?? ''}): ${n.statement}`);
 console.log(`world layer: ${countNodes(db)} nodes, ${listChains(db).length} chains`);
 console.log(deltaForSource(db, source.id).sentence);
 db.close();

@@ -1,6 +1,8 @@
 /**
- * The ingestion pipeline (design §7): read → chunk → extract → embed → match → merge, per source,
- * chunks in order, sources in parallel under a global limit, failures isolated per chunk.
+ * The ingestion pipeline (design §7): read → split into parts → extract → embed → match → merge. A
+ * paper or lecture is one part, so it is one extractor call and at most one matcher call; only
+ * book-length sources have several parts, read in order. Sources run in parallel under a global limit;
+ * a failing part writes nothing and is retried on the next run.
  */
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir } from 'node:fs/promises';
@@ -11,7 +13,7 @@ import { runMatcher } from '../agents/matcher';
 import type { MatchQuery } from '../agents/matcher';
 import { planMerge } from '../core/merge';
 import type { KnowledgeNode, Source, SourceKind } from '../core/types';
-import { chunkBlocks, collapseBuildPages } from '../ingest/chunker';
+import { blocksFromParts, chunkBlocks, collapseBuildPages, PART_TOKENS } from '../ingest/chunker';
 import { textHash } from '../ingest/embedder';
 import type { Embedder } from '../ingest/embedder';
 import { readBytes, readSourceFile } from '../ingest/readers';
@@ -23,9 +25,12 @@ import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { getEmbeddingHash, listEmbeddings, upsertEmbedding } from '../store/embeddings';
 import { newId } from '../store/ids';
-import { addCoverage, coveredNodeIds, createSource, findSourceByHash, getSource, listChunks, updateChunk, updateSourceStatus } from '../store/sources';
+import { nodesWithEvidence } from '../store/evidence';
+import { nodesInOpenSets } from '../store/practice';
+import { nodesInSessions } from '../store/sessions';
+import { addCoverage, coveredElsewhere, coveredNodeIds, createSource, findSourceByHash, getSource, listChunks, resetSourceParts, updateChunk, updateSourceStatus } from '../store/sources';
 import type { SourceChunk } from '../store/sources';
-import { applyMergePlan, getNodes, listChains, listNodes } from '../store/world';
+import { applyMergePlan, getNodes, listChains, listNodes, retireNodes } from '../store/world';
 import { refreshGoalFields } from './knowledge';
 
 export interface IngestProgress {
@@ -45,6 +50,8 @@ export interface IngestionOptions {
   onProgress?: (p: IngestProgress) => void;
   /** Called after every run of a source, so goals using it can move on. */
   onSourceDone?: (sourceId: string) => void;
+  /** Tokens per part; tests use small parts to exercise multi-part sources. */
+  partTokens?: number;
 }
 
 const CANDIDATES = 5;
@@ -87,8 +94,35 @@ export class IngestionService {
   }
 
   private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[]): Source {
-    const chunks = chunkBlocks(kind === 'pdf' ? collapseBuildPages(blocks) : blocks);
-    return createSource(this.db, { kind, title, path, hash }, chunks);
+    return createSource(this.db, { kind, title, path, hash }, this.parts(kind, blocks));
+  }
+
+  private parts(kind: SourceKind, blocks: TextBlock[]) {
+    return chunkBlocks(kind === 'pdf' ? collapseBuildPages(blocks) : blocks, this.options.partTokens ?? PART_TOKENS);
+  }
+
+  /**
+   * Prepare a source to be read again with the current extraction: split it into parts afresh (from its
+   * file, or from its stored text when it has none) and retire the ideas only it gave that nothing
+   * depends on: no evidence, no other source, not in any session or open practice or probe. Ideas
+   * that stay are matched again like any other. Call `start` afterwards.
+   */
+  async prepareReread(sourceId: string): Promise<{ retired: string[] }> {
+    const source = getSource(this.db, sourceId);
+    if (!source) throw new Error(`unknown source ${sourceId}`);
+    if (this.running.has(sourceId)) throw new Error('This source is being read right now.');
+    const blocks = source.path ? (await readSourceFile(join(this.options.sourcesDir, source.path))).result.blocks : blocksFromParts(listChunks(this.db, sourceId));
+    const parts = this.parts(source.kind, blocks);
+    if (parts.length === 0) throw new Error('There is no text in this source to read again.');
+    const old = coveredNodeIds(this.db, sourceId);
+    const keep = new Set([...nodesWithEvidence(this.db), ...coveredElsewhere(this.db, sourceId), ...nodesInOpenSets(this.db), ...nodesInSessions(this.db, old)]);
+    const retired = old.filter((id) => !keep.has(id));
+    transaction(this.db, () => {
+      retireNodes(this.db, retired);
+      resetSourceParts(this.db, sourceId, parts);
+    });
+    this.emit(sourceId);
+    return { retired };
   }
 
   /** Queue a source run; returns immediately. */
@@ -105,7 +139,7 @@ export class IngestionService {
     return this.running.has(sourceId);
   }
 
-  /** Process every pending or failed chunk of a source, in order. Safe to call again after failures. */
+  /** Process every pending or failed part of a source, in order. Safe to call again after failures. */
   async runSource(sourceId: string): Promise<Source> {
     const source = getSource(this.db, sourceId);
     if (!source) throw new Error(`unknown source ${sourceId}`);
@@ -121,14 +155,14 @@ export class IngestionService {
         failures += 1;
         const message = error instanceof Error ? error.message : String(error);
         updateChunk(this.db, chunk.id, { status: 'failed', attempts: chunk.attempts + 1, error: message });
-        this.emit(sourceId, { message: `Chunk ${chunk.idx + 1} failed: ${message}` });
+        this.emit(sourceId, { message: `Part ${chunk.idx + 1} failed: ${message}` });
       }
     }
     const done = listChunks(this.db, sourceId).filter((c) => c.status === 'done').length;
     updateSourceStatus(this.db, sourceId, {
       status: failures === 0 ? 'done' : 'failed',
       chunksDone: done,
-      error: failures === 0 ? null : `${failures} chunk${failures === 1 ? '' : 's'} failed; run again to retry`,
+      error: failures === 0 ? null : `${failures} part${failures === 1 ? '' : 's'} failed; run again to retry`,
     });
     if (done > 0) refreshGoalFields(this.db);
     this.emit(sourceId);

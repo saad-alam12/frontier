@@ -123,6 +123,12 @@ export function listPracticeSets(db: Database, limit = 50): PracticeSetRecord[] 
   return (db.prepare("SELECT * FROM practice_sets WHERE kind IN ('compound', 'mock') ORDER BY created_at DESC, rowid DESC LIMIT ?").all(limit) as unknown as SetRow[]).map(toSet);
 }
 
+/** Ideas asked about in a set that is still open (practice, mock or probe). */
+export function nodesInOpenSets(db: Database): Set<string> {
+  const rows = db.prepare("SELECT node_ids FROM practice_sets WHERE status = 'open'").all() as { node_ids: string }[];
+  return new Set(rows.flatMap((r) => parseJson<string[]>(r.node_ids, [])));
+}
+
 export function closePracticeSet(db: Database, id: string): void {
   db.prepare("UPDATE practice_sets SET status = 'done' WHERE id = ?").run(id);
 }

@@ -1,6 +1,7 @@
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
+import { EXTRACTION } from '../core/types';
 import type { Source, SourceKind } from '../core/types';
 
 interface SourceRow {
@@ -14,6 +15,7 @@ interface SourceRow {
   chunk_count: number;
   chunks_done: number;
   error: string | null;
+  extraction: number;
 }
 
 export interface SourceChunk {
@@ -53,6 +55,7 @@ const toSource = (r: SourceRow): Source => ({
   chunkCount: r.chunk_count,
   chunksDone: r.chunks_done,
   error: r.error,
+  extraction: r.extraction,
 });
 
 const toChunk = (r: ChunkRow): SourceChunk => ({
@@ -85,7 +88,7 @@ export function listSources(db: Database): Source[] {
 export function createSource(db: Database, input: { kind: SourceKind; title: string; path: string | null; hash: string }, chunks: { text: string; locator: string }[]): Source {
   const id = newId('src');
   const addedAt = nowIso();
-  db.prepare('INSERT INTO sources (id, kind, title, path, hash, added_at, status, chunk_count, chunks_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)').run(
+  db.prepare('INSERT INTO sources (id, kind, title, path, hash, added_at, status, chunk_count, chunks_done, extraction) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)').run(
     id,
     input.kind,
     input.title,
@@ -94,10 +97,33 @@ export function createSource(db: Database, input: { kind: SourceKind; title: str
     addedAt,
     'pending',
     chunks.length,
+    EXTRACTION,
   );
-  const insert = db.prepare("INSERT INTO source_chunks (id, source_id, idx, text, locator, status) VALUES (?, ?, ?, ?, ?, 'pending')");
-  chunks.forEach((c, i) => insert.run(newId('chunk'), id, i, c.text, c.locator));
+  insertChunks(db, id, chunks);
   return getSource(db, id) as Source;
+}
+
+function insertChunks(db: Database, sourceId: string, chunks: { text: string; locator: string }[]): void {
+  const insert = db.prepare("INSERT INTO source_chunks (id, source_id, idx, text, locator, status) VALUES (?, ?, ?, ?, ?, 'pending')");
+  chunks.forEach((c, i) => insert.run(newId('chunk'), sourceId, i, c.text, c.locator));
+}
+
+/**
+ * Start a source over with new parts (it is being read again): its parts, coverage and worked examples
+ * go, and it waits to be read with the current extraction. The ideas themselves are the caller's to keep
+ * or retire.
+ */
+export function resetSourceParts(db: Database, sourceId: string, chunks: { text: string; locator: string }[]): void {
+  db.prepare('DELETE FROM source_coverage WHERE source_id = ?').run(sourceId);
+  db.prepare('DELETE FROM examples WHERE source_id = ?').run(sourceId);
+  db.prepare('DELETE FROM source_chunks WHERE source_id = ?').run(sourceId);
+  insertChunks(db, sourceId, chunks);
+  db.prepare("UPDATE sources SET status = 'pending', chunk_count = ?, chunks_done = 0, error = NULL, extraction = ? WHERE id = ?").run(chunks.length, EXTRACTION, sourceId);
+}
+
+/** Ideas some other source also covers. */
+export function coveredElsewhere(db: Database, sourceId: string): Set<string> {
+  return new Set((db.prepare('SELECT DISTINCT node_id FROM source_coverage WHERE source_id != ?').all(sourceId) as { node_id: string }[]).map((r) => r.node_id));
 }
 
 export function deleteSource(db: Database, id: string): void {

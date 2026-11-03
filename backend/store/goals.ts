@@ -187,6 +187,13 @@ export function listGoals(db: Database): Goal[] {
   return (db.prepare('SELECT * FROM goals ORDER BY created_at').all() as unknown as GoalRow[]).map(toGoal);
 }
 
+/** A source the goal compiled is being read again: it counts as new material for the next compile. */
+export function forgetCompiledSource(db: Database, goalId: string, sourceId: string): void {
+  const goal = getGoal(db, goalId);
+  if (!goal || !goal.compiledSources.includes(sourceId)) return;
+  db.prepare('UPDATE goals SET compiled_sources = ? WHERE id = ?').run(JSON.stringify(goal.compiledSources.filter((s) => s !== sourceId)), goalId);
+}
+
 /** Record a compile: the goal's short title, which teaching sources it covered, and what the goal means for its time. */
 export function markCompiled(db: Database, goalId: string, title: string | null, sourceIds: string[], reading: { level?: GoalLevel | null; scope?: string | null } = {}): void {
   db.prepare('UPDATE goals SET compiled_at = ?, title = COALESCE(?, title), compiled_sources = ?, level = COALESCE(?, level), scope = COALESCE(?, scope) WHERE id = ?').run(

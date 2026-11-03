@@ -39,6 +39,7 @@ export function LibraryScreen() {
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<Order>('source');
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [reread, setReread] = useState<{ sourceId: string; text: string; error: boolean } | null>(null);
 
   const refresh = useCallback(async () => {
     const list = await call('library.list');
@@ -79,6 +80,16 @@ export function LibraryScreen() {
     await call('library.remove', { sourceId: id });
     setSelected(null);
     await refresh();
+  };
+
+  const readAgain = async (id: string) => {
+    try {
+      const { retired } = await call('library.reread', { sourceId: id });
+      setReread({ sourceId: id, error: false, text: retired > 0 ? `Reading it again. ${retired} small ${retired === 1 ? 'idea nothing depended on was' : 'ideas nothing depended on were'} removed; ideas you have studied stay.` : 'Reading it again.' });
+      await refresh();
+    } catch (error) {
+      setReread({ sourceId: id, error: true, text: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   const current = sources.find((s) => s.id === selected) ?? null;
@@ -131,8 +142,17 @@ export function LibraryScreen() {
             {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
             {!current.readsIdeas && <p className="t-lead m-0">Kept as {current.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')} for your goals: used for style, scope and practice, not read into ideas.</p>}
             {current.error && <Notice error>{current.error}</Notice>}
+            {current.readsIdeas && current.readOld && current.status !== 'running' && (
+              <Notice>Read the old way, into many small ideas. Read it again to get a few lesson-sized ones: ideas you have studied stay, and goals that use it are mapped again.</Notice>
+            )}
+            {reread?.sourceId === current.id && (reread.error ? <Notice error>{reread.text}</Notice> : current.status !== 'done' && <p className="t-small m-0 text-secondary">{reread.text}</p>)}
             <div className="button-row">
               {current.readsIdeas && current.status !== 'running' && current.chunksDone < current.chunkCount && <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>}
+              {current.readsIdeas && current.chunkCount > 0 && current.status !== 'running' && current.status !== 'pending' && (
+                <Button kind={current.readOld ? 'primary' : 'quiet'} onClick={() => void readAgain(current.id)}>
+                  Read again
+                </Button>
+              )}
               <Button kind="quiet" onClick={() => void remove(current.id)}>
                 Remove from library
               </Button>
@@ -156,7 +176,7 @@ export function LibraryScreen() {
               </ul>
             </Section>
           )}
-          {current.readsIdeas && (
+          {current.readsIdeas && (current.chunkCount > 1 || current.chunks.some((c) => c.error)) && (
             <Section title="Parts" meta={`${current.chunksDone} of ${current.chunkCount} read`}>
               <ul className="list-card">
                 {current.chunks.map((c) => (

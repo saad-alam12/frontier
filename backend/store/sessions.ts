@@ -57,6 +57,12 @@ export function activeSession<S>(db: Database): SessionRecord<S> | undefined {
   return row ? toSession<S>(row) : undefined;
 }
 
+/** Which of these ideas any session (open or past) has planned, taught or carried. */
+export function nodesInSessions(db: Database, ids: Iterable<string>): Set<string> {
+  const states = (db.prepare('SELECT state FROM sessions').all() as { state: string }[]).map((r) => r.state).join('\n');
+  return new Set([...ids].filter((id) => states.includes(id)));
+}
+
 export function listSessions<S>(db: Database, limit = 50): SessionRecord<S>[] {
   return (db.prepare('SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?').all(limit) as unknown as SessionRow[]).map((r) => toSession<S>(r));
 }
