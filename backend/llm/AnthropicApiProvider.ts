@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
+import type { CompleteRequest, CompleteResult, LlmMessage, LlmProvider, Role } from './provider';
 import type { ModelChoice } from '../settings/schema';
 import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
@@ -45,7 +45,7 @@ export class AnthropicApiProvider implements LlmProvider {
         input_schema: toInputSchema(req.submit.schema),
       },
     ];
-    const messages: Anthropic.MessageParam[] = req.messages.map((m) => ({ role: m.role, content: m.content }));
+    const messages: Anthropic.MessageParam[] = req.messages.map(toMessageParam);
     const usage = { inputTokens: 0, outputTokens: 0 };
     let idleTurns = 0;
 
@@ -106,6 +106,13 @@ export class AnthropicApiProvider implements LlmProvider {
       messages.push({ role: 'user', content: results });
     }
   }
+}
+
+/** Text first, then any images as base64 image blocks, so the model reads the answer before looking at what it shows. */
+export function toMessageParam(m: LlmMessage): Anthropic.MessageParam {
+  if (m.role !== 'user' || !m.images?.length) return { role: m.role, content: m.content };
+  const images: Anthropic.ImageBlockParam[] = m.images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } }));
+  return { role: 'user', content: [{ type: 'text', text: m.content }, ...images] };
 }
 
 function toInputSchema(schema: z.ZodType): Anthropic.Tool.InputSchema {

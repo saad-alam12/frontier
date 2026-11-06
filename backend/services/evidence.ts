@@ -9,7 +9,7 @@ import { deriveState } from '../core/nodeState';
 import type { Evidence, EvidenceContext, EvidenceKind, NodeState } from '../core/types';
 import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
-import { emptyState, getState, insertEvidence, listEvidenceForNode, upsertState } from '../store/evidence';
+import { emptyState, eraseEvidence, getState, insertEvidence, listEvidenceForNode, upsertState } from '../store/evidence';
 import { newId } from '../store/ids';
 import { chainsAround, getNode } from '../store/world';
 
@@ -104,6 +104,11 @@ export function setOwnStatement(db: Database, nodeId: string, ownStatement: stri
   const next: NodeState = { ...current, ownStatement, handle: handle === undefined ? current.handle : handle };
   upsertState(db, next);
   return next;
+}
+
+/** The learner erased these ideas (Settings): their evidence and states go. The erase service calls this inside its transaction. */
+export function eraseEvidenceFor(db: Database, nodeIds: Iterable<string>): void {
+  eraseEvidence(db, nodeIds);
 }
 
 /** Goal fields are written by the goal service through this one door. */

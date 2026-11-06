@@ -297,7 +297,7 @@ export function GoalPage({
       {detail.expected.length > 0 && (
         <details className="disclosure">
           <summary>
-            {plural(detail.expected.length, 'idea')} expected, not in your material yet
+            {plural(detail.expected.length, 'idea')} the goal needs that your material does not cover yet
           </summary>
           <p className="m-0 text-[13px] text-muted">The goal will likely need these. They are taught once a source covers them, or now if you choose.</p>
           <ul className="list-card">

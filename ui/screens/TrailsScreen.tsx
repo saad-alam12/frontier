@@ -5,6 +5,7 @@ import { call } from '../api';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, MetaLine } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { ResponseExtras } from '../components/AnswerExtras';
 import { STAGE_LABEL, cardText } from '../lib/stages';
 
 const PLAY_MS = 1400;
@@ -52,8 +53,11 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
   if (trails.length === 0) {
     return (
       <Screen>
-        <h1 className="t-display">Trails</h1>
-        <Empty>Every session you run is kept here as a trail you can replay.</Empty>
+        <div className="flex flex-col gap-[10px]">
+          <h1 className="t-display">Trails</h1>
+          <p className="t-lead m-0">Every session you have done, step by step.</p>
+        </div>
+        <Empty>Your first session will appear here. Open it later to read it again or replay it.</Empty>
       </Screen>
     );
   }
@@ -173,7 +177,7 @@ function TrailEntry({ item, fresh }: { item: TrailItem; fresh: boolean }) {
             {item.carried ? ' · from the session before' : ''}
           </div>
           <Markdown text={cardText(item.card)} className="text-[15px] text-soft" />
-          {item.response && item.card.stage !== 'explain' && item.card.stage !== 'support' && item.card.stage !== 'reteach' && <Answer text={item.response.answer} confidence={item.response.confidence} />}
+          {item.response && item.card.stage !== 'explain' && item.card.stage !== 'support' && item.card.stage !== 'reteach' && <Answer text={item.response.answer} confidence={item.response.confidence} extras={item.response} />}
           {item.grade && (
             <div className="flex flex-col gap-[4px]">
               <span className="font-medium">{Math.round(item.grade.score * 10)}/10</span>
@@ -235,10 +239,11 @@ function TrailEntry({ item, fresh }: { item: TrailItem; fresh: boolean }) {
   }
 }
 
-function Answer({ text, confidence }: { text: string; confidence?: number }) {
+function Answer({ text, confidence, extras }: { text: string; confidence?: number; extras?: { attachments?: string[]; quote?: string } }) {
   return (
     <div className="answer-block flex flex-col gap-[6px]">
-      {text.trim() ? <div className="learner-text whitespace-pre-wrap">{text}</div> : <div className="learner-text text-muted">No idea</div>}
+      {extras && <ResponseExtras response={extras} />}
+      {text.trim() ? <div className="learner-text whitespace-pre-wrap">{text}</div> : extras?.attachments?.length ? null : <div className="learner-text text-muted">No idea</div>}
       {confidence !== undefined && <div className="t-caption text-muted">{confidenceLabel(confidence).replace(/^./, (c) => c.toUpperCase())}</div>}
     </div>
   );

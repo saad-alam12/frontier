@@ -304,6 +304,27 @@ export function capTargets(db: Database, goalId: string, nodeId: string, depth: 
   ).run(depth, reason, nodeId, goalId);
 }
 
+/** The learner erased these ideas: every goal stops targeting them. */
+export function removeTargetsOf(db: Database, nodeIds: Iterable<string>): void {
+  const stmt = db.prepare('DELETE FROM targets WHERE node_id = ?');
+  for (const id of nodeIds) stmt.run(id);
+}
+
+/** The learner erased these sources: no goal keeps them as material. */
+export function removeMaterialsOf(db: Database, sourceIds: Iterable<string>): void {
+  const stmt = db.prepare('DELETE FROM goal_materials WHERE source_id = ?');
+  for (const id of sourceIds) stmt.run(id);
+}
+
+/**
+ * The goal's map was erased: its capabilities and targets go and it counts as never compiled, so the
+ * goal worker maps it again. What the learner set (text, time, background, gaps) stays.
+ */
+export function resetGoalMap(db: Database, goalId: string): void {
+  db.prepare('DELETE FROM capabilities WHERE goal_id = ?').run(goalId);
+  db.prepare("UPDATE goals SET compiled_at = NULL, compiled_sources = '[]', coverage = NULL, baseline = '{}', remap = NULL, started_unverified = '[]' WHERE id = ?").run(goalId);
+}
+
 export function deleteCapabilities(db: Database, ids: string[]): void {
   const stmt = db.prepare('DELETE FROM capabilities WHERE id = ?');
   for (const id of ids) stmt.run(id);

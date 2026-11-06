@@ -43,7 +43,7 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 | `accent-text` | `#B4C2FF` | accent used as text (links, "learnable" labels, highlighted math) |
 | `accent-halo` | `rgba(142,164,255,0.18)` | 4px halo around current dots |
 
-- Primary buttons are **ivory** (`text` on `bg` inverted), not accent. The accent marks state, not actions.
+- Primary buttons are **ivory** (`text` on `bg` inverted), not accent. The accent marks state, not actions. The one exception is the danger button, used only to confirm erasing data.
 - Only one accent colour. Success/warning/danger are not part of the palette yet; if needed, use muted versions that pass contrast and never compete with the accent.
 - All text meets WCAG AA on its background (the values above do).
 - A light theme is not required for R1. Keep all colours in tokens (CSS variables) so one can be added.
@@ -74,11 +74,13 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 
 - Spacing steps (px): 4, 6, 8, 10, 12, 14, 16, 18, 22, 24, 28, 32, 36, 40, 48, 56, 72. Do not invent in-between values.
 - Radius: 10 (nav items), 12 (inputs), 14 (small cards), 18 (answer surface, list cards), 999 (buttons, chips, pills), 50% (dots).
-- **App shell** (desktop, ≥ 1200 px wide):
-  - Left nav rail: 96 px, border-right `border`. Brand mark (28 px ring with an accent dot) then text items 72 px wide, 12 px, radius 10; selected = `surface-selected` + `text`. Settings sits alone at the bottom of the rail.
-  - Main column: padding 56 top, 72 sides, 48 bottom; vertical gap 36 between blocks. Content max width **720 px**, left-aligned (not centred).
-  - Right panel: 520–560 px, padding 48 / 40, `bg-panel`, border-left `border`, vertical gap 22–28.
-  - Below 1200 px the right panel moves under the main column; below 700 px the nav becomes a top bar. No horizontal scrolling.
+- **App shell** (R4):
+  - Sidebar: 220 px, border-right `border`. On macOS the window has an inset title bar (traffic lights at 18/18 inside the sidebar) and the sidebar shows the system sidebar material under `rgba(24,22,19,0.62)`, so it stays warm; the rest of the window is opaque `bg`. Windows and Linux keep the standard frame and an opaque `#181715` sidebar. The theme is forced dark (`nativeTheme.themeSource`).
+  - Sidebar content, top to bottom: the brand (22 px mark + "Frontier" 15 px weight 600), the live Session entry while a session is open, the places you work in (Today, Goals, Map, Stats), a "Look back" group (Lookup, Trails, Library) under an 11 px `text-muted` heading, and Settings at the bottom. Items: 32 px high, radius 8, 16 px Lucide icon (stroke 1.75, `text-muted`) + 13 px label (`text-secondary`); hover `rgba(238,234,226,0.05)`; selected `rgba(238,234,226,0.09)` with `text` label and accent icon. Each item has a hover hint saying what the place is for.
+  - Below 1024 px window width the sidebar is 64 px, icons only.
+  - Main column: padding 56 top, 64 sides, 48 bottom; vertical gap 36 between blocks. Content max width **720 px**, left-aligned (not centred). Every screen title has a one-line `t-lead` under it saying what the screen is for.
+  - Right panel: 420 px (at least 340), padding 48 / 36, `bg-panel`, border-left `border`, vertical gap 22–28.
+  - Below 1100 px window width the right panel moves under the main column. No horizontal scrolling. The default window is 1360 × 880.
 - **Alignment rules** (the owner checks these):
   - Breadcrumb, step path, question, answer surface and buttons share the main column's left edge exactly.
   - The step path spans the full column width: first point on the left edge, last label ending on the right edge, points evenly spaced, labels left-aligned under their points.
@@ -86,6 +88,15 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
   - Lists inside cards: 14 px vertical / 20 px horizontal padding, 1px `border-strong` dividers.
 
 ## 5. Components
+
+### Brand mark (R4)
+A 24-unit circle: the left half filled `text` (what you know), the right half a dashed 1.6 accent arc (what lies beyond), and a 2.5 accent dot in the centre on a 4-unit gap in the background colour (you, on the edge). 22 px in the sidebar, 56 px on the welcome screen.
+
+### Sheets (R4)
+Every confirmation is a modal sheet on the native `<dialog>`: 440 px, radius 18, `surface-raised` with an inset `border-strong` and a soft shadow, a blurred 60% backdrop, fading in over 200 ms. 18 px title, 14 px `text-secondary` body, buttons at the bottom right (cancel left of the action). Actions that erase data use the danger button (`#E3A59B` fill, dark text) and, for erasing everything, a typed confirmation word. Esc or a click on the backdrop cancels.
+
+### Buttons: press and hover (R4)
+Buttons scale to 0.97 while pressed; secondary buttons take the hover fill. Inputs show an accent border and a 3 px `accent-halo` ring while focused. Clickable rows in list cards take the hover fill.
 
 ### Breadcrumb
 `Course / Lecture 5 / Jacobian of a composition`. Readable names, not folder slugs. Separators `/` in `node-muted`, earlier items `text-secondary` and clickable, current item `text`. 15 px.
@@ -101,6 +112,9 @@ Question style (24/1.45, weight 400), Markdown with KaTeX. One sentence of frami
 
 ### Answer surface
 `surface`, radius 18, inset 1px `border-strong`, padding 22/24/18. Learner text style, no visible field border inside. Footer row above a 1px divider: left a listening/hint area, right the confidence chips (A guess · Fairly sure · Sure; selected = `chip-selected` + `text`). Placeholder: "Say it or type it, however it comes. Leave it empty if you have no idea." When text is arriving from dictation, five 3 px accent bars animate (scaleY 0.45→1, staggered 0.9–1.3 s) with the word "Listening"; otherwise show the hint "Speak or type, however it comes".
+
+### Attachments and quotes (R4)
+Above the answer text: image thumbnails (64 px, radius 10, a remove button each) and at most one quote block (2 px accent bar on the left, `text-soft`, three lines at most, a remove button). A paperclip icon button in the answer footer opens the file picker; paste and drop work anywhere on the answer surface. Selecting text in an earlier message shows a small floating "Reply" pill just above the selection. In the history, a sent quote shows above the learner's answer and its images below it.
 
 ### Buttons
 Primary: ivory pill, `bg` text, 44 px high, 22 px side padding, weight 500. Secondary: transparent pill, 1px `ring` border, `#D8D3C8` text. Keyboard hint beside, 12 px `text-muted` ("⌘↵ to submit").
@@ -134,7 +148,7 @@ One plain sentence in `text-secondary` and, where useful, one action. No dashed 
 - **Segmented control**: one pill track (`surface`, inset `border-strong`), the chosen segment an ivory pill with `bg` text. Used for how time is given (In total · Per week · Per day · Per lecture) and the Stats range.
 - **Time picker**: a stepper (−, the number at 34 px weight 500, +) beside its unit in `text-soft`; a log-scale slider in the accent; quick picks as outlined mini chips ("2 hours · an article or a video"); then the true total in `accent-text` 22 px, the one number the plan is made for.
 - **Budget bar**: a 10 px track (6 px compact). Spent in ivory, the time the plan holds ahead in accent stripes (135°), the rest empty; a 2 px `text-secondary` tick where the budget's rhythm puts you by now. Legend below in 13 px.
-- **Idea field**: the plan as 16 px dots on a `surface` card: in depth = filled accent with halo, overview = 2 px accent ring, already yours = filled ivory, left out = dashed `node-muted` ring at 80%; a 7 px amber dot on an idea another goal shares. Dots ease between states as the time changes.
+- **Idea field**: the plan as 16 px dots on a `surface` card: in depth = filled accent with halo, overview = 2 px accent ring, already yours = filled ivory, left out = dashed `node-muted` ring at 80%; a 7 px amber dot on an idea another goal shares. Dots ease between states as the time changes. Hovering or focusing a dot shows a 288 px tip centred above it (so it never covers the row): the state with its dot, the idea's name, its statement (four lines at most) and one plain sentence on what the plan does with it.
 - **Depth pips**: five 8 px dots per idea: filled ivory up to what you know, accent ring up to the planned depth, dashed up to what the goal asks beyond the time. Shown with a one-line legend.
 - **Progress panel** (goal page): a raised card with up to four figures (30 px number, the target after a slash in `text-muted`, a 13 px label), the budget bar, a pace sentence (amber `#E8C27A` only when it needs attention, accent when ahead, `text-secondary` when on track), then the primary action.
 - **Wizard**: the horizontal step path on top with "Cancel"/"Finish later" on the right, one question group per step, Back (quiet) and the primary action at the bottom right above a 1 px divider. Questions are 15 px `text` with a 13 px `text-muted` hint underneath.

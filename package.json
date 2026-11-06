@@ -33,6 +33,7 @@
     "d3-force": "^3.0.0",
     "katex": "^0.16.22",
     "linkedom": "^0.18.14",
+    "lucide-react": "^1.69.0",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isGraded } from '../core/session';
 import type { Stage } from '../core/session';
-import type { LlmProvider } from '../llm/provider';
+import type { LlmImage, LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
 import type { Assessment, GoalFocus, GoalLevel } from '../core/types';
 import { answerReadingPrompt } from './prompts';
@@ -54,6 +54,10 @@ export interface LearnerResponse {
   handle?: string;
   /** "I know this, test me" on a predict or explain card: go straight to the question that shows the aim. */
   testMe?: boolean;
+  /** Attached images, as file names in the data folder's attachments/ directory. */
+  attachments?: string[];
+  /** The part of an earlier message the learner selected and is replying to. */
+  quote?: string;
 }
 
 export interface TutorGoal {
@@ -83,6 +87,8 @@ export interface TutorStepInput {
   /** Earlier cards and responses for this node, oldest first. */
   history: { stage: Stage; card: TutorCard; response: LearnerResponse | null; grade: Grade | null }[];
   previous: { stage: Stage; card: TutorCard; response: LearnerResponse } | null;
+  /** The images attached to the previous response, sent with the message; earlier answers' images are not sent again. */
+  images?: LlmImage[];
   nextStage: Stage | null;
 }
 
@@ -142,7 +148,7 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
     // the fresh explanation after a worked example goes to the escalation model
     role: input.nextStage === 'reteach' ? 'tutorEscalation' : 'tutor',
     system: answerReadingPrompt('tutor'),
-    messages: [{ role: 'user', content: sections.join('\n\n') }],
+    messages: [{ role: 'user', content: sections.join('\n\n'), images: input.images }],
     submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade) },
   });
   return result.data as TutorStepResult;
@@ -204,7 +210,10 @@ export function cardText(card: TutorCard): string {
 }
 
 export function responseText(r: LearnerResponse): string {
-  const parts = [r.answer.trim() ? r.answer : '(empty: the learner has no idea)'];
+  const pictures = r.attachments?.length ?? 0;
+  const parts = r.quote ? [`The learner is replying to this part: "${r.quote}"`] : [];
+  parts.push(r.answer.trim() ? r.answer : pictures ? '(no text: the answer is in the attached images)' : '(empty: the learner has no idea)');
+  if (pictures) parts.push(`attached images: ${pictures}`);
   if (r.confidence !== undefined) parts.push(`confidence: ${confidenceLabel(r.confidence)}`);
   if (r.handle) parts.push(`handle: ${r.handle}`);
   if (r.effort !== undefined) parts.push(`effort ${r.effort}/5`);
@@ -222,7 +231,7 @@ export type RecallResult = z.infer<typeof RecallSchema>;
 
 export async function runRecall(
   provider: LlmProvider,
-  input: { goalText: string; nodes: { id: string; name: string; statement: string }[]; text: string; closing: boolean },
+  input: { goalText: string; nodes: { id: string; name: string; statement: string }[]; text: string; closing: boolean; quote?: string; images?: LlmImage[] },
 ): Promise<RecallResult> {
   const ids = new Set(input.nodes.map((n) => n.id));
   const schema = RecallSchema.superRefine((value, ctx) => {
@@ -238,13 +247,14 @@ export async function runRecall(
   const message = [
     `Goal: ${input.goalText}`,
     `## Ideas covered\n${input.nodes.map((n) => `- [${n.id}] ${n.name}: ${n.statement}`).join('\n')}`,
-    `## Learner's recall\n${input.text || '(nothing written)'}`,
+    ...(input.quote ? [`## The learner is replying to this part\n"${input.quote}"`] : []),
+    `## Learner's recall\n${input.text || (input.images?.length ? '(no text: the recall is in the attached images)' : '(nothing written)')}`,
     input.closing ? 'Score every idea and add the closing summary (canDo and previewQuestion).' : 'Score every idea. No closing summary.',
   ].join('\n\n');
   const result = await provider.complete({
     role: 'tutor',
     system: answerReadingPrompt('recall'),
-    messages: [{ role: 'user', content: message }],
+    messages: [{ role: 'user', content: message, images: input.images }],
     submit: { name: 'submit_recall', description: 'Submit recall scores per idea and, when asked, the closing summary.', schema },
   });
   return result.data;

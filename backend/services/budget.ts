@@ -183,7 +183,7 @@ export function learnerSpeedNow(db: Database): number {
 export interface PlanPreview {
   plan: GoalPlan;
   /** Ideas in the preview with the depth the plan gives each (0: left out). */
-  ideas: { nodeId: string; name: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[]; simplified: string | null }[];
+  ideas: { nodeId: string; name: string; statement: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[]; simplified: string | null }[];
   /** True when the plan reaches every target at its full depth with time to spare: a bigger map would use it. */
   roomForMore: boolean;
 }
@@ -216,6 +216,7 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
     .map(([nodeId, e]) => ({
       nodeId,
       name: inputs.nodes.get(nodeId)?.name ?? nodeId,
+      statement: inputs.nodes.get(nodeId)?.statement ?? '',
       kind: inputs.nodes.get(nodeId)?.kind ?? 'claim',
       plannedDepth: Math.min(e.ideal, allocation.nodeDepth.get(nodeId) ?? 0) as Depth,
       idealDepth: e.ideal as Depth,

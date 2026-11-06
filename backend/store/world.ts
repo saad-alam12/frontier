@@ -130,7 +130,8 @@ export function applyMergePlan(db: Database, plan: MergePlan): void {
 /**
  * Remove ideas nothing depends on any more (a source read again into larger ideas). Every chain that
  * uses one goes too; worked examples, embeddings and goal targets on them go by cascade. The caller
- * makes sure none has evidence: evidence is never deleted.
+ * makes sure none has evidence: evidence is deleted only when the learner erases ideas from Settings
+ * (services/erase.ts), which removes it first.
  */
 export function retireNodes(db: Database, ids: Iterable<string>): void {
   const dropChains = db.prepare('DELETE FROM chains WHERE conclusion = ? OR id IN (SELECT chain_id FROM chain_premises WHERE node_id = ?)');
@@ -138,6 +139,24 @@ export function retireNodes(db: Database, ids: Iterable<string>): void {
   for (const id of ids) {
     dropChains.run(id, id);
     dropNode.run(id);
+  }
+}
+
+/**
+ * A source was erased: ideas and chains that stay (another source backs them) lose their citations of
+ * it, so no card points at a source that is gone.
+ */
+export function dropSourceRefs(db: Database, sourceId: string): void {
+  // LIKE only narrows the rows to parse; the exact match is on the parsed refs.
+  const like = `%${sourceId}%`;
+  const now = nowIso();
+  const updateNode = db.prepare('UPDATE nodes SET sources = ?, updated_at = ? WHERE id = ?');
+  for (const r of db.prepare('SELECT id, sources FROM nodes WHERE sources LIKE ?').all(like) as { id: string; sources: string }[]) {
+    updateNode.run(JSON.stringify(parseJson<SourceRef[]>(r.sources, []).filter((s) => s.sourceId !== sourceId)), now, r.id);
+  }
+  const updateChain = db.prepare('UPDATE chains SET sources = ? WHERE id = ?');
+  for (const r of db.prepare('SELECT id, sources FROM chains WHERE sources LIKE ?').all(like) as { id: string; sources: string }[]) {
+    updateChain.run(JSON.stringify(parseJson<SourceRef[]>(r.sources, []).filter((s) => s.sourceId !== sourceId)), r.id);
   }
 }
 

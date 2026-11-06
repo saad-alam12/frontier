@@ -43,7 +43,10 @@ export function StatsScreen() {
   return (
     <Screen wide>
       <div className="flex flex-col gap-[18px]">
-        <h1 className="t-display">Stats</h1>
+        <div className="flex flex-col gap-[10px]">
+          <h1 className="t-display">Stats</h1>
+          <p className="t-lead m-0">Where your time goes and how far each goal has come.</p>
+        </div>
         <div className="stats-filters">
           <div role="radiogroup" aria-label="Time range" className="segmented is-small">
             {RANGES.map((r) => (

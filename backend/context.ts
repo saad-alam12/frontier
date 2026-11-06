@@ -78,6 +78,7 @@ export class AppContext {
       db: this.db(),
       provider: this.provider(),
       ingestion: this.ingestion(),
+      attachmentsDir: this.paths().attachments,
       onGraded: (event: { setId: string; problemId: string }) => this.emit('practice.graded', event),
       onError: (message: string) => this.emit('app.toast', { kind: 'error', message }),
     };
@@ -105,6 +106,6 @@ export class AppContext {
 
   private ensureFolders(): void {
     const p = this.paths();
-    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd]) mkdirSync(dir, { recursive: true });
+    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd, p.attachments]) mkdirSync(dir, { recursive: true });
   }
 }

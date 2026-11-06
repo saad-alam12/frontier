@@ -211,6 +211,8 @@ Every answer (probe, session card, practice) goes into **one field**. The learne
 
 Answers are often dictated by a speech-to-text tool that types into the focused field. The field is a plain text input so this works; every model that reads answers is told to read spoken math ("d a i by d x j"), fix obvious transcription slips from context ("Jack's" = JAX) and never penalize notation or spelling. A bare answer means the reasoning is unknown, not absent.
 
+In a session (teaching steps and the start and end recall) an answer may also carry **images** (pasted, dropped or picked: png, jpeg, gif or webp, at most 4 of 5 MB each) and **one quote**: the learner selects text in any earlier message and presses Reply, and the quote shows above the field. The tutor sees the images of the answer it judges and is told which part the learner replies to. An answer that is only images is an answer, not "no idea". Images are stored once each in the data folder's `attachments/` folder, named by their content hash; the session keeps only their names. Practice answers do not take images or quotes yet.
+
 ---
 
 ## 5. Practice and retention
@@ -370,7 +372,7 @@ prompts/     all prompts, written from scratch for this project
 Rules:
 - **LLMs judge, code mechanizes.** Fringe, scheduling, FSRS, merging, dedupe, tiering and scoring arithmetic are deterministic code. LLMs extract, match, teach, generate and grade.
 - **One writer per store.** Only the merger writes the world layer. Only the evidence service writes evidence. NodeState is derived from evidence.
-- **Append-only evidence.** Never edit evidence; correct by appending.
+- **Append-only evidence.** Never edit evidence; correct by appending. The one exception: when the learner erases ideas from their map (Settings, "Erase from your map"), the evidence on those ideas is deleted with them.
 - **Structured outputs via submit tools.** Each agent ends by calling a `submit_*` tool whose input is validated with zod; validation errors go back to the model for a retry (max 3).
 - **Provider interface.** Every model call goes through `llm/` with a role name; settings map each role to a model and an effort level (`low` … `max`, passed as the Agent SDK `effort` option or the API's `output_config.effort`). Defaults: goal compiler and the escalation tutor Opus 5.5 at extra high; tutor and prober Opus 5.5 at medium; problem generator and grader Sonnet 5.5 at high; extractor, matcher and planner Haiku 5.5 at max; librarian and connection test Haiku 5.5 at medium.
 

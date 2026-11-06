@@ -70,7 +70,9 @@ export function trail(db: Database, sessionId: string): Trail {
   const session = getSession<SessionState>(db, sessionId);
   if (!session) throw new Error(`unknown session ${sessionId}`);
   const view = loadKnowledge(db);
-  const name = (id: string | undefined) => (id ? (view.nodes.get(id)?.name ?? session.state.plan?.steps?.find((st) => st.nodeId === id)?.name ?? id) : '');
+  // erased ideas keep the names the session recorded, so the trail still reads
+  const name = (id: string | undefined) =>
+    id ? (view.nodes.get(id)?.name ?? session.state.plan?.steps?.find((st) => st.nodeId === id)?.name ?? session.state.previousNodes?.find((n) => n.id === id)?.name ?? id) : '';
   const items: TrailItem[] = [];
   const open = new Map<string, Extract<TrailItem, { type: 'step' }>>();
   for (const e of listSessionEvents(db, sessionId)) {

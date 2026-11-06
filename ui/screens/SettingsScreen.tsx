@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../api';
 import type { AppInfo, ConnectionTestResult, Effort, ModelOptions, Role, Settings, SettingsPatch } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
-import { Button, Field, Notice, Section } from '../components/controls';
+import { Button, Section } from '../components/controls';
+import { EraseMap } from '../components/EraseMap';
 
 const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'goalCompiler', label: 'Goal compiler', does: 'Turns a goal into skills and the ideas each needs' },
@@ -63,43 +64,48 @@ export function SettingsScreen() {
     <Screen>
       <div className="flex flex-col gap-[14px]">
         <h1 className="t-display">Settings</h1>
-        <p className="m-0 text-[15px] text-secondary">{saved ? 'Saved' : 'Changes are saved as you make them.'}</p>
+        <p className="t-lead m-0">{saved ? 'Saved' : 'Changes are saved as you make them.'}</p>
       </div>
 
-      <Section title="Model provider" gap={22}>
-        <Field label="Provider" htmlFor="provider" hint="The Claude login uses the Claude Code login already on this machine. The API key option uses the public API.">
-          <select id="provider" className="input" value={settings.provider} onChange={(e) => void update({ provider: e.target.value as Settings['provider'] })}>
-            <option value="agentSdk">Claude login (subscription)</option>
-            <option value="anthropicApi">Anthropic API key</option>
-          </select>
-        </Field>
-        {settings.provider === 'anthropicApi' && (
-          <Field label="API key" htmlFor="api-key">
-            <input
-              id="api-key"
-              className="input"
-              type="password"
-              value={settings.apiKey}
-              onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-              onBlur={(e) => void update({ apiKey: e.target.value })}
-              placeholder="sk-ant-..."
-            />
-          </Field>
-        )}
-        <Field label="Parallel model calls" htmlFor="concurrency" hint="Background work runs at most this many model calls at once. Keep it low on a subscription.">
-          <input id="concurrency" className="input" type="number" min={1} max={8} value={settings.concurrency} onChange={(e) => void update({ concurrency: Number(e.target.value) || 1 })} />
-        </Field>
-        <div className="button-row">
-          <Button kind="primary" onClick={() => void testConnection()} disabled={testing}>
-            {testing ? 'Testing…' : 'Test connection'}
-          </Button>
-          {testResult && (
-            <Notice error={!testResult.ok}>
-              {testResult.ok
-                ? `Connected via ${testResult.provider} (${testResult.model}) in ${testResult.attempts} attempt${testResult.attempts === 1 ? '' : 's'}.`
-                : `Failed: ${testResult.error}`}
-            </Notice>
+      <Section title="Model provider" gap={14}>
+        <div className="settings-group">
+          <SettingRow label="Provider" htmlFor="provider" hint="The Claude login uses the Claude Code login already on this Mac. An API key uses the public API and is billed per call.">
+            <select id="provider" className="input" value={settings.provider} onChange={(e) => void update({ provider: e.target.value as Settings['provider'] })}>
+              <option value="agentSdk">Claude login (subscription)</option>
+              <option value="anthropicApi">Anthropic API key</option>
+            </select>
+          </SettingRow>
+          {settings.provider === 'anthropicApi' && (
+            <SettingRow label="API key" htmlFor="api-key">
+              <input
+                id="api-key"
+                className="input"
+                type="password"
+                value={settings.apiKey}
+                onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
+                onBlur={(e) => void update({ apiKey: e.target.value })}
+                placeholder="sk-ant-..."
+              />
+            </SettingRow>
           )}
+          <SettingRow label="Model calls at once" htmlFor="concurrency" hint="Background work never runs more calls than this at the same time. Keep it low on a subscription.">
+            <input id="concurrency" className="input is-narrow" type="number" min={1} max={8} value={settings.concurrency} onChange={(e) => void update({ concurrency: Number(e.target.value) || 1 })} />
+          </SettingRow>
+          <SettingRow
+            label="Connection"
+            hint={
+              testResult
+                ? testResult.ok
+                  ? `Connected via ${testResult.provider} (${testResult.model}) in ${testResult.attempts} attempt${testResult.attempts === 1 ? '' : 's'}.`
+                  : `Failed: ${testResult.error}`
+                : 'Sends one short request to check that the model answers.'
+            }
+            hintError={testResult !== null && !testResult.ok}
+          >
+            <Button onClick={() => void testConnection()} disabled={testing}>
+              {testing ? 'Testing…' : 'Test connection'}
+            </Button>
+          </SettingRow>
         </div>
       </Section>
 
@@ -112,15 +118,37 @@ export function SettingsScreen() {
         </ul>
       </Section>
 
-      <Section title="Data folder" gap={14}>
-        <div className="flex items-center gap-[12px]">
-          <code className="input flex min-w-0 flex-1 items-center truncate font-mono text-[13px] text-soft">{settings.dataFolder}</code>
-          <Button onClick={() => void chooseFolder()}>Change</Button>
+      <Section title="Data" gap={14}>
+        <div className="settings-group">
+          <SettingRow label="Data folder" hint="Holds the database, the sources you add and exports. Changing it does not move existing data.">
+            <Button onClick={() => void chooseFolder()}>Change…</Button>
+          </SettingRow>
+          <div className="settings-path">
+            <code className="truncate font-mono text-[12px] text-secondary" title={settings.dataFolder}>
+              {settings.dataFolder}
+            </code>
+          </div>
         </div>
-        <p className="m-0 text-[13px] text-muted">Holds the database, the sources you add and exports. Changing it does not move existing data.</p>
         {info && <p className="m-0 text-[12px] text-muted">Frontier {info.version}. Settings file: {info.settingsFile}</p>}
       </Section>
+
+      <EraseMap />
     </Screen>
+  );
+}
+
+/** One row of a settings group: what it is and why on the left, the control on the right. */
+function SettingRow({ label, hint, hintError, htmlFor, children }: { label: string; hint?: string; hintError?: boolean; htmlFor?: string; children: ReactNode }) {
+  return (
+    <div className="settings-row">
+      <div className="flex min-w-0 flex-col gap-[2px]">
+        <label className="settings-label" htmlFor={htmlFor}>
+          {label}
+        </label>
+        {hint && <span className={hintError ? 't-small text-danger' : 't-small text-muted'}>{hint}</span>}
+      </div>
+      <div className="settings-control">{children}</div>
+    </div>
   );
 }
 

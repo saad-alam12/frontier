@@ -79,8 +79,11 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
 
   return (
     <Screen>
-      <div className="section-head">
-        <h1 className="t-display">Goals</h1>
+      <div className="section-head items-end">
+        <div className="flex flex-col gap-[10px]">
+          <h1 className="t-display">Goals</h1>
+          <p className="t-lead m-0">What you are learning toward. Each goal gets a plan that fits the time you give it.</p>
+        </div>
         <Button kind="primary" onClick={() => setView({ name: 'new' })}>
           New goal
         </Button>

@@ -17,6 +17,7 @@ import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
+import { EraseRequestSchema, eraseFromMap, previewErase } from '../services/erase';
 import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, startUnverified } from '../store/goals';
@@ -25,6 +26,7 @@ import { getProbeSet } from '../store/probes';
 import { getSession } from '../store/sessions';
 import { approveRemap, dismissRemap, remapView, requestRemap } from '../services/remap';
 import { getDrafts, setDraft } from '../store/drafts';
+import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
@@ -179,6 +181,12 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
     'map.view': () => mapView(ctx.db()),
     'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),
+    'map.erasePreview': (request) => previewErase(ctx.db(), EraseRequestSchema.parse(request)),
+    'map.erase': (request) => {
+      const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, isReading: (id) => ctx.ingestion().isRunning(id) }, EraseRequestSchema.parse(request));
+      for (const goalId of result.goalsToMap) ctx.goalWorker().refresh(goalId); // goals left with no map are mapped again
+      return result;
+    },
     'lookup.search': ({ query }) => lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query),
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
@@ -193,6 +201,8 @@ export function buildHandlers(ctx: AppContext): Handlers {
       setDraft(ctx.db(), key, value);
       return undefined;
     },
+    'attachments.save': (upload) => ({ name: saveAttachment(ctx.paths().attachments, upload) }),
+    'attachments.read': ({ name }) => attachmentDataUrl(ctx.paths().attachments, name),
   };
 }
 

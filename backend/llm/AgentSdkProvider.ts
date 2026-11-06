@@ -4,9 +4,10 @@
  * project and is kept isolated here so it can be swapped out.
  */
 import { AbortError, createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import type { CompleteRequest, CompleteResult, HelperTool, LlmProvider, Role } from './provider';
+import type { CompleteRequest, CompleteResult, HelperTool, LlmImage, LlmProvider, Role } from './provider';
 import type { ModelChoice } from '../settings/schema';
 import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, flattenMessages, runHelperTool } from './submitLoop';
@@ -62,7 +63,9 @@ export class AgentSdkProvider implements LlmProvider {
     });
 
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
-    const prompt = flattenMessages(req.messages);
+    const text = flattenMessages(req.messages);
+    const images = req.messages.flatMap((m) => (m.role === 'user' ? (m.images ?? []) : []));
+    const prompt = images.length ? withImages(text, images) : text;
     const system = `${req.system}\n\nWhen you are done, call the ${req.submit.name} tool exactly once with your final answer. Do not write files or run commands.`;
 
     try {
@@ -103,6 +106,22 @@ export class AgentSdkProvider implements LlmProvider {
     if (!tracker.accepted) throw new NoSubmitError(req.role);
     return { data: tracker.accepted.data, usage, attempts: tracker.attempts, model };
   }
+}
+
+/**
+ * A string prompt can only carry text, so a prompt with images goes in as one streamed user message
+ * whose content is Messages API blocks (SDKUserMessage.message is a MessageParam). The stream may end
+ * right after it: with an in-process MCP server the SDK keeps stdin open until the run ends.
+ */
+export async function* withImages(text: string, images: LlmImage[]): AsyncIterable<SDKUserMessage> {
+  yield {
+    type: 'user',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content: [{ type: 'text', text }, ...images.map((image) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: image.mediaType, data: image.data } }))],
+    },
+  };
 }
 
 function toSdkTool(helper: HelperTool) {

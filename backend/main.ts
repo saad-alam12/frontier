@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, nativeTheme, shell } from 'electron';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
 import { resumeGrading } from './services/practice';
@@ -7,10 +7,23 @@ import { resumeGrading } from './services/practice';
 let mainWindow: BrowserWindow | null = null;
 let context: AppContext | null = null;
 
+/**
+ * On macOS the window gets an inset title bar (the traffic lights sit in the sidebar) and a
+ * translucent sidebar material; the renderer paints everything else opaque. Windows and Linux keep
+ * the standard frame and an opaque sidebar, because they have no matching material.
+ */
+const MAC_CHROME: Electron.BrowserWindowConstructorOptions =
+  process.platform === 'darwin'
+    ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 }, vibrancy: 'sidebar', visualEffectState: 'active', backgroundColor: '#00000000' }
+    : { backgroundColor: '#141311' };
+
 function createWindow(): void {
+  // The palette is dark only, so native materials and menus must not follow a light system theme.
+  nativeTheme.themeSource = 'dark';
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    ...MAC_CHROME,
+    width: 1360,
+    height: 880,
     minWidth: 900,
     minHeight: 600,
     title: 'Frontier',

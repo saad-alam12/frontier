@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GoalBudget, GoalPlan, GoalProgress, PlanPreview } from '../../backend/api/contract';
 import { budgetMinutes, formatHours } from '../../backend/core/budget';
-import { depthName } from '../lib/stages';
 import { Markdown } from './Markdown';
 import { useTip } from './tooltip';
 
@@ -205,31 +204,51 @@ function dotKind(i: PlanIdea): DotKind {
   return i.plannedDepth >= 2 ? 'deep' : i.plannedDepth === 1 ? 'overview' : 'cut';
 }
 
-/** One line on what the plan does with an idea, and why when the time trims it. */
+/** What the plan does with an idea, in plain words, and why when the time trims it. */
 function dotLine(i: PlanIdea, kind: DotKind): string {
-  const trimmed = i.plannedDepth < i.idealDepth ? `. The goal asks ${depthName(i.idealDepth).toLowerCase()}; trimmed to fit your time` : '';
+  const asks = DEPTH_GOAL[i.idealDepth] ?? DEPTH_GOAL[2];
+  const trimmed = i.plannedDepth < i.idealDepth ? ` The goal asks you to ${asks}; your time does not stretch that far.` : '';
   switch (kind) {
     case 'known':
-      return `Already yours: ${depthName(i.currentDepth).toLowerCase()}`;
+      return 'You already know this. It costs no time.';
     case 'deep':
-      return `In depth: ${depthName(i.plannedDepth).toLowerCase()}${trimmed}`;
+      return `Learned in depth: you will ${DEPTH_GOAL[i.plannedDepth] ?? DEPTH_GOAL[2]}.${trimmed}`;
     case 'overview':
-      return `Overview: ${depthName(i.plannedDepth).toLowerCase()}${trimmed}`;
+      return `An overview: you will ${DEPTH_GOAL[1]}.${trimmed}`;
     case 'cut':
-      return `Left out for this time. The goal asks ${depthName(i.idealDepth).toLowerCase()}`;
+      return 'Left out for this time. Give the goal more time to add it.';
   }
 }
+
+/** Depth levels said as what the learner will be able to do. */
+const DEPTH_GOAL: Record<number, string> = {
+  1: 'recognize it and know what it is for',
+  2: 'be able to explain it in your own words',
+  3: 'be able to derive it',
+  4: 'be able to apply it to problems',
+  5: 'be able to carry it to new problems',
+};
+
+const KIND_LABEL: Record<DotKind, string> = { deep: 'In depth', overview: 'Overview', known: 'Already yours', cut: 'Left out' };
 
 function DotTip({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
   return (
     <>
+      <div className="tip-kicker">
+        <i className={`idea-dot is-${kind}`} aria-hidden="true" />
+        {KIND_LABEL[kind]}
+      </div>
       <div className="tip-title">
         <Markdown text={idea.name} inline />
       </div>
+      {idea.statement && (
+        <div className="tip-body">
+          <Markdown text={idea.statement} inline />
+        </div>
+      )}
       <div className="tip-line">{dotLine(idea, kind)}</div>
       {idea.simplified && <div className="tip-line">Simplified: {idea.simplified}</div>}
-      {idea.skills.length > 0 && <div className="tip-meta">For: {idea.skills.join('; ')}</div>}
-      {idea.sharedWith.length > 0 && <div className="tip-meta">Shared with {idea.sharedWith.join(', ')}</div>}
+      {idea.sharedWith.length > 0 && <div className="tip-meta">Also in {idea.sharedWith.join(', ')}, so it is learned once for both.</div>}
     </>
   );
 }
@@ -261,10 +280,9 @@ export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
               key={i.nodeId}
               className={`idea-dot is-${kind}`}
               tabIndex={0}
-              aria-label={`${i.name}: ${dotLine(i, kind)}${i.simplified ? `. Simplified: ${i.simplified}` : ''}`}
-              onPointerEnter={(e) => tip.show(e, content)}
-              onPointerMove={(e) => tip.show(e, content)}
-              onFocus={(e) => tip.showAt(e.currentTarget, content)}
+              aria-label={`${i.name}. ${i.statement ? `${i.statement} ` : ''}${dotLine(i, kind)}${i.simplified ? `. Simplified: ${i.simplified}` : ''}`}
+              onPointerEnter={(e) => tip.showAbove(e.currentTarget, content)}
+              onFocus={(e) => tip.showAbove(e.currentTarget, content)}
               onBlur={tip.hide}
             >
               {i.sharedWith.length > 0 && <span className="shared-mark" aria-hidden="true" />}

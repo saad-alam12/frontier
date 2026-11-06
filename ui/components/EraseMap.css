@@ -1,0 +1,32 @@
+/* A long map would push the erase button far down; the list scrolls inside its card instead. */
+.erase-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.erase-list > li {
+  padding: 0;
+}
+
+/* The whole row is the label, so the click target is the row, not only the small checkbox. */
+.erase-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  cursor: pointer;
+}
+
+.erase-item input[type='checkbox'] {
+  flex: none;
+  margin: 0;
+  accent-color: var(--danger-fill, var(--accent));
+}
+
+.erase-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

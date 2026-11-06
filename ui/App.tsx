@@ -53,6 +53,7 @@ export function App() {
   };
   return (
     <div className="app">
+      <div className="window-drag" aria-hidden="true" />
       <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} />
       {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
       {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} />}

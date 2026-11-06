@@ -10,7 +10,7 @@ export function Button({
 }: {
   children: ReactNode;
   onClick?: () => void;
-  kind?: 'primary' | 'secondary' | 'quiet';
+  kind?: 'primary' | 'secondary' | 'quiet' | 'danger';
   disabled?: boolean;
   type?: 'button' | 'submit';
   title?: string;

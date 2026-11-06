@@ -1,47 +1,78 @@
 import type { ReactNode } from 'react';
+import { ChartNoAxesColumn, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
 
 export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
 
-/** Where you work, then the places you go to look things up. */
-const PRIMARY: { name: ScreenName; label: string }[] = [
-  { name: 'today', label: 'Today' },
-  { name: 'goals', label: 'Goals' },
-  { name: 'map', label: 'Map' },
-  { name: 'stats', label: 'Stats' },
+interface NavEntry {
+  name: ScreenName;
+  label: string;
+  icon: LucideIcon;
+  /** Shown on hover: what the place is for, for a learner who has not used it yet. */
+  hint: string;
+}
+
+/** Where you work. */
+const PRIMARY: NavEntry[] = [
+  { name: 'today', label: 'Today', icon: Sun, hint: 'What to do now' },
+  { name: 'goals', label: 'Goals', icon: Target, hint: 'What you are learning toward, and the time you give it' },
+  { name: 'map', label: 'Map', icon: Waypoints, hint: 'Every idea and how they connect' },
+  { name: 'stats', label: 'Stats', icon: ChartNoAxesColumn, hint: 'Your time and progress' },
 ];
-const SECONDARY: { name: ScreenName; label: string }[] = [
-  { name: 'lookup', label: 'Lookup' },
-  { name: 'trails', label: 'Trails' },
-  { name: 'library', label: 'Library' },
+/** Where you look back and look things up. */
+const SECONDARY: NavEntry[] = [
+  { name: 'lookup', label: 'Lookup', icon: Search, hint: 'Ask about anything you have learned' },
+  { name: 'trails', label: 'Trails', icon: History, hint: 'Your past sessions, step by step' },
+  { name: 'library', label: 'Library', icon: LibraryBig, hint: 'The material your maps are built from' },
 ];
 
 /**
- * The 96 px left rail: brand mark, a live Session entry while a session is open, the four places
- * you work in, the three you look things up in, and Settings at the bottom.
+ * The Frontier mark: what you know (the filled half), what lies beyond (the dashed half), and you,
+ * the accent dot, standing on the edge between them.
+ */
+export function BrandMark({ size = 22, on = 'var(--bg-sidebar)' }: { size?: number; /** The colour behind the mark, so the dot's ring reads as a gap. */ on?: string }) {
+  return (
+    <svg className="brand-svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2a10 10 0 0 0 0 20z" fill="var(--text)" />
+      <path d="M12 2a10 10 0 0 1 0 20" fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeDasharray="2.1 2.4" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="4" fill={on} />
+      <circle cx="12" cy="12" r="2.5" fill="var(--accent)" />
+    </svg>
+  );
+}
+
+/**
+ * The sidebar: the mark, a live Session entry while a session is open, the places you work in, the
+ * places you look back in, and Settings at the bottom.
  */
 export function NavRail({ current, onSelect, sessionActive }: { current: ScreenName; onSelect: (s: ScreenName) => void; sessionActive: boolean }) {
-  const item = (name: ScreenName, label: string, small?: boolean) => (
-    <button key={name} type="button" className={small ? 'nav-item is-small' : 'nav-item'} aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)}>
-      {label}
+  const item = ({ name, label, icon: Icon, hint }: NavEntry) => (
+    <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={hint}>
+      <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+      <span>{label}</span>
     </button>
   );
   return (
     <nav aria-label="Main" className="nav-rail">
-      <div className="brand-mark" aria-hidden="true">
-        <span />
+      <div className="nav-titlebar" aria-hidden="true" />
+      <div className="brand">
+        <BrandMark />
+        <span className="brand-name">Frontier</span>
       </div>
       {(sessionActive || current === 'session') && (
         <button type="button" className="nav-live" aria-current={current === 'session' ? 'page' : undefined} onClick={() => onSelect('session')} title="Your session is open">
           <span className="live-dot" aria-hidden="true" />
-          Session
+          <span>Session</span>
+          <span className="nav-live-hint">{current === 'session' ? 'Open now' : 'Continue'}</span>
         </button>
       )}
-      {PRIMARY.map((i) => item(i.name, i.label))}
-      <div className="nav-divider" aria-hidden="true" />
-      {SECONDARY.map((i) => item(i.name, i.label, true))}
+      <div className="nav-group">{PRIMARY.map(item)}</div>
+      <div className="nav-group">
+        <div className="nav-heading">Look back</div>
+        {SECONDARY.map(item)}
+      </div>
       <div className="nav-spacer" />
-      {item('settings', 'Settings', true)}
+      <div className="nav-group">{item({ name: 'settings', label: 'Settings', icon: Settings, hint: 'Models, data and your map' })}</div>
     </nav>
   );
 }

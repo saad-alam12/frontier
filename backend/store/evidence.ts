@@ -70,6 +70,19 @@ export function insertEvidence(db: Database, e: Evidence): void {
   ).run(e.id, e.nodeId, e.at, e.kind, e.score, e.reasoning, e.effort, e.confidence, JSON.stringify(e.context), e.sessionId);
 }
 
+/**
+ * The one exception to append-only evidence: the learner erased these ideas from their map, so what
+ * they showed about them, and the states derived from it, go too.
+ */
+export function eraseEvidence(db: Database, nodeIds: Iterable<string>): void {
+  const dropEvidence = db.prepare('DELETE FROM evidence WHERE node_id = ?');
+  const dropState = db.prepare('DELETE FROM node_states WHERE node_id = ?');
+  for (const id of nodeIds) {
+    dropEvidence.run(id);
+    dropState.run(id);
+  }
+}
+
 export function listEvidenceForNode(db: Database, nodeId: string): Evidence[] {
   return (db.prepare('SELECT * FROM evidence WHERE node_id = ? ORDER BY at, id').all(nodeId) as unknown as EvidenceRow[]).map(rowToEvidence);
 }

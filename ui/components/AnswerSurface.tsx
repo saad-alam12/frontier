@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CONFIDENCE_LEVELS } from '../../backend/core/types';
 import { Button } from './controls';
+import { AttachButton, PendingExtras, attachHandlers, clearQuote, useAnswerExtras, useExtrasTarget } from './AnswerExtras';
 
 export const ANSWER_PLACEHOLDER = 'Say it or type it, however it comes. Leave it empty if you have no idea.';
 const HINT = 'Speak or type, however it comes';
@@ -23,6 +24,7 @@ export function AnswerSurface({
   disabled,
   label = 'Your answer',
   autoFocus,
+  extras,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -36,11 +38,22 @@ export function AnswerSurface({
   label?: string;
   /** Focus the field on mount, as after stopping a judged answer to edit it. */
   autoFocus?: boolean;
+  /** Accept attached images (paste, drop, paperclip) and a quoted reply, as session answers do. */
+  extras?: boolean;
 }) {
   const [listening, noteInput] = useListening();
+  const { quote, quoteVersion } = useAnswerExtras();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useExtrasTarget(Boolean(extras));
+  // a new quote means the learner is about to reply to it
+  useEffect(() => {
+    if (extras && quoteVersion > 0) inputRef.current?.focus();
+  }, [extras, quoteVersion]);
   return (
-    <div className="answer-surface">
+    <div className="answer-surface" {...(extras ? attachHandlers(disabled) : {})}>
+      {extras && <PendingExtras disabled={disabled} />}
       <textarea
+        ref={inputRef}
         aria-label={label}
         className="answer-input learner-text"
         rows={rows}
@@ -52,10 +65,20 @@ export function AnswerSurface({
           noteInput(e.target.value.length - value.length);
           onChange(e.target.value);
         }}
-        onKeyDown={(e) => submitOnModEnter(e, onSubmit)}
+        onKeyDown={(e) => {
+          // Esc drops a pending quote; with none it is left alone for whatever else listens
+          if (extras && e.key === 'Escape' && quote) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearQuote();
+            return;
+          }
+          submitOnModEnter(e, onSubmit);
+        }}
       />
       <div className="answer-footer">
         <div className="answer-hint">
+          {extras && <AttachButton disabled={disabled} />}
           {listening ? (
             <>
               <span className="listening-bars" aria-hidden="true">

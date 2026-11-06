@@ -102,7 +102,10 @@ export function LibraryScreen() {
   if (sources.length === 0) {
     return (
       <Screen>
-        <h1 className="t-display">Library</h1>
+        <div className="flex flex-col gap-[10px]">
+          <h1 className="t-display">Library</h1>
+          <p className="t-lead m-0">The material your maps are built from.</p>
+        </div>
         {notice && <Notice error>{notice}</Notice>}
         <Empty action={addButton}>Add a lecture PDF, notes or a web page. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
       </Screen>
@@ -231,7 +234,7 @@ function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; hig
     <li id={`idea-${item.nodeId}`} className={highlighted ? 'idea-row is-highlighted' : 'idea-row'}>
       <div className="row">
         <Markdown text={item.name} inline className="font-medium" />
-        {item.citations.length > 0 && <span className="t-small shrink-0 text-muted">{item.citations.map(formatCitation).join(', ')}</span>}
+        {item.citations.length > 0 && <span className="t-small min-w-0 max-w-[45%] truncate text-muted" title={item.citations.map(formatCitation).join(', ')}>{item.citations.map(formatCitation).join(', ')}</span>}
       </div>
       <Markdown text={item.statement} className="text-soft" />
       {(item.builtOn.length > 0 || item.leadsTo.length > 0) && (

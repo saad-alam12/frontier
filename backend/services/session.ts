@@ -10,7 +10,9 @@ import type { EdgeState, Stage } from '../core/session';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal } from '../core/types';
 import { CommitGate } from '../llm/cancel';
-import type { LlmProvider } from '../llm/provider';
+import type { LlmImage, LlmProvider } from '../llm/provider';
+import { ResponseExtrasSchema } from '../core/attachments';
+import { attachmentExists, readAttachment } from '../store/attachments';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
 import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
@@ -143,7 +145,7 @@ export interface HistoryNode {
 
 export interface SessionHistory {
   /** The free recall at the start of the session, when there was one. */
-  reconstruct: { text: string; recalled: { nodeId: string; name: string; score: number; note: string }[] } | null;
+  reconstruct: { text: string; recalled: { nodeId: string; name: string; score: number; note: string }[]; attachments?: string[]; quote?: string } | null;
   nodes: HistoryNode[];
 }
 
@@ -172,6 +174,8 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
   provider: LlmProvider;
   /** When present, the tutor's prose is ingested as a source after the session. */
   ingestion?: IngestionService;
+  /** Where answer images are stored; needed only when a response attaches any. */
+  attachmentsDir?: string;
 }
 
 export function currentSession(db: Database): SessionSnapshot | null {
@@ -202,7 +206,8 @@ export async function startSession(deps: SessionDeps, goalId: string, focus?: st
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
   const view = loadKnowledge(db);
-  const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => (view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id))) : null;
+  // an idea erased from the map since has nothing left to carry, so it counts as reached
+  const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => !view.nodes.has(id) || ((view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id)))) : null;
   const planned = focus?.length ? planFocusSession(db, goalId, focus) : await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
   const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
@@ -273,13 +278,37 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
   const session = normalized(stored);
   if (session.status !== 'active') return snapshot(deps.db, session);
   if (inflight.has(sessionId)) throw new Error('Still working on your last answer.');
+  const checked = checkExtras(deps, response);
   const gate = answersQuestion(session.state) ? new CommitGate() : null;
   inflight.set(sessionId, gate);
   try {
-    return await respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, response);
+    return await respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked);
   } finally {
     inflight.delete(sessionId);
   }
+}
+
+/**
+ * The renderer is not trusted with what reaches the model: attachments must be names of stored
+ * files (at most four) and the quote must fit. Empty extras are dropped so stored answers stay plain.
+ */
+function checkExtras(deps: SessionDeps, response: LearnerResponse): LearnerResponse {
+  const { attachments, quote, ...rest } = response;
+  const parsed = ResponseExtrasSchema.safeParse({ attachments: attachments?.length ? attachments : undefined, quote: quote?.trim() ? quote : undefined });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'The attachments are not valid.');
+  const extras = parsed.data;
+  if (extras.attachments) {
+    const dir = deps.attachmentsDir;
+    if (!dir || !extras.attachments.every((name) => attachmentExists(dir, name))) throw new Error('An attached image was not saved. Attach it again.');
+  }
+  return { ...rest, ...(extras.attachments ? { attachments: extras.attachments } : {}), ...(extras.quote ? { quote: extras.quote } : {}) };
+}
+
+/** The images of the response being judged, read from disk for the model call. */
+function imagesOf(deps: SessionDeps, response: LearnerResponse): LlmImage[] | undefined {
+  const dir = deps.attachmentsDir;
+  if (!response.attachments?.length || !dir) return undefined;
+  return response.attachments.map((name) => readAttachment(dir, name));
 }
 
 /** A free recall or an answer to a graded card: the learner may stop it and edit. */
@@ -300,11 +329,11 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       const view = loadKnowledge(db);
       const nodes = state.previousNodes.map((n) => ({ id: n.id, name: n.name, statement: view.nodes.get(n.id)?.statement ?? '' })).filter((n) => view.nodes.has(n.id));
       if (nodes.length) {
-        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: false });
+        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: false, quote: response.quote, images: imagesOf(deps, response) });
         for (const r of recall.recalled) {
           recordEvidence(db, { nodeId: r.nodeId, kind: 'recall', score: r.score, reasoning: r.note || 'free recall at session start', sessionId, context: { step: 'reconstruct' } });
         }
-        appendSessionEvent(db, sessionId, 'reconstruct', { text: response.answer, recalled: recall.recalled });
+        appendSessionEvent(db, sessionId, 'reconstruct', { text: response.answer, recalled: recall.recalled, attachments: response.attachments, quote: response.quote });
       }
       state.phase = 'orient';
       break;
@@ -346,7 +375,7 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       const nodes = taught.map((s) => ({ id: s.nodeId, name: s.name, statement: view.nodes.get(s.nodeId)?.statement ?? '' }));
       let closing: SessionState['closing'] = { canDo: 'Session complete.', previewQuestion: '', recall: [] };
       if (nodes.length) {
-        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: true });
+        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: true, quote: response.quote, images: imagesOf(deps, response) });
         for (const r of recall.recalled) {
           recordEvidence(db, { nodeId: r.nodeId, kind: 'recall', score: r.score, reasoning: r.note || 'free recall at session close', sessionId, context: { step: 'close' } });
         }
@@ -354,7 +383,7 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
         closing = { canDo: recall.canDo ?? '', previewQuestion: recall.previewQuestion ?? '', recall: recall.recalled.map((r) => ({ ...r, name: names.get(r.nodeId) ?? r.nodeId })) };
       }
       state.closing = closing;
-      appendSessionEvent(db, sessionId, 'close', { text: response.answer, closing });
+      appendSessionEvent(db, sessionId, 'close', { text: response.answer, closing, attachments: response.attachments, quote: response.quote });
       state.phase = 'preview';
       state.card = null;
       state.stage = null;
@@ -439,7 +468,7 @@ async function produceCard(
   previous: TutorStepInput['previous'],
   goal: TutorGoal,
 ): Promise<Grade | null> {
-  const result = await runTutorStep(deps.provider, buildTutorInput(deps.db, state, step, previous, stage, goal));
+  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined });
   if (!result.card) throw new Error('the tutor returned no card');
   state.stage = stage;
   state.card = result.card;
@@ -485,7 +514,7 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   if (nominalNext) {
     grade = await produceCard(deps, sessionId, state, step, nominalNext, previous, goal);
   } else {
-    const result = await runTutorStep(deps.provider, buildTutorInput(db, state, step, previous, null, goal));
+    const result = await runTutorStep(deps.provider, { ...buildTutorInput(db, state, step, previous, null, goal), images: imagesOf(deps, response) });
     grade = result.grade;
   }
   if (!grade) throw new Error('the tutor returned no grade');
@@ -771,9 +800,9 @@ export function sessionHistory(db: Database, session: SessionRecord<SessionState
   let reconstruct: SessionHistory['reconstruct'] = null;
   const previousNames = new Map(s.previousNodes.map((n) => [n.id, n.name]));
   for (const event of listSessionEvents(db, session.id)) {
-    const p = event.payload as { carriedFrom?: string; nodeId?: string; stage?: Stage; card?: TutorCard; response?: LearnerResponse; grade?: Grade; text?: string; recalled?: { nodeId: string; score: number; note: string }[] };
+    const p = event.payload as { carriedFrom?: string; nodeId?: string; stage?: Stage; card?: TutorCard; response?: LearnerResponse; grade?: Grade; text?: string; recalled?: { nodeId: string; score: number; note: string }[]; attachments?: string[]; quote?: string };
     if (event.kind === 'reconstruct') {
-      reconstruct = { text: p.text ?? '', recalled: (p.recalled ?? []).map((r) => ({ ...r, name: previousNames.get(r.nodeId) ?? r.nodeId })) };
+      reconstruct = { text: p.text ?? '', recalled: (p.recalled ?? []).map((r) => ({ ...r, name: previousNames.get(r.nodeId) ?? r.nodeId })), attachments: p.attachments, quote: p.quote };
       continue;
     }
     if (!p.nodeId || !p.stage) continue;

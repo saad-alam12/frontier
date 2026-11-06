@@ -36,6 +36,11 @@ export function listEmbeddings(db: Database, model: string): StoredEmbedding[] {
   }));
 }
 
+export function deleteEmbeddings(db: Database, nodeIds: Iterable<string>): void {
+  const stmt = db.prepare('DELETE FROM node_embeddings WHERE node_id = ?');
+  for (const id of nodeIds) stmt.run(id);
+}
+
 export function countEmbeddings(db: Database): number {
   return (db.prepare('SELECT count(*) AS n FROM node_embeddings').get() as { n: number }).n;
 }

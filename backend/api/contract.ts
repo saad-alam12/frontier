@@ -21,7 +21,10 @@ import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget
 import type { RemapView } from '../services/remap';
 import type { TickInput } from '../services/activity';
 import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
+import type { EraseRequest, ErasePreview, EraseResult, EraseScope } from '../services/erase';
+export type { EraseRequest, ErasePreview, EraseResult, EraseScope };
 import type { GoalBudget } from '../core/types';
+import type { ImageUpload } from '../core/attachments';
 
 export type { GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
@@ -131,6 +134,10 @@ export interface ApiMethods {
   'map.view': { input: undefined; output: MapView };
   /** An idea's card without counting it as a lookup (the map's selection). */
   'map.card': { input: { nodeId: string }; output: NodeCard };
+  /** What erasing would remove (ideas, links, ideas with evidence, sources), changing nothing: for the confirm dialog. */
+  'map.erasePreview': { input: EraseRequest; output: ErasePreview };
+  /** Erase from the map for good (Settings). Refused while a session is open or a chosen source is being read. */
+  'map.erase': { input: EraseRequest; output: EraseResult };
   /** Ideas by meaning and name; a question also gets a short answer from the learner's own cards. */
   'lookup.search': { input: { query: string }; output: LookupAnswer };
   /** Open a card from Lookup: counts as a weak review (once per idea per day). */
@@ -143,6 +150,10 @@ export interface ApiMethods {
   /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
   'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
   'drafts.set': { input: { key: string; value: string }; output: undefined };
+  /** Store an image for an answer (validated again here); returns the file name a response attaches. */
+  'attachments.save': { input: ImageUpload; output: { name: string } };
+  /** A stored answer image as a data URL, for thumbnails in history and Trails. */
+  'attachments.read': { input: { name: string }; output: string };
 }
 
 export type ApiName = keyof ApiMethods;

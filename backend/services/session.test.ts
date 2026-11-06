@@ -13,6 +13,7 @@ import { listBugsForNode } from '../store/bugs';
 import { activeSession, listSessionEvents, listSessions } from '../store/sessions';
 import { logTime } from '../store/activity';
 import { listSources } from '../store/sources';
+import { saveAttachment } from '../store/attachments';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { deeperMinutes, goDeeper } from './goals';
@@ -489,5 +490,50 @@ describe('teaching session', () => {
     expect(deps.provider.calls.slice(before).map((c) => c.role)).toContain('tutorEscalation');
     snap = await respond(deps, snap.id, answer(''));
     expect(snap.current?.stage).toBe('compress'); // resumes after the stage that failed
+  });
+});
+
+describe('images and a quoted reply on an answer', () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+  it('sends them with the tutor call, stores them with the response and shows them in the history', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8]);
+    const attachmentsDir = mkdtempSync(join(tmpdir(), 'frontier-att-'));
+    const withDir = { ...deps, attachmentsDir };
+    const name = saveAttachment(attachmentsDir, { mediaType: 'image/png', data: PNG });
+    let snap = await startSession(withDir, goal.id);
+    snap = await respond(withDir, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('index');
+    const before = deps.provider.calls.length;
+
+    snap = await respond(withDir, snap.id, { answer: '', attachments: [name], quote: '  A profile is a list of strategies.  ' });
+    const tutorCall = deps.provider.calls.slice(before).find((c) => c.role === 'tutor');
+    expect(tutorCall?.images).toEqual([{ mediaType: 'image/png', data: PNG }]);
+    const said = tutorCall?.messages[0]?.content.split("## Learner's response")[1] ?? '';
+    expect(said).toContain('The learner is replying to this part: "A profile is a list of strategies."');
+    expect(said).toContain('the answer is in the attached images');
+    expect(said).toContain('attached images: 1');
+
+    // the history is rebuilt from stored events, as after a restart
+    const item = currentSession(db)?.history.nodes[0]?.items[0];
+    expect(item?.response).toMatchObject({ answer: '', attachments: [name], quote: 'A profile is a list of strategies.' });
+  });
+
+  it('refuses attachments that were never saved, too many of them, or names that are not attachment names', async () => {
+    const { goal, deps } = await setup([0.8]);
+    const attachmentsDir = mkdtempSync(join(tmpdir(), 'frontier-att-'));
+    const withDir = { ...deps, attachmentsDir };
+    const name = saveAttachment(attachmentsDir, { mediaType: 'image/png', data: PNG });
+    let snap = await startSession(withDir, goal.id);
+    snap = await respond(withDir, snap.id, answer(''));
+    const calls = deps.provider.calls.length;
+    await expect(respond(withDir, snap.id, { answer: 'x', attachments: [`${'a'.repeat(64)}.png`] })).rejects.toThrow('was not saved');
+    await expect(respond(withDir, snap.id, { answer: 'x', attachments: Array(5).fill(name) as string[] })).rejects.toThrow('At most 4 images');
+    await expect(respond(withDir, snap.id, { answer: 'x', attachments: ['../frontier.db'] })).rejects.toThrow('not an attachment name');
+    await expect(respond(deps, snap.id, { answer: 'x', attachments: [name] })).rejects.toThrow('was not saved');
+    expect(deps.provider.calls.length).toBe(calls); // nothing reached the model
+    // a plain answer still goes through, with no empty extras stored
+    snap = await respond(withDir, snap.id, { answer: 'one strategy per player', attachments: [], quote: ' ' });
+    expect(snap.history.nodes[0]?.items[0]?.response).toEqual({ answer: 'one strategy per player' });
   });
 });

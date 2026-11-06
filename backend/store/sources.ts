@@ -126,6 +126,12 @@ export function coveredElsewhere(db: Database, sourceId: string): Set<string> {
   return new Set((db.prepare('SELECT DISTINCT node_id FROM source_coverage WHERE source_id != ?').all(sourceId) as { node_id: string }[]).map((r) => r.node_id));
 }
 
+/** Ideas some source outside this set also covers (erasing a set of sources keeps these). */
+export function coveredOutside(db: Database, sourceIds: string[]): Set<string> {
+  const rows = db.prepare('SELECT source_id, node_id FROM source_coverage').all() as { source_id: string; node_id: string }[];
+  return new Set(rows.filter((r) => !sourceIds.includes(r.source_id)).map((r) => r.node_id));
+}
+
 export function deleteSource(db: Database, id: string): void {
   db.prepare('DELETE FROM sources WHERE id = ?').run(id);
 }

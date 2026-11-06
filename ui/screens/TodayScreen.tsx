@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { TodayGoal, TodayView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
 import type { ScreenName } from '../components/Shell';
-import { Screen } from '../components/Shell';
+import { BrandMark, Screen } from '../components/Shell';
 import { Button, Meter, MetaLine, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar, paceSentence } from '../components/budget';
@@ -67,11 +67,11 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
       )}
       {today.preview && <div className="divider" />}
       <div className="flex flex-col gap-[14px]">
-        <div className="section-head">
-          <h2 className="t-title">The next two weeks</h2>
-          <span className="t-caption text-secondary">ideas falling due</span>
+        <div className="flex flex-col gap-[6px]">
+          <h2 className="t-title">Reviews ahead</h2>
+          <p className="t-small m-0 text-secondary">Ideas come back for a short review just before you would start to forget them.</p>
         </div>
-        <Forecast counts={today.forecast} />
+        {today.forecast.some((n) => n > 0) ? <Forecast counts={today.forecast} /> : <p className="m-0 text-secondary">Nothing to review in the next two weeks.</p>}
       </div>
       <div className="divider" />
       <div className="flex flex-col gap-[14px]">
@@ -315,9 +315,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
   return (
     <Screen>
       <div className="welcome">
-        <div className="welcome-mark" aria-hidden="true">
-          <span />
-        </div>
+        <BrandMark size={56} on="var(--bg)" />
         <h1 className="welcome-title">Learn what matters, in the time you have.</h1>
         <p className="t-lead m-0 max-w-[560px]">
           Tell Frontier what you want to learn and how much time you can give it. It maps the ideas, finds where you stand, and teaches at the edge of what you know, the most useful ideas first.
@@ -354,15 +352,15 @@ function Forecast({ counts }: { counts: number[] }) {
   const max = Math.max(1, ...counts);
   const total = counts.reduce((a, b) => a + b, 0);
   return (
-    <div className="forecast" role="img" aria-label={`Ideas falling due over the next two weeks: ${counts.join(', ')}`}>
+    <div className="forecast" role="img" aria-label={`Reviews per day over the next two weeks: ${counts.join(', ')}`}>
       <div className="forecast-bars" aria-hidden="true">
         {counts.map((n, i) => (
-          <span key={i} className={i === 0 ? 'is-today' : undefined} style={{ height: `${Math.max(3, (n / max) * 100)}%`, opacity: n === 0 ? 0.5 : 1 }} title={`${n}`} />
+          <span key={i} className={i === 0 ? 'is-today' : undefined} style={{ height: `${Math.max(3, (n / max) * 100)}%`, opacity: n === 0 ? 0.5 : 1 }} title={`${n} ${n === 1 ? 'review' : 'reviews'}`} />
         ))}
       </div>
       <div className="forecast-axis" aria-hidden="true">
         <span>Today</span>
-        <span>{total === 0 ? 'Nothing due' : `${total} in all`}</span>
+        <span>{total} in the next two weeks</span>
         <span>In two weeks</span>
       </div>
     </div>

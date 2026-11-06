@@ -1,4 +1,4 @@
-import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
+import type { CompleteRequest, CompleteResult, LlmImage, LlmProvider, Role } from './provider';
 import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
 
@@ -15,6 +15,8 @@ export interface FakeCall {
   role: Role;
   system: string;
   messages: CompleteRequest<unknown>['messages'];
+  /** Every image the request's user messages carried, in order, so tests can see what reached the model. */
+  images: LlmImage[];
   toolCalls: { name: string; input: unknown; output: string }[];
 }
 
@@ -44,7 +46,8 @@ export class FakeProvider implements LlmProvider {
 
   async complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
     const tracker = new SubmitTracker(req);
-    const call: FakeCall = { role: req.role, system: req.system, messages: req.messages, toolCalls: [] };
+    const images = req.messages.flatMap((m) => (m.role === 'user' ? (m.images ?? []) : []));
+    const call: FakeCall = { role: req.role, system: req.system, messages: req.messages, images, toolCalls: [] };
     this.calls.push(call);
     const anyReq = req as CompleteRequest<unknown>;
 

@@ -129,6 +129,12 @@ export function nodesInOpenSets(db: Database): Set<string> {
   return new Set(rows.flatMap((r) => parseJson<string[]>(r.node_ids, [])));
 }
 
+/** Open sets of any kind (probes included) that ask about one of these ideas. */
+export function openSetsWith(db: Database, nodeIds: Set<string>): string[] {
+  const rows = db.prepare("SELECT id, node_ids FROM practice_sets WHERE status = 'open'").all() as { id: string; node_ids: string }[];
+  return rows.filter((r) => parseJson<string[]>(r.node_ids, []).some((id) => nodeIds.has(id))).map((r) => r.id);
+}
+
 export function closePracticeSet(db: Database, id: string): void {
   db.prepare("UPDATE practice_sets SET status = 'done' WHERE id = ?").run(id);
 }

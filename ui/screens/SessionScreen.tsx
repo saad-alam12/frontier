@@ -4,8 +4,11 @@ import type { GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard,
 import { confidenceLabel } from '../../backend/core/types';
 import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Notice, Section } from '../components/controls';
+import { ConfirmDialog } from '../components/Dialog';
 import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
+import { ResponseExtras, clearAnswerExtras, useAnswerExtras, withExtras } from '../components/AnswerExtras';
+import { QuoteReply } from '../components/QuoteReply';
 import { FrontierPanel } from '../components/FrontierPanel';
 import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
@@ -75,6 +78,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
         setStopped(true);
         return;
       }
+      clearAnswerExtras();
       if (draftKey) void call('drafts.set', { key: draftKey, value: '' });
     });
   const stoppable = snap && pending ? (pending.card ? !isReading(pending.card.stage) : snap.phase === 'reconstruct' || snap.phase === 'close') : false;
@@ -166,6 +170,8 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
       {error && <Notice error>{error}</Notice>}
 
+      <QuoteReply containerRef={mainRef} />
+
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
       {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking />}
@@ -176,29 +182,28 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
       </div>
 
       {snap.status === 'active' && (
-        <div className="button-row gap-[18px] border-t border-line pt-[18px]">
-          {confirmEnd ? (
-            <>
-              <span className="t-small text-secondary">End this session? What you learned is kept, and next time you continue this idea where you stopped.</span>
-              <Button kind="quiet" onClick={() => void end()} disabled={isBusy}>
-                End session
-              </Button>
-              <Button kind="quiet" onClick={() => setConfirmEnd(false)}>
-                Keep going
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button kind="quiet" onClick={() => void pause()} disabled={isBusy}>
-                Pause and come back later
-              </Button>
-              <Button kind="quiet" onClick={() => setConfirmEnd(true)} disabled={isBusy}>
-                End session
-              </Button>
-            </>
-          )}
+        <div className="session-footer">
+          <Button kind="secondary" onClick={() => void pause()} disabled={isBusy} title="Leave now and continue this same session later">
+            Pause
+          </Button>
+          <Button kind="quiet" onClick={() => setConfirmEnd(true)} disabled={isBusy}>
+            End session
+          </Button>
+          <span className="t-small text-muted">Pause keeps this session open. Your answers are saved either way.</span>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmEnd}
+        title="End this session?"
+        confirmLabel={busy === 'end' ? 'Ending…' : 'End session'}
+        cancelLabel="Keep going"
+        busy={busy === 'end'}
+        onConfirm={() => void end()}
+        onCancel={() => setConfirmEnd(false)}
+      >
+        <p>Everything you learned so far is kept. Your next session starts where you stopped, at the same step of this idea.</p>
+        <p>To come back to this very session instead, choose Pause.</p>
+      </ConfirmDialog>
     </Screen>
   );
 }
@@ -223,7 +228,8 @@ function History({ snap, expanded, onToggle }: { snap: SessionSnapshot; expanded
       {reconstruct && (
         <article className="flex flex-col gap-[14px]">
           <div className="t-caption text-muted">Recall from last time</div>
-          <div className="answer-block learner-text whitespace-pre-wrap">{reconstruct.text.trim() || <span className="text-muted">Nothing came back</span>}</div>
+          <ResponseExtras response={reconstruct} />
+          {(reconstruct.text.trim() || !reconstruct.attachments?.length) && <div className="answer-block learner-text whitespace-pre-wrap">{reconstruct.text.trim() || <span className="text-muted">Nothing came back</span>}</div>}
           <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
             {reconstruct.recalled.map((r) => (
               <li key={r.nodeId} className="flex items-baseline gap-[10px]">
@@ -283,9 +289,10 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
       <CardText card={item.card} past />
       {!read && item.response && (
         <div className="answer-block flex flex-col gap-[8px]">
+          <ResponseExtras response={item.response} />
           {item.response.answer.trim() ? (
             <div className="learner-text whitespace-pre-wrap">{item.response.answer}</div>
-          ) : (
+          ) : item.response.attachments?.length ? null : (
             <div className="learner-text text-muted">{item.response.testMe ? 'I know this, test me' : 'No idea'}</div>
           )}
           {meta && <div className="t-caption text-muted">{meta}</div>}
@@ -449,6 +456,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
   const draftKey = `session:${snap.id}:${current?.nodeId}:${current?.stage}:${historyLength(snap)}`;
   const drafts = useDrafts<CardDraft>([draftKey], EMPTY_CARD_DRAFT);
   const draft = drafts.values[draftKey] ?? EMPTY_CARD_DRAFT;
+  const extras = useAnswerExtras();
   const [lastKey, setLastKey] = useState(draftKey);
   if (draftKey !== lastKey) {
     setLastKey(draftKey);
@@ -459,7 +467,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
   const set = (patch: Partial<CardDraft>) => drafts.set(draftKey, { ...draft, ...patch });
   const send = (answer: string) => {
     if (busy) return;
-    onSend({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined }, draftKey);
+    onSend(withExtras({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined }, extras), draftKey);
   };
 
   const testMe = current.canTestOut ? () => onSend({ answer: '', testMe: true }) : undefined;
@@ -515,6 +523,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
           rows={card.stage === 'compress' ? 3 : 4}
           disabled={busy}
           autoFocus={refocus}
+          extras
         />
         {card.stage === 'compress' && (
           <input className="input" aria-label="Handle" placeholder="A handle, if you like: a short phrase, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />
@@ -529,14 +538,15 @@ function RecallStep({ sessionId, prompt, submitLabel, busy, refocus, onSend }: {
   const key = `session:${sessionId}:recall:${submitLabel}`;
   const drafts = useDrafts<CardDraft>([key], EMPTY_CARD_DRAFT);
   const text = (drafts.values[key] ?? EMPTY_CARD_DRAFT).answer;
+  const extras = useAnswerExtras();
   const submit = () => {
     if (busy) return;
-    onSend({ answer: text }, key);
+    onSend(withExtras({ answer: text }, extras), key);
   };
   return (
     <section className="flex flex-col gap-[32px]">
       <p className="t-question">{prompt}</p>
-      <AnswerSurface value={text} onChange={(answer) => drafts.set(key, { ...EMPTY_CARD_DRAFT, answer })} onSubmit={submit} placeholder="From memory, however it comes." rows={6} disabled={busy} autoFocus={refocus} />
+      <AnswerSurface value={text} onChange={(answer) => drafts.set(key, { ...EMPTY_CARD_DRAFT, answer })} onSubmit={submit} placeholder="From memory, however it comes." rows={6} disabled={busy} autoFocus={refocus} extras />
       <div className="answer-actions">
         <Button kind="primary" onClick={submit} disabled={busy}>
           {busy ? 'Comparing…' : submitLabel}

@@ -1,5 +1,23 @@
 # Progress
 
+## Summary of R4: plan dots that explain, erasing from the map, screenshots and quotes, a finished look (2026-11-06, local session)
+
+**What works.** All four points of your R3 feedback are built.
+- **Plan dots explain themselves.** Hovering or tabbing to a dot shows a box above it: whether the idea is in depth, an overview, already yours or left out; its name; a short description; and one plain sentence on what the plan does with it. The box used to sit beside the pointer and hide the other dots, and it showed the goal's skill text instead of the idea.
+- **Erase from your map** (bottom of Settings). Choose Everything, or pick topics, sources or single ideas from a searchable list. **Erase…** first shows how many ideas, links and learned ideas will go, in a confirm dialog; Everything also needs the word "erase" typed. Nothing is chosen at first, so nothing can be erased by one click.
+- **Screenshots and quotes in sessions.** Paste, drop or attach up to 4 images to an answer; the tutor sees them. Select text in an earlier message and press **Reply** to answer that part; the quote shows above your answer and in the history. One live call through your Claude login confirmed that an image reaches the model.
+- **A finished look.** A native macOS sidebar (translucent, with the window buttons inside it, icons, a "Look back" group, a hint on hover for each place), a new logo (what you know, what lies beyond, and you on the edge), modal dialogs for confirmations (ending a session now asks in a dialog that explains Pause against End), a wider main column, a one-line purpose under each screen title, grouped Settings rows, plainer review forecast on Today, press and focus feedback on buttons and fields, and a fix for Library rows that pushed the page sideways.
+
+211 tests pass; typecheck and lint are clean. Today, Goals, a goal page, the new-goal flow, Map, Stats, Lookup, Trails, Library and Settings (with the erase dialog) were checked in screenshots of the running app.
+
+**Try first.** Hover the dots under a goal's "Change the time", then a session where you paste a screenshot and reply to a quoted part of an explanation. Steps are under "Next step".
+
+**Blocked or untested here.**
+- The session screen with a real tutor was not opened, to avoid starting a session in your data: the quote button, thumbnails and the end dialog in a live session are yours to check.
+- Practice answers (in Practice and the practice step of a session) take no images or quotes yet; that needs a change to how practice answers are stored.
+- The Reply button shows only where an answer box is open, so you cannot quote an explanation card that has no answer box.
+- Erasing re-maps the affected goals at once, which uses model calls (the app would do it at its next start anyway).
+
 ## Summary of R3: plans that fit the time and the learner, a living map, Esc to edit (2026-10-29, cloud session)
 
 **What works.** All four points from your R3 request are built (one commit per section, `R3 §1`–`§7`).
@@ -73,65 +91,29 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | M5 Practice, scheduler and Today | Done | Scheduler in core, problem generator and grader on the fake provider, practice in sessions and from Today; 125 tests at the time |
 | M6 Map, Lookup, Trails, packaging | Done | Canvas map (16 ms per frame at 636 ideas in the packaged app), lookup, trails with replay; Linux build packaged and launched; 137 tests |
 | R2 Time budgets, Stats, clearer app | Done | Owner's request after M6 (see Owner feedback); 160 tests; reviewed by the owner (R3 request) |
-| R3 Plans that fit the time and the learner, living map, Esc | Done, checkpoint ready | Owner's request after R2 (see Owner feedback); 186 tests; Linux build packaged and launched |
+| R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
+| R4 Plan dots, erase from map, screenshots and quotes, finished look | Done, checkpoint ready | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac |
 
 ## Next step
 
-**R4 is next.** The owner gave feedback at the R3 checkpoint (2026-11-06, under "Owner feedback"): plan dots that name their idea, resetting the map from Settings, screenshots and quoted replies in sessions, and a production-ready UI/UX. Build R4 from that feedback, then stop at a new owner checkpoint. The R3 steps below are kept for reference.
-
-**CHECKPOINT R3 (feedback received).**
+**CHECKPOINT R4 READY.** Waiting for the owner's feedback on the plan dots, erasing from the map, screenshots and quotes in sessions, and the new look, under "Owner feedback".
 
 Exact steps for the owner, on the Mac:
 
-1. **Install and start.**
-   - Run `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. `npm install` matters this time: the map adds `d3-force`.
-   - The database migrates on first start. Your goals keep their maps; a goal mapped before R3 shows "This goal was mapped before plans fitted the time" with **Draw a map for your time** on its page.
-   - **Extraction is fixed (2026-11-03).** In Library, open "Attention Is All You Need": it says it was read the old way. Press **Read again**. The 104 small ideas you have not studied go, and the paper is read in one call into about 7 lesson-sized ideas, in under a minute. Goals that use it are mapped again automatically. A newly added paper is read the new way from the start. `npm run live:ingest -- paper.pdf` prints the time and the ideas without touching your data.
-2. **Esc to edit.**
-   - Open a session (or start one from Today), write an answer and send it.
-   - While "Thinking…" shows, press Esc (or Stop). Your answer, confidence and handle come back in the field. Change it and send again.
-   - The same works in a goal's "Ask me a few questions" while "Judging your answers…" shows.
-3. **A 10-hour goal.**
-   - Goals → New goal → "Understand how LLMs work". Choose on your own and not assessed, "Understand the ideas".
-   - In "What do you already know about it?" write "I know some Python, no linear algebra". Skip material, give it 10 hours in total, then **Map my goal**.
-   - Check the plan step:
-     - the level says "The big picture, in plain words", with one plain sentence on what the goal means in 10 hours;
-     - about 18–20 ideas or fewer, nearly all in depth, with names that are ideas rather than formulas;
-     - "About N sessions" fits 10 hours.
-   - Hover the dots, or tab to them and use the arrow keys: each names the idea and says "In depth", "Overview", "Already yours" or "Left out for this time".
-   - Drag the time slider: the plan changes live.
-   - Press **Start with this plan**.
-4. **The same goal at 200 hours.**
-   - Make the same goal again with 200 hours in total. Afterwards you can remove it under Edit goal → Remove goal.
-   - Expect many more ideas, deeper, and a higher level ("Working knowledge, with the key formulas" or "In full").
-5. **A session that adapts.** Start a session on the 10-hour goal.
-   - **An idea you know:** press **I know this, test me** on the prediction or explanation. One question, and if you answer it well the idea is done.
-   - **An idea you don't know:** answer the check badly, for example "I have never heard of this, I don't know what a vector is".
-     - Expect a line "Simplified to the core idea. …" and a fresh, plainer explanation. The idea finishes within about half an hour of work.
-     - Afterwards the goal page shows it as simplified with **Go deeper · adds about N min**.
-   - Press **Go deeper**: the goal's time grows by that much and a session opens on that idea, after any premise it still needs.
-6. **A re-map proposal.**
-   - On a goal page, under "Check where you stand", press **Ask me a few questions** and answer in a way that shows a real missing background (for example, no idea what a matrix or a derivative is).
-   - When the gaps add up to an hour or more, a minute or two later the goal page shows **A new map for your time**: your map against the new one, the new level and scope, and its dots. Today shows "A new map" with **Look at it**.
-   - Choose **Use the new map** or **Keep my map**. Where a background goal is suggested, **Start it as a goal** creates it as a draft.
-   - On an older goal, **Draw a map for your time** gives the same proposal without the probe.
-7. **The Map.**
-   - Open Map and hover an idea: it, its neighbours and their links light up, and the rest fades.
-   - Scroll to pan; pinch or ⌘-scroll to zoom. Drag an idea.
-   - Click one to open its card, then try **Only its neighbourhood** with 1, 2 or 3 steps.
-   - Open **View**:
-     - turn states off;
-     - pick a goal;
-     - colour by Goal, Topic or Depth;
-     - turn on **Prerequisites left to right**;
-     - play with the forces;
-     - use Reset to defaults.
-   - Press F (or Full screen) for full screen; Esc leaves it. Press **Replay how it grew**.
-8. **Write what you think under "Owner feedback", then commit and push.** I'd most like your view on:
-   - whether the real 10-hour and 200-hour maps are the right size and level;
-   - whether simplification kicks in at the right moment and the simplified teaching is good;
-   - whether the re-map proposal made sense;
-   - whether the Map is now readable.
+1. **Start the app.** `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. `npm install` matters: the icons come from a new package (`lucide-react`).
+2. **The look.** Look over every screen in the sidebar. Hover a sidebar item to see what it is for. Make the window narrower than about 1000 px: the sidebar keeps only its icons.
+3. **Plan dots.** Open a goal, press **Change the time**, and hover the dots (or tab to them). Each box names the idea, describes it and says what the plan does with it. Press Cancel.
+4. **A session with a screenshot and a quote.**
+   - Start a session from Today.
+   - On a question, paste a screenshot (⌘V), drop one on the answer box, or use the paperclip. Remove one with its x.
+   - Select a few words in an earlier message: a **Reply** pill appears. Press it; the quote shows above your answer. Send.
+   - The tutor's feedback should refer to the image and the quoted part. Both show in the history and later in Trails.
+   - Press **End session**: a dialog explains End against Pause. Choose Keep going or End.
+5. **Erase from your map** (Settings, at the bottom). Choose Ideas, tick one idea you do not need, press **Erase…** and read the dialog. Cancel, or erase it if you really want it gone (this cannot be undone). Do not try Everything unless you want to start from nothing.
+6. **Write what you think under "Owner feedback", then commit and push.** I'd most like your view on:
+   - whether the new look feels finished, and which screens still feel rough or unclear;
+   - whether the dot boxes now tell you enough;
+   - whether quoting and screenshots work the way you expect from the Claude app.
 
 ## Owner feedback
 
@@ -142,6 +124,7 @@ Exact steps for the owner, on the Mac:
   - Attach screenshots to the answer box (paste or drop an image), and the tutor sees them.
   - Reply to a specific part of a message: select text in a message and reply to that part, with the quote shown above the answer, as in the Claude app.
 - **Production-ready UI/UX.** Cleaner, more intuitive, more thoughtful and more pleasant to use. The feel of Apple software is the reference for the vibe, not something to copy. Some parts look barebones and unfinished: the logo, the sidebar, the dialog when ending a session, among others. Some parts are hard to understand: it is not clear what they do or what they are for.
+- The owner asked for this to be built locally, not in a cloud session, using subagents where that helps. Done: see the R4 summary at the top and Decisions.
 
 ### 2026-11-03, during the R3 checkpoint (extraction)
 - **Extraction is far too fine and too slow.** "Attention Is All You Need" (15 pages) became 104 ideas and took almost 10 minutes. 12 ideas would be reasonable, 6–8 just fine. Fix the setup: read a source whole and extract lesson-sized ideas, then match and merge.
@@ -229,6 +212,12 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-06: The R4 look. The sidebar is 220 px with Lucide icons (`lucide-react` 1.69, ISC; checked before adding; chosen over hand-drawn icons for quality and consistency, and only the icons used are bundled). On macOS the window uses `titleBarStyle: 'hiddenInset'` and the `sidebar` vibrancy with a transparent window background; the renderer marks `html.is-mac` (from the user agent) so only the sidebar is translucent and a 28 px strip along the top drags the window. Windows and Linux keep the normal frame and an opaque sidebar. `nativeTheme.themeSource = 'dark'` because the palette is dark only. The side panel shrank from 520–560 px to 420 px (main column padding 64) because the wider sidebar left the main column about 400 px wide at the default window, which made the goal page wrap; the default window is now 1360 × 880 and the panel moves under the main column below 1100 px. Confirmations use one `ConfirmDialog` on the native `<dialog>` (focus trap, Esc and an inert background come with it, so no library); the danger button exists only for erasing. Today's "next two weeks, ideas falling due" became "Reviews ahead" with one sentence on what a review is, and a plain line instead of an empty chart when nothing is due. All in `docs/visual-design.md`.
+- 2026-11-06: Plan dot tips. `PlanPreview.ideas` carries the node's `statement`. The tip sits centred above the dot (`useTip().showAbove`), not beside the pointer, because beside the pointer it covered the next dots in the row. It says the state, the name, the statement (four lines at most) and what the plan does in words of ability ("you will be able to explain it in your own words") instead of depth names ("In depth: derive"); the skill text it showed before is gone because it described the goal, not the idea.
+- 2026-11-06: Screenshots and quotes in session answers. Images are uploaded when attached (`attachments.save`, checked by zod in `backend/core/attachments.ts`: type by magic bytes, size from the base64 length, at most 4 of 5 MB), stored in `<data folder>/attachments/` named by SHA-256 so a repeated image is one file, and referenced by name from the stored response with the quote (at most 4,000 characters). `respond()` checks names, quote and that the files exist before any model call. Only the images of the answer being judged go to the model; earlier answers show as "attached images: N". The Anthropic API provider sends image blocks; the Agent SDK provider streams one `SDKUserMessage` whose content is text plus image blocks (`query({ prompt: AsyncIterable<SDKUserMessage> })`, confirmed in the installed `sdk.d.ts`; prompts without images keep the string path). Checked live once: a 64 px red PNG through the Claude login came back as "red" from Haiku 5.5. Unsent images and quotes live in memory only, not in drafts. Images removed before sending stay on disk (small, deduplicated; no cleanup yet). The Reply pill shows only for a selection inside the conversation while an answer box that takes quotes is open; math in a selection is quoted as its TeX. Practice answers are not covered: they are stored and graded separately, and changing that needs a migration.
+
+- 2026-11-06: Erase from your map (owner feedback at the R3 checkpoint: reset the map from Settings, wholly or in parts, with confirmation). A new section at the bottom of Settings picks Everything, Topics, Sources or Ideas (a searchable checklist for the last three); **Erase…** first asks `map.erasePreview` (`previewErase` in `backend/services/erase.ts`, which only reads) and shows "This erases N ideas, M links and what you learned about K of them" in the shared confirm dialog; Everything also needs the word "erase" typed. `map.erase` (`eraseFromMap`) then does everything in one transaction, through each store's own removal function. Semantics: erasing an idea removes the node, every chain touching it, its evidence and node state, its embedding and every goal target on it; worked examples, source coverage and misconceptions on it go by cascade. This is the one exception to append-only evidence (the learner explicitly asked; `docs/design.md` says so). A topic is erased as every idea in it, with topics resolved exactly as the map draws them (`mapView`), since topics are derived, not stored. A source is erased with every idea only it covers (coverage from no source outside the chosen set); ideas and chains another source also backs stay and only lose their citations of it; its stored file copy in the data folder is deleted after the transaction commits. Everything erases every idea, chain, evidence row, source and file. Goals: their targets on erased ideas go, capabilities left with no ideas go unless mastered (as after reading a source again), and the time plans are re-planned (`refreshGoalFields`). A goal left with no capabilities, and every goal when everything is erased, is reset to the existing "never compiled" state (`resetGoalMap`: capabilities, compiled sources, coverage, baseline, re-map proposal and started expected ideas cleared; text, time, background and gaps kept), and the handler asks the goal worker to map it again at once (it would do so at the next start anyway). A ready re-map proposal that targets an erased idea is dropped, since it could no longer be applied. Sessions, practice answers and time logged stay: trails replay erased ideas by the names the session recorded (now also for recalled ideas), and a session that ended mid-idea no longer carries an erased idea into the next one. Open practice and probe sets that ask about an erased idea are closed. Erasing is refused while a session is open or a chosen source is being read (both would write about ideas that are gone). Settings (model choices and the in-app preferences table) are never touched.
 
 - 2026-11-03 — Lesson-sized extraction (owner feedback: 104 ideas in about 10 minutes from a 15-page paper). Cause: 1,500-token chunks (11 for that paper), each with its own extractor and matcher call in sequence, and a prompt asking for "every distinct idea", up to 60 per chunk. Now a source is split only past 40,000 tokens (`PART_TOKENS`), so a paper is one extractor call and at most one matcher call. Each block in a part starts with its locator in brackets (`[p12]`) so ideas still cite pages. The extractor prompt was rewritten: an idea is one lesson of about half an hour that absorbs its parts; headline ideas first, then what the source teaches; background it only uses, results, settings, references and recaps are not ideas. The message asks for `ideaRange`: round(tokens ÷ 1,700) to round(tokens ÷ 1,250), at least 1 and 2, at most 40 (6–8 for that paper). Statements may be up to 1,200 characters, since they carry what the idea absorbed. Sources gain `extraction` (migration 11: 1 = old, 2 = now). Old ones are marked in the Library with **Read again**, which splits the source afresh and retires the ideas only it gave that have no evidence, no other source and appear in no session or open practice or probe set (chains through them go too; targets on them cascade). Goals using the source forget it as compiled, so it is compiled again as new material once read, and drop capabilities left with no ideas unless mastered. Refused while a session is open. Sources without a file (session transcripts) are split again from their stored text. `npm run live:ingest` now prints the time taken and every idea with its pages. Checked live on "Attention Is All You Need" (one part, range 6–8, extractor call only): Haiku at max effort took 340 s for 7 ideas, Haiku at medium 27 s for 7 ideas of the same quality, Sonnet at high 22 s for 9. The first live run also showed two faults, now fixed: a circle of chains (the architecture needing positional encoding and the reverse), which the schema now sends back to the model (`chainLoop`), and five worked examples the paper does not contain (the prompt now forbids inventing them). The extractor's default effort is therefore medium (the R1 table left it "to be confirmed"); the matcher stays at max until it is timed.
 - 2026-10-29 — The map as a living graph (R3 §7). The layered layout (`ui/lib/mapLayout.ts`) is gone; `ui/lib/mapGraph.ts` (pure, tested) builds the graph for `d3-force` 3.0.0 (ISC; its dependencies d3-dispatch, d3-quadtree and d3-timer are ISC; `@types/d3-force` MIT, dev only). A chain with several premises keeps a junction node (half a layer before its conclusion). Forces: links (distance as set, junction links 45% of it; strength 0.05–1), repel (−25 to −325, junctions −8, out to 700), centre (x/y pull 0.02–0.2), collide (radius + 3), and for "Prerequisites left to right" an x pull of 0.3 to (layer − half the deepest layer) × 1.6 × link distance. 300 warm-up ticks on first open, then live. Radius 3 + 1.6·√(ideas built on it), plus 0.35 per depth level for owned ideas, × idea size. Labels are placed greedily by priority (selected 1000, hovered 900, neighbours 500, matches 400, then 10 + 4 per dependent + a little for learnable and owned) and skipped when they would overlap another label or an overlay. Fit keeps 180 px clear at the top (title and search), 64 px at the bottom (legend) and the open card or view panel; after a filter or flow change the camera follows the layout until it settles (alpha < 0.08) or the learner moves it. Trackpad scroll pans, pinch or ⌘-scroll or a mouse wheel notch zooms. Full screen uses the Fullscreen API on the map element (no IPC). Settings live in renderer `localStorage` (`frontier.map.settings`, read through `mergeSettings` so old or partial values fall back to the defaults); they are a per-device convenience. Topics colour the first six clusters from `core/clusters.ts`, the rest muted. Replay how it grew orders ideas by their first passing evidence (`firstPasses`, new `MapNodeView.learnedAt`), the rest after, over about 6 s. Frame time with 574 synthetic plus 35 seed ideas under xvfb: 16.7 ms median and p95 while settling, zooming, hovering and switching the flow. Also fixed: separators between linked ideas in the idea card now follow the last word instead of drifting to the right edge in a narrow column.

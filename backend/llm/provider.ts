@@ -16,9 +16,17 @@ export const ROLES = [
 ] as const;
 export type Role = (typeof ROLES)[number];
 
+/** An image sent to the model with a user message: base64 bytes and their type. */
+export interface LlmImage {
+  mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+  data: string;
+}
+
 export interface LlmMessage {
   role: 'user' | 'assistant';
   content: string;
+  /** Images that follow the text of a user message (the learner's attached screenshots). */
+  images?: LlmImage[];
 }
 
 /** A helper tool the agent may call before submitting (for example, to fetch a source excerpt). */
