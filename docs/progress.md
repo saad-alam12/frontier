@@ -77,7 +77,9 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 
 ## Next step
 
-**CHECKPOINT R3 READY.** Waiting for the owner's feedback on plans that fit the time, sessions that adapt, re-maps, Esc and the new Map, under "Owner feedback".
+**R4 is next.** The owner gave feedback at the R3 checkpoint (2026-11-06, under "Owner feedback"): plan dots that name their idea, resetting the map from Settings, screenshots and quoted replies in sessions, and a production-ready UI/UX. Build R4 from that feedback, then stop at a new owner checkpoint. The R3 steps below are kept for reference.
+
+**CHECKPOINT R3 (feedback received).**
 
 Exact steps for the owner, on the Mac:
 
@@ -132,6 +134,14 @@ Exact steps for the owner, on the Mac:
    - whether the Map is now readable.
 
 ## Owner feedback
+
+### 2026-11-06, at the R3 checkpoint (R4 request)
+- **Plan dots tell me nothing.** On the goal page the row of dots (with the legend "In depth, Overview, Already yours, Left out" and the line "1 idea is planned shallower…") shows no name when hovered. Hovering a dot must show the idea's title and a short description. Note from the local session: `IdeaField` in `ui/components/budget.tsx` already has a hover tip (name and depth line, no description); find out why it does not appear on the goal page, fix it, and add the description.
+- **Reset the map from Settings.** A button in Settings to erase the whole map, or only chosen parts of it: topics, sources, or single ideas (nodes). It must ask for confirmation and never happen by accident.
+- **Richer answers in sessions.**
+  - Attach screenshots to the answer box (paste or drop an image), and the tutor sees them.
+  - Reply to a specific part of a message: select text in a message and reply to that part, with the quote shown above the answer, as in the Claude app.
+- **Production-ready UI/UX.** Cleaner, more intuitive, more thoughtful and more pleasant to use. The feel of Apple software is the reference for the vibe, not something to copy. Some parts look barebones and unfinished: the logo, the sidebar, the dialog when ending a session, among others. Some parts are hard to understand: it is not clear what they do or what they are for.
 
 ### 2026-11-03, during the R3 checkpoint (extraction)
 - **Extraction is far too fine and too slow.** "Attention Is All You Need" (15 pages) became 104 ideas and took almost 10 minutes. 12 ideas would be reasonable, 6–8 just fine. Fix the setup: read a source whole and extract lesson-sized ideas, then match and merge.
