@@ -4,6 +4,8 @@ import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { Dialog } from '../components/Dialog';
+import { plainError } from '../lib/errors';
 import { ROLE_LABEL } from './goals/labels';
 
 const CLASS_LABEL: Record<DeltaClass, string> = {
@@ -40,6 +42,7 @@ export function LibraryScreen() {
   const [order, setOrder] = useState<Order>('source');
   const [highlight, setHighlight] = useState<string | null>(null);
   const [reread, setReread] = useState<{ sourceId: string; text: string; error: boolean } | null>(null);
+  const [pasting, setPasting] = useState(false);
 
   const refresh = useCallback(async () => {
     const list = await call('library.list');
@@ -94,9 +97,25 @@ export function LibraryScreen() {
 
   const current = sources.find((s) => s.id === selected) ?? null;
   const addButton = (
-    <Button kind="primary" onClick={() => void addFiles()} disabled={busy}>
-      {busy ? 'Adding…' : 'Add files'}
-    </Button>
+    <div className="button-row">
+      <Button onClick={() => setPasting(true)} disabled={busy}>
+        Paste text
+      </Button>
+      <Button kind="primary" onClick={() => void addFiles()} disabled={busy}>
+        {busy ? 'Adding…' : 'Add files'}
+      </Button>
+    </div>
+  );
+  const pasteSheet = pasting && (
+    <PasteSheet
+      onClose={() => setPasting(false)}
+      onAdded={async (sourceId, existed) => {
+        setPasting(false);
+        setNotice(existed ? 'That text is already in the library.' : null);
+        await refresh();
+        setSelected(sourceId);
+      }}
+    />
   );
 
   if (sources.length === 0) {
@@ -107,7 +126,8 @@ export function LibraryScreen() {
           <p className="t-lead m-0">The material your maps are built from.</p>
         </div>
         {notice && <Notice error>{notice}</Notice>}
-        <Empty action={addButton}>Add a lecture PDF, notes or a web page. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+        <Empty action={addButton}>Add a lecture PDF, notes or a web page, or paste text. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+        {pasteSheet}
       </Screen>
     );
   }
@@ -137,6 +157,7 @@ export function LibraryScreen() {
 
   return (
     <Screen aside={aside} asideLabel="Sources">
+      {pasteSheet}
       <Breadcrumb items={[{ label: 'Library', onClick: () => setSelected(null) }, ...(current ? [{ label: current.title }] : [])]} />
       {current ? (
         <>
@@ -249,5 +270,48 @@ function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; hig
       )}
       <span className={`t-small ${CLASS_TONE[item.cls]}`}>{CLASS_LABEL[item.cls]}</span>
     </li>
+  );
+}
+
+/** Paste notes, an article or a transcript: it becomes a source like a file. */
+function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void> }) {
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text });
+      await onAdded(sourceId, existed);
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Paste text"
+      width={620}
+      actions={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="primary" onClick={() => void add()} disabled={busy || text.trim().length === 0}>
+            {busy ? 'Adding…' : 'Add to library'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-[12px]">
+        <p className="m-0">Notes, an article copied from a page, a transcript. It is read into ideas like a file.</p>
+        <input className="input" aria-label="Title" placeholder="Title (optional: the first line is used)" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <textarea className="input" aria-label="Text" rows={12} placeholder="Paste here" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
+        {error && <Notice error>{error}</Notice>}
+      </div>
+    </Dialog>
   );
 }

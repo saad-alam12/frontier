@@ -12,7 +12,7 @@ import { countNodes, getNode, listChains, listExamplesForNode, listNodes } from 
 import { countEmbeddings } from '../store/embeddings';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
-import { deltaForSource, listSourceSummaries, readSourceAgain } from './library';
+import { addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain } from './library';
 import { recordEvidence } from './evidence';
 import { createGoal, addCapabilities, getGoal, listCapabilities, markCompiled, setMaterials } from '../store/goals';
 import { createSession, endSession } from '../store/sessions';
@@ -329,5 +329,27 @@ describe('lesson-sized extraction', () => {
     expect(listNodes(db).filter((n) => n.name === 'Strategy profile')).toHaveLength(1);
     expect(id('Best response')).toBe(studied);
     expect(countNodes(db)).toBe(6);
+  });
+});
+
+describe('pasted text', () => {
+  it('becomes a source that is read into ideas, titled from its first line when it has no title', async () => {
+    const { db, service } = setup();
+    const { source, existed } = await addPastedText(service, { text: LECTURE_A });
+    expect(existed).toBe(false);
+    expect(source).toMatchObject({ kind: 'markdown', title: 'Lecture 2: Equilibrium' });
+    await vi.waitFor(() => expect(getSource(db, source.id)?.status).toBe('done'));
+    expect(listNodes(db).map((n) => n.name)).toContain('Nash equilibrium');
+    // the same text again is the same source
+    expect((await addPastedText(service, { title: 'Again', text: LECTURE_A })).existed).toBe(true);
+    await expect(addPastedText(service, { text: 'Too short.' })).rejects.toThrow(/at least a few sentences/);
+  });
+
+  it('cuts a long first line at a word for the title', () => {
+    expect(pastedTitle('\n\n## Notes from the reading group\nmore')).toBe('Notes from the reading group');
+    const long = pastedTitle('Attention lets each word in a sentence look back at every earlier word and weigh it');
+    expect(long.length).toBeLessThanOrEqual(61);
+    expect(long.endsWith('…')).toBe(true);
+    expect(long).not.toMatch(/\s…$/);
   });
 });

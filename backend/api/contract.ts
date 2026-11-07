@@ -5,7 +5,7 @@
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
 import type { MaterialRole } from '../core/types';
 import type { ConnectionTestResult } from '../agents/connectionTest';
-import type { DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../services/library';
+import type { DeltaItem, DeltaSummary, IdeaRef, PastedText, SourceSummary } from '../services/library';
 import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
@@ -80,6 +80,8 @@ export interface ApiMethods {
   'library.list': { input: undefined; output: SourceSummary[] };
   /** Opens a file picker, adds the chosen files and starts ingesting them. */
   'library.addFiles': { input: undefined; output: { added: SourceSummary[]; skipped: string[] } };
+  /** Add pasted text (notes, an article, a transcript) as a source and start reading it. */
+  'library.addText': { input: PastedText; output: { sourceId: string; existed: boolean } };
   'library.run': { input: { sourceId: string }; output: undefined };
   'library.remove': { input: { sourceId: string }; output: undefined };
   /** Read a source again into lesson-sized ideas; returns how many of its old ideas were retired. */

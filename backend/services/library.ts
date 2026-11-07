@@ -1,4 +1,5 @@
 /** Read models for the Library screen: sources with chunk progress, and the delta view per source. */
+import { z } from 'zod';
 import { classifyDelta } from '../core/delta';
 import type { DeltaClass } from '../core/delta';
 import { EXTRACTED_ROLES, EXTRACTION } from '../core/types';
@@ -117,4 +118,30 @@ export function deltaForSource(db: Database, sourceId: string): DeltaSummary {
   const haveText = have === 0 ? 'you have none yet' : `you have ${have}${c.deeper ? ` (${c.deeper} could go deeper)` : ''}`;
   const sentence = `Of ${nodeIds.length} ideas in this source, ${haveText}; ${c['new-fringe']} are new and learnable now; ${c['new-beyond']} need a prerequisite first${c.conflict ? `; ${c.conflict} conflict with what you know` : ''}.`;
   return { sourceId, total: nodeIds.length, counts: c, items, sentence };
+}
+
+/** Pasted text: notes, an article copied from a page, a transcript. Long enough to hold ideas. */
+export const PastedTextSchema = z.object({
+  title: z.string().trim().max(120).optional(),
+  text: z.string().trim().min(80, 'Paste at least a few sentences.').max(400_000, 'That is too long for one source. Split it into parts.'),
+});
+export type PastedText = z.input<typeof PastedTextSchema>;
+
+/** A title for pasted text that has none: its first heading or line, cut at a word. */
+export function pastedTitle(text: string): string {
+  const first = text.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l.length > 0) ?? 'Pasted text';
+  if (first.length <= 60) return first;
+  const cut = first.slice(0, 60);
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 30 ? cut.lastIndexOf(' ') : 60)}…`;
+}
+
+/**
+ * Add pasted text to the library as a Markdown source and start reading it, like a file. The same
+ * text twice is the same source.
+ */
+export async function addPastedText(ingestion: IngestionService, input: PastedText): Promise<{ source: Source; existed: boolean }> {
+  const { title, text } = PastedTextSchema.parse(input);
+  const added = await ingestion.addText({ kind: 'markdown', title: title || pastedTitle(text), text });
+  if (added.source.status !== 'done') ingestion.start(added.source.id);
+  return added;
 }

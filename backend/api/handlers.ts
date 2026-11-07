@@ -5,7 +5,7 @@ import type { AppContext } from '../context';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
+import { addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
 import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -82,6 +82,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return result.canceled ? null : (result.filePaths[0] ?? null);
     },
     'library.list': () => listSourceSummaries(ctx.db()),
+    'library.addText': async (input) => {
+      const { source, existed } = await addPastedText(ctx.ingestion(), input);
+      return { sourceId: source.id, existed };
+    },
     'library.addFiles': async () => {
       const result = await dialog.showOpenDialog({
         properties: ['openFile', 'multiSelections'],
