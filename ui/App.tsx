@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { call } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
+import { startSessionInBackground, startSessionWork, useSessionWork } from './lib/sessionWork';
 import { TodayScreen } from './screens/TodayScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { PracticeScreen } from './screens/PracticeScreen';
@@ -25,11 +26,16 @@ export function App() {
   /** Where Goals opens when another screen sends you there (a new goal, a draft, a goal page). */
   const [goalsView, setGoalsView] = useState<{ view: GoalsView; key: number } | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
+  const { last: lastWork } = useSessionWork();
 
-  useEffect(() => startActivityTicker(), []);
+  useEffect(() => {
+    startActivityTicker();
+    startSessionWork();
+  }, []);
+  // a session planned in the background opens while the learner is elsewhere
   useEffect(() => {
     void call('session.current').then((s) => setSessionActive(s !== null && s.phase !== 'done'));
-  }, [screen]);
+  }, [screen, lastWork]);
   useSurface(practiceSet && screen === 'today' ? 'practice' : (SURFACE[screen] ?? null), { practiceSetId: screen === 'today' ? practiceSet : null });
 
   const navigate = (s: ScreenName) => {
@@ -48,7 +54,7 @@ export function App() {
   /** Go deeper on simplified ideas: their time joins the goal, and a session on them opens. */
   const goDeeper = async (goalId: string, nodeIds?: string[]) => {
     const deeper = await call('goals.goDeeper', { goalId, nodeIds });
-    if (deeper.nodeIds.length) await call('session.start', { goalId, focus: deeper.nodeIds });
+    if (deeper.nodeIds.length) startSessionInBackground(goalId, deeper.nodeIds);
     navigate('session');
   };
   return (

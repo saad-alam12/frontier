@@ -8,6 +8,7 @@ import { GoalFormScreen } from './goals/GoalForm';
 import { GoalPage } from './goals/GoalPage';
 import { GoalWizard } from './goals/GoalWizard';
 import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
+import { startSessionInBackground } from '../lib/sessionWork';
 
 export type GoalsView = { name: 'list' } | { name: 'new' } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
 
@@ -68,7 +69,7 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
           onEdit={() => setView({ name: 'edit', goalId: detail.goal.id })}
           onChanged={() => void refresh()}
           onStartSession={async () => {
-            await call('session.start', { goalId: detail.goal.id });
+            startSessionInBackground(detail.goal.id);
             onNavigate('session');
           }}
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}

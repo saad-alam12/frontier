@@ -15,6 +15,7 @@ import { StepPath, VerticalPath } from '../components/paths';
 import { useDrafts } from '../hooks/useDrafts';
 import { useEscape } from '../hooks/useEscape';
 import { STAGE_LABEL } from '../lib/stages';
+import { startSessionInBackground, useSessionScreenOpen, useSessionWork } from '../lib/sessionWork';
 
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
@@ -31,8 +32,11 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
   const [snap, setSnap] = useState<SessionSnapshot | null | undefined>(undefined);
   const [goals, setGoals] = useState<GoalDetail[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [pending, setPending] = useState<Pending>(null);
+  /** The answer this screen just sent, until the backend's work shows it. */
+  const [sending, setSending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
+  const { work, last } = useSessionWork();
+  useSessionScreenOpen();
   const [confirmEnd, setConfirmEnd] = useState(false);
   /** Set after Esc stopped an answer, so the field comes back focused for editing. */
   const [stopped, setStopped] = useState(false);
@@ -50,6 +54,10 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
     void refresh();
     return onEvent('practice.graded', () => void refresh());
   }, [refresh]);
+  // work that finished, here or while the screen was closed, changed the session
+  useEffect(() => {
+    if (last && last.outcome !== 'running') void refresh();
+  }, [last, refresh]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -60,28 +68,36 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
-      setPending(null);
+      setSending(null);
     }
   };
 
-  const start = (goalId: string) => run('start', async () => setSnap(await call('session.start', { goalId })));
-  /** The draft stays saved until the answer is accepted, so Esc (or an error) gives it back to edit. */
+  /**
+   * The draft stays saved until the backend accepts the answer (it deletes it then), so Esc or an
+   * error gives it back to edit, also after leaving the screen.
+   */
   const send = (response: LearnerResponse, draftKey?: string) =>
     run('respond', async () => {
       if (!snap) return;
       setStopped(false);
-      setPending({ card: snap.card, stage: snap.current?.stage ?? null, response });
+      setSending({ card: snap.card, stage: snap.current?.stage ?? null, response });
       try {
-        setSnap(await call('session.respond', { sessionId: snap.id, response }));
+        setSnap(await call('session.respond', { sessionId: snap.id, response, draftKey }));
       } catch (e) {
-        if (!isCancelled(e)) throw e;
+        if (!isCancelled(e)) throw new Error(notSent(e instanceof Error ? e.message : String(e)));
         setStopped(true);
         return;
       }
       clearAnswerExtras();
-      if (draftKey) void call('drafts.set', { key: draftKey, value: '' });
     });
-  const stoppable = snap && pending ? (pending.card ? !isReading(pending.card.stage) : snap.phase === 'reconstruct' || snap.phase === 'close') : false;
+  // the backend's work on this session: an answer still being judged, or one that failed
+  const mine = snap && work?.sessionId === snap.id ? work : null;
+  const judging = mine?.kind === 'respond' && mine.status === 'running' ? mine : null;
+  const failed = mine?.status === 'failed' ? mine.error : null;
+  const pending: Pending = sending ?? judging?.sent ?? null;
+  const asksJudgement = Boolean(snap && pending && (pending.card ? !isReading(pending.card.stage) : snap.phase === 'reconstruct' || snap.phase === 'close'));
+  const stoppable = judging ? judging.stoppable : asksJudgement;
+  const thinkingLabel = asksJudgement ? 'Judging…' : 'Thinking…';
   const stop = () => {
     if (snap && stoppable) void call('session.cancel', { sessionId: snap.id });
   };
@@ -119,13 +135,19 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
 
   if (!snap) {
     const ready = goals.filter((g) => g.goal.status === 'active' && g.capabilities.length > 0);
+    const planning = work?.kind === 'start' && work.status === 'running' ? work : null;
+    const startFailed = work?.kind === 'start' && work.status === 'failed' ? work.error : null;
+    if (planning) {
+      const goal = goals.find((g) => g.goal.id === planning.goalId)?.goal;
+      return <Planning goalTitle={goal ? (goal.title ?? goal.text) : null} />;
+    }
     return (
       <Screen>
         <div className="flex flex-col gap-[14px]">
           <h1 className="t-display">Session</h1>
           <p className="t-lead m-0">One goal per session. What to learn is already chosen; you press start.</p>
         </div>
-        {error && <Notice error>{error}</Notice>}
+        {(error ?? startFailed) && <Notice error>{error ?? `The session could not be planned: ${startFailed}`}</Notice>}
         {ready.length === 0 ? (
           <Empty action={<Button onClick={() => onNavigate('goals')}>Go to goals</Button>}>Add a goal first. Its first session is planned from your material.</Empty>
         ) : (
@@ -136,8 +158,8 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
                   <span>{g.goal.title ?? g.goal.text}</span>
                   <span className="t-small text-muted">{g.capabilities.length} skills</span>
                 </div>
-                <Button kind="primary" onClick={() => void start(g.goal.id)} disabled={busy !== null}>
-                  {busy === 'start' ? 'Planning…' : 'Start session'}
+                <Button kind="primary" onClick={() => startSessionInBackground(g.goal.id)}>
+                  Start session
                 </Button>
               </li>
             ))}
@@ -147,8 +169,9 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
     );
   }
 
-  const isBusy = busy !== null;
+  const isBusy = busy !== null || judging !== null;
   const current = snap.current;
+  const notice = error ?? (failed ? notSent(failed) : null);
   const crumbs = [{ label: snap.goalTitle, onClick: () => onNavigate('goals') }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
@@ -168,16 +191,16 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
         )}
       </div>
 
-      {error && <Notice error>{error}</Notice>}
+      {notice && <Notice error>{notice}</Notice>}
 
       <QuoteReply containerRef={mainRef} />
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
-      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking />}
+      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking={thinkingLabel} />}
 
       <div ref={currentRef} className="flex flex-col gap-[36px]">
-        {pending && !pending.card && <Thinking onStop={stoppable ? stop : undefined} />}
+        {pending && !pending.card && <Thinking label={thinkingLabel} onStop={stoppable ? stop : undefined} />}
         {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onDone={() => void refresh()} />}
       </div>
 
@@ -204,6 +227,30 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
         <p>Everything you learned so far is kept. Your next session starts where you stopped, at the same step of this idea.</p>
         <p>To come back to this very session instead, choose Pause.</p>
       </ConfirmDialog>
+    </Screen>
+  );
+}
+
+/** Why the last answer did not go through; the answer itself is still in the field. */
+function notSent(reason: string): string {
+  const said = reason.trim().replace(/\.?$/, '.');
+  return `Your answer did not go through. ${said.charAt(0).toUpperCase()}${said.slice(1)} It is still in the field to send again.`;
+}
+
+/** A session being planned in the background: the screen says so, and opens the session when it is ready. */
+function Planning({ goalTitle }: { goalTitle: string | null }) {
+  return (
+    <Screen>
+      <div className="flex flex-col gap-[14px]">
+        {goalTitle && <div className="t-caption text-muted">{goalTitle}</div>}
+        <h1 className="t-display">Planning your session</h1>
+        <p className="t-lead m-0">Frontier is choosing what to learn next, from where you stand. You can leave this screen: the session opens here when it is ready.</p>
+      </div>
+      <div className="work-dots" role="status" aria-label="Planning">
+        <i />
+        <i />
+        <i />
+      </div>
     </Screen>
   );
 }
@@ -277,7 +324,7 @@ function HistoryNodeView({ node, open, onToggle }: { node: HistoryNode; open: bo
 }
 
 /** One past step: the card as shown, the learner's answer exactly as given, then the rating. */
-function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryItem; thinking?: boolean; onStop?: () => void }) {
+function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryItem; /** The label while the tutor works on this answer. */ thinking?: string; onStop?: () => void }) {
   const read = isReading(item.card.stage) && !item.response?.testMe;
   const effort = item.response?.effort;
   const meta = item.response
@@ -309,7 +356,7 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
           {item.grade.misconception && <p className="t-small m-0 text-secondary">Noted to repair: {item.grade.misconception}</p>}
         </div>
       )}
-      {thinking && <Thinking onStop={onStop} />}
+      {thinking && <Thinking label={thinking} onStop={onStop} />}
     </article>
   );
 }

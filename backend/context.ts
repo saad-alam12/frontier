@@ -6,6 +6,7 @@ import { createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import { IngestionService } from './services/ingestion';
 import { GoalWorker, nextGoalStep } from './services/goalWorker';
+import { SessionWork } from './services/sessionWork';
 import { listGoals } from './store/goals';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';
@@ -14,6 +15,8 @@ import type { Database } from './store/db';
 /** Everything the IPC handlers need. Built once in main.ts; pieces are rebuilt when settings change. */
 export class AppContext {
   readonly settings: SettingsStore;
+  /** Planning and judging in flight; it outlives the Session screen and survives a settings change. */
+  readonly sessionWork = new SessionWork();
   emit: EventSink = () => {};
   private cachedProvider: LlmProvider | null = null;
   private cachedDb: Database | null = null;
@@ -28,6 +31,7 @@ export class AppContext {
   ) {
     this.settings = new SettingsStore(settingsFile, defaultDataFolder);
     this.ensureFolders();
+    this.sessionWork.subscribe((event) => this.emit('session.work', event));
   }
 
   paths() {
@@ -79,6 +83,7 @@ export class AppContext {
       provider: this.provider(),
       ingestion: this.ingestion(),
       attachmentsDir: this.paths().attachments,
+      work: this.sessionWork,
       onGraded: (event: { setId: string; problemId: string }) => this.emit('practice.graded', event),
       onError: (message: string) => this.emit('app.toast', { kind: 'error', message }),
     };

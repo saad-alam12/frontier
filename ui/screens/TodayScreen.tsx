@@ -9,6 +9,7 @@ import { BudgetBar, paceSentence } from '../components/budget';
 import { formatHours } from '../../backend/core/budget';
 import { ASSESSMENT_LABEL } from './goals/labels';
 import type { GoalsView } from './GoalsScreen';
+import { startSessionInBackground } from '../lib/sessionWork';
 
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
 
@@ -37,11 +38,11 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
       setBusy(null);
     }
   };
-  const startSession = (goalId: string) =>
-    run(`session:${goalId}`, async () => {
-      await call('session.start', { goalId });
-      onNavigate('session');
-    });
+  /** Planning goes on in the background; the Session screen shows it and opens the session when ready. */
+  const startSession = (goalId: string) => {
+    startSessionInBackground(goalId);
+    onNavigate('session');
+  };
   const startPractice = (goalId: string, kind: 'compound' | 'mock') =>
     run(`${kind}:${goalId}`, async () => {
       const set = await call('practice.start', { goalId, kind });
@@ -257,12 +258,12 @@ function NextUp({
               {busy === `compound:${lead.goalId}` ? 'Writing problems…' : 'Practise what is fading'}
             </Button>
             <Button onClick={() => onStartSession(lead.goalId)} disabled={busy !== null}>
-              {busy === `session:${lead.goalId}` ? 'Planning…' : 'Start a session instead'}
+              Start a session instead
             </Button>
           </>
         ) : (
           <Button kind="primary" onClick={() => onStartSession(lead.goalId)} disabled={busy !== null}>
-            {busy === `session:${lead.goalId}` ? 'Planning…' : "Start today's session"}
+            Start today&rsquo;s session
           </Button>
         )}
       </div>

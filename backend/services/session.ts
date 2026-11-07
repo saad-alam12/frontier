@@ -9,7 +9,6 @@ import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, e
 import type { EdgeState, Stage } from '../core/session';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal } from '../core/types';
-import { CommitGate } from '../llm/cancel';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
@@ -21,6 +20,7 @@ import { getState } from '../store/evidence';
 import { getGoal, listTargets } from '../store/goals';
 import { activeSession, appendSessionEvent, createSession, endSession, getSession, listEndedSessions, listSessionEvents, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
+import { deleteDrafts } from '../store/drafts';
 import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
@@ -33,6 +33,7 @@ import { MAX_PLAN_NODES, candidatesForGoal, planFocusSession, planSession } from
 import { practiceView, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps, PracticeView } from './practice';
 import type { LessonPlan, LessonStep } from './planner';
+import type { SessionWork, SessionWorkView } from './sessionWork';
 
 export type Phase = 'reconstruct' | 'orient' | 'teach' | 'practice' | 'close' | 'preview' | 'done';
 export type NodeStatus = 'pending' | 'active' | 'done';
@@ -121,6 +122,8 @@ export interface SessionSnapshot {
   practice: PracticeView | null;
   /** The practice problem whose solution is showing, waiting for "Next". */
   practiceRevealed: string | null;
+  /** An answer still being judged (or one that failed), so the screen shows it as sent after leaving and coming back. */
+  work: SessionWorkView | null;
 }
 
 /** One answered step: the card as shown, the learner's answer exactly as given, the rating. */
@@ -176,11 +179,13 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
   ingestion?: IngestionService;
   /** Where answer images are stored; needed only when a response attaches any. */
   attachmentsDir?: string;
+  /** The work in flight, which keeps running when the Session screen closes. */
+  work: SessionWork;
 }
 
-export function currentSession(db: Database): SessionSnapshot | null {
+export function currentSession(db: Database, work?: SessionWork): SessionSnapshot | null {
   const session = activeSession<SessionState>(db);
-  return session ? snapshot(db, normalized(session)) : null;
+  return session ? snapshot(db, normalized(session), work) : null;
 }
 
 /**
@@ -197,11 +202,20 @@ function normalized(session: SessionRecord<SessionState>): SessionRecord<Session
   return { ...session, state: { ...session.state, plan: { ...session.state.plan, steps }, edge: normalizeEdge(session.state.edge) } };
 }
 
-/** Open a session on the goal (or return the open one). `focus`: a session the learner chose, going deeper on those ideas. */
+/**
+ * Open a session on the goal (or return the open one). `focus`: a session the learner chose, going
+ * deeper on those ideas. Planning runs as the session's work, so it goes on when the screen closes.
+ */
 export async function startSession(deps: SessionDeps, goalId: string, focus?: string[]): Promise<SessionSnapshot> {
   const { db } = deps;
   const active = activeSession<SessionState>(db);
-  if (active) return snapshot(db, normalized(active));
+  if (active) return snapshot(db, normalized(active), deps.work);
+  const sessionId = await deps.work.run({ kind: 'start', sessionId: null, goalId, sent: null, stoppable: false }, () => openGoalSession(deps, goalId, focus), (id) => id);
+  return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>, deps.work);
+}
+
+async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[] | undefined): Promise<string> {
+  const { db } = deps;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
@@ -235,7 +249,7 @@ export async function startSession(deps: SessionDeps, goalId: string, focus?: st
   logEvent(db, 'session.started', { goalId, sessionId: session.id }, { steps: plan.steps.length });
   appendSessionEvent(db, session.id, 'start', { goalId, plan: { title: plan.title, steps: plan.steps.map((s) => s.nodeId) }, resumes: carried ? { nodeId: carried.step.nodeId, fromSessionId: carried.resume.fromSessionId } : null });
   if (carried) carryEvents(db, carried.resume.fromSessionId, session.id, carried.step.nodeId);
-  return snapshot(db, session);
+  return session.id;
 }
 
 /** Pause keeps the session active: reopening resumes at the same card with nothing regenerated. */
@@ -254,6 +268,7 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   const session = getSession<SessionState>(db, sessionId);
   if (!session || session.status !== 'active') return;
   endSession(db, sessionId, 'abandoned');
+  deps.work.forget(sessionId);
   appendSessionEvent(db, sessionId, 'abandon', {});
   logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'abandoned' });
   refreshGoalFields(db);
@@ -261,31 +276,26 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
 }
 
 /**
- * Requests in flight per session. Answers to questions carry a gate: until the tutor's first call
- * answers, Esc stops the request and nothing has been written (every write comes after that call).
+ * Advance the session with the learner's response to the current card (or an acknowledgement). It runs
+ * as the session's work: a second answer is refused while one is judged, and answers to questions carry
+ * a commit gate, so until the tutor's first call answers Esc stops the request and nothing has been
+ * written (every write comes after that call). `draftKey`: the unsent answer, deleted once accepted.
  */
-const inflight = new Map<string, CommitGate | null>();
-
-/** Stop the answer being judged, if it can still stop. True when it will. */
-export function cancelRespond(sessionId: string): boolean {
-  return inflight.get(sessionId)?.cancel() ?? false;
-}
-
-/** Advance the session with the learner's response to the current card (or an acknowledgement). */
-export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse): Promise<SessionSnapshot> {
-  const stored = getSession<SessionState>(deps.db, sessionId);
+export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse, options: { draftKey?: string } = {}): Promise<SessionSnapshot> {
+  const { db } = deps;
+  const stored = getSession<SessionState>(db, sessionId);
   if (!stored) throw new Error(`unknown session ${sessionId}`);
   const session = normalized(stored);
-  if (session.status !== 'active') return snapshot(deps.db, session);
-  if (inflight.has(sessionId)) throw new Error('Still working on your last answer.');
+  if (session.status !== 'active') return snapshot(db, session, deps.work);
+  if (deps.work.current()?.status === 'running') throw new Error('Still working on your last answer.');
   const checked = checkExtras(deps, response);
-  const gate = answersQuestion(session.state) ? new CommitGate() : null;
-  inflight.set(sessionId, gate);
-  try {
-    return await respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked);
-  } finally {
-    inflight.delete(sessionId);
-  }
+  const state = session.state;
+  const sent = { card: state.phase === 'teach' ? publicCard(state.card) : null, stage: state.phase === 'teach' ? state.stage : null, response: checked };
+  const job = { kind: 'respond' as const, sessionId, goalId: state.goalId, sent, stoppable: answersQuestion(state) };
+  await deps.work.run(job, (gate) => respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked));
+  // the renderer owns draft keys; only this session's can be dropped from here
+  if (options.draftKey?.startsWith(`session:${sessionId}:`)) deleteDrafts(db, [options.draftKey]);
+  return snapshot(db, normalized(getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>), deps.work);
 }
 
 /**
@@ -317,7 +327,7 @@ function answersQuestion(state: SessionState): boolean {
   return state.phase === 'teach' && state.stage !== null && isGraded(state.stage);
 }
 
-async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<SessionSnapshot> {
+async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<void> {
   const { db } = deps;
   const sessionId = session.id;
   const state = session.state;
@@ -397,13 +407,12 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       logEvent(db, 'session.ended', { goalId: state.goalId, sessionId }, { status: 'done' });
       refreshGoalFields(db);
       await ingestTranscript(deps, sessionId, state);
-      return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>);
+      return;
     }
     case 'done':
       break;
   }
   saveSessionState(db, sessionId, state);
-  return snapshot(db, { ...session, state });
 }
 
 /**
@@ -753,7 +762,7 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
   }
 }
 
-function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSnapshot {
+function snapshot(db: Database, session: SessionRecord<SessionState>, work: SessionWork | undefined): SessionSnapshot {
   const s = session.state;
   const step = s.phase === 'teach' ? s.plan.steps[s.stepIndex] : undefined;
   const stages = step ? stepStages(step) : [];
@@ -789,6 +798,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
     frontier: step ? frontierMap(db, s, step.nodeId) : null,
     practice: s.practiceSetId ? practiceView(db, s.practiceSetId) : null,
     practiceRevealed: s.practiceRevealed ?? null,
+    work: work?.forSession(session.id) ?? null,
   };
 }
 

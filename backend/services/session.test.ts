@@ -14,11 +14,13 @@ import { activeSession, listSessionEvents, listSessions } from '../store/session
 import { logTime } from '../store/activity';
 import { listSources } from '../store/sources';
 import { saveAttachment } from '../store/attachments';
+import { getDrafts, setDraft } from '../store/drafts';
 import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { deeperMinutes, goDeeper } from './goals';
 import { recordEvidence } from './evidence';
-import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from './session';
+import { abandonSession, currentSession, pauseSession, respond, startSession } from './session';
+import { SessionWork } from './sessionWork';
 import { settleGrading } from './practice';
 import type { SessionState } from './session';
 
@@ -55,6 +57,15 @@ function fakeTutor(scores: number[]) {
   };
 }
 
+/** A planner that picks profiles, best responses and Nash equilibrium when they are candidates. */
+function fakePlanner(req: CompleteRequest<unknown>) {
+  const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+  const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
+  const preferred = all.filter((c) => ['Strategy profile', 'Best response', 'Nash equilibrium'].includes(c.name));
+  const picks = (preferred.length ? preferred : all.slice(0, 3)).map((c) => c.id);
+  return { title: 'Profiles and best responses', orientation: 'Today builds Nash equilibrium from the two ideas it is made of.', steps: picks.map((nodeId) => ({ nodeId, why: 'needed for the exam' })) };
+}
+
 async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 | 3 | 4 }[] = []) {
   const db = openDatabase(':memory:');
   const ids = seedExampleGraph(db);
@@ -69,17 +80,12 @@ async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 |
   refreshGoalFields(db);
   const tutor = fakeTutor(scores);
   const provider = new FakeProvider({ tutor, tutorEscalation: tutor });
-  provider.script('planner', (req: CompleteRequest<unknown>) => {
-    const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
-    const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
-    const preferred = all.filter((c) => ['Strategy profile', 'Best response', 'Nash equilibrium'].includes(c.name));
-    const picks = (preferred.length ? preferred : all.slice(0, 3)).map((c) => c.id);
-    return { title: 'Profiles and best responses', orientation: 'Today builds Nash equilibrium from the two ideas it is made of.', steps: picks.map((nodeId) => ({ nodeId, why: 'needed for the exam' })) };
-  });
+  provider.script('planner', fakePlanner);
   provider.script('extractor', { nodes: [], chains: [], conflicts: [] });
   provider.script('matcher', { decisions: [] });
   const ingestion = new IngestionService({ db, provider, embedder: new FakeEmbedder(), sourcesDir: join(mkdtempSync(join(tmpdir(), 'frontier-sess-')), 'sources') });
-  return { db, ids, goal, provider, deps: { db, provider, ingestion } };
+  const work = new SessionWork();
+  return { db, ids, goal, provider, work, deps: { db, provider, ingestion, work } };
 }
 
 const answer = (text: string, confidence = 0.66) => ({ answer: text, confidence });
@@ -99,7 +105,7 @@ describe('stopping an answer (Esc)', () => {
     const first = respond(deps, snap.id, answer('first try'));
     await settle();
     await expect(respond(deps, snap.id, answer('impatient'))).rejects.toThrow('Still working');
-    expect(cancelRespond(snap.id)).toBe(true);
+    expect(deps.work.cancel(snap.id)).toBe(true);
     await expect(first).rejects.toThrow('cancelled');
     expect(listSessionEvents(db, snap.id)).toHaveLength(events);
     expect(listEvidenceForSession(db, snap.id)).toHaveLength(evidence);
@@ -109,7 +115,7 @@ describe('stopping an answer (Esc)', () => {
     snap = await respond(deps, snap.id, answer('second try'));
     expect(snap.history.nodes[0]?.items[0]?.response?.answer).toBe('second try');
     expect(listEvidenceForSession(db, snap.id)).toHaveLength(evidence + 1);
-    expect(cancelRespond(snap.id)).toBe(false); // nothing in flight
+    expect(deps.work.cancel(snap.id)).toBe(false); // nothing in flight
   });
 
   it('cannot stop once the tutor has answered: the request runs to the end', async () => {
@@ -126,10 +132,105 @@ describe('stopping an answer (Esc)', () => {
     });
     const pending = respond(deps, snap.id, answer('one strategy per player'));
     await settle();
-    expect(cancelRespond(snap.id)).toBe(false);
+    expect(deps.work.cancel(snap.id)).toBe(false);
     release();
     snap = await pending;
     expect(snap.history.nodes[0]?.status).toBe('done');
+  });
+});
+
+describe('work that keeps going when the Session screen closes', () => {
+  /** Hold the tutor's next call open until `release` is called. */
+  function holdTutor(deps: Awaited<ReturnType<typeof setup>>['deps'], fail = false) {
+    let release: () => void = () => undefined;
+    const tutor = fakeTutor([0.8, 0.8, 0.8]);
+    deps.provider.script('tutor', (req: CompleteRequest<unknown>) => new Promise((resolve, reject) => (release = () => (fail ? reject(new Error('tutor: the model ended without calling the submit tool')) : resolve(tutor(req))))), tutor);
+    return () => release();
+  }
+
+  it('shows an answer still being judged in the snapshot, as sent, and announces when it is done', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const card = snap.card;
+    const events: string[] = [];
+    deps.work.subscribe((e) => events.push(`${e.kind}:${e.outcome}${e.work?.stoppable ? ' (stoppable)' : ''}`));
+    const release = holdTutor(deps);
+    const pending = respond(deps, snap.id, { ...answer('one strategy per player'), quote: 'A profile' }, { draftKey: `session:${snap.id}:card` });
+    await settle();
+
+    // the screen closed and opened again: it reads the answer as it was sent, still stoppable
+    const reopened = currentSession(db, deps.work);
+    expect(reopened?.work).toMatchObject({ kind: 'respond', status: 'running', sessionId: snap.id, stoppable: true, error: null });
+    expect(reopened?.work?.sent).toEqual({ card, stage: 'index', response: { answer: 'one strategy per player', confidence: 0.66, quote: 'A profile' } });
+    expect(deps.work.current()?.sessionId).toBe(snap.id);
+    expect(events).toEqual(['respond:running (stoppable)']);
+
+    release();
+    snap = await pending;
+    // once the tutor has answered, the answer can no longer be stopped; then the next card is there
+    expect(events).toEqual(['respond:running (stoppable)', 'respond:running', 'respond:done']);
+    expect(snap.work).toBeNull();
+    expect(currentSession(db, deps.work)?.history.nodes[0]?.items[0]?.response?.answer).toBe('one strategy per player');
+  });
+
+  it('keeps a failed answer and its error for the next read, until the next answer replaces it', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    setDraft(db, `session:${snap.id}:card`, '{"answer":"one strategy per player"}');
+    const events: string[] = [];
+    deps.work.subscribe((e) => events.push(e.outcome));
+    const release = holdTutor(deps, true);
+    const pending = respond(deps, snap.id, answer('one strategy per player'), { draftKey: `session:${snap.id}:card` });
+    await settle();
+    release();
+    await expect(pending).rejects.toThrow('ended without calling the submit tool');
+
+    expect(events).toEqual(['running', 'failed']);
+    for (const read of [1, 2]) {
+      const again = currentSession(db, deps.work);
+      expect(again?.work, `read ${read}`).toMatchObject({ kind: 'respond', status: 'failed', stoppable: false, error: 'tutor: the model ended without calling the submit tool' });
+      expect(again?.work?.sent?.response.answer).toBe('one strategy per player');
+      expect(again?.current?.stage).toBe('index'); // nothing was written: the same card is open
+    }
+    expect(getDrafts(db, [`session:${snap.id}:card`])).toHaveProperty(`session:${snap.id}:card`); // the answer is still there to send again
+
+    snap = await respond(deps, snap.id, answer('one strategy per player'), { draftKey: `session:${snap.id}:card` });
+    expect(snap.work).toBeNull();
+    expect(getDrafts(db, [`session:${snap.id}:card`])).toEqual({}); // accepted, so the draft is gone
+  });
+
+  it('refuses a second answer while one is judged, without losing the first', async () => {
+    const { db, goal, deps } = await setup([0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const release = holdTutor(deps);
+    const first = respond(deps, snap.id, answer('first'));
+    await settle();
+    await expect(respond(deps, snap.id, answer('second'))).rejects.toThrow('Still working on your last answer.');
+    expect(currentSession(db, deps.work)?.work?.sent?.response.answer).toBe('first');
+    release();
+    snap = await first;
+    expect(snap.history.nodes[0]?.items[0]?.response?.answer).toBe('first');
+  });
+
+  it('plans a session in the background: visible while planning, and the event names the session it opened', async () => {
+    const { db, goal, deps: base } = await setup();
+    let release: () => void = () => undefined;
+    const hold = (req: CompleteRequest<unknown>) => new Promise((resolve) => (release = () => resolve(fakePlanner(req))));
+    const deps = { ...base, provider: new FakeProvider({ planner: [hold, fakePlanner], tutor: fakeTutor([]) }) };
+    const opened: (string | null)[] = [];
+    deps.work.subscribe((e) => e.outcome === 'done' && opened.push(e.sessionId));
+    const starting = startSession(deps, goal.id);
+    await settle();
+    expect(deps.work.current()).toMatchObject({ kind: 'start', status: 'running', sessionId: null, goalId: goal.id, stoppable: false });
+    expect(currentSession(db, deps.work)).toBeNull();
+    await expect(startSession(deps, goal.id)).rejects.toThrow('still being planned');
+    release();
+    const snap = await starting;
+    expect(opened).toEqual([snap.id]);
+    expect(deps.work.current()).toBeNull();
   });
 });
 

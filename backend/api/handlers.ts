@@ -12,7 +12,7 @@ import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
 import { cancelProbe, createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
-import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from '../services/session';
+import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
@@ -156,14 +156,15 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'probe.cancel': ({ probeId }) => cancelProbe(probeId),
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
-    'session.current': () => currentSession(ctx.db()),
+    'session.current': () => currentSession(ctx.db(), ctx.sessionWork),
+    'session.work': () => ctx.sessionWork.current(),
     'session.start': ({ goalId, focus }) => startSession(ctx.practiceDeps(), goalId, focus),
-    'session.respond': async ({ sessionId, response }) => {
-      const snap = await respond(ctx.practiceDeps(), sessionId, response);
+    'session.respond': async ({ sessionId, response, draftKey }) => {
+      const snap = await respond(ctx.practiceDeps(), sessionId, response, { draftKey });
       if (snap.status !== 'active') ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map
       return snap;
     },
-    'session.cancel': ({ sessionId }) => cancelRespond(sessionId),
+    'session.cancel': ({ sessionId }) => ctx.sessionWork.cancel(sessionId),
     'session.pause': ({ sessionId }) => {
       pauseSession(ctx.db(), sessionId);
       return undefined;

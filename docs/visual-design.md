@@ -76,7 +76,7 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 - Radius: 10 (nav items), 12 (inputs), 14 (small cards), 18 (answer surface, list cards), 999 (buttons, chips, pills), 50% (dots).
 - **App shell** (R4):
   - Sidebar: 220 px, border-right `border`. On macOS the window has an inset title bar (traffic lights at 18/18 inside the sidebar) and the sidebar shows the system sidebar material under `rgba(24,22,19,0.62)`, so it stays warm; the rest of the window is opaque `bg`. Windows and Linux keep the standard frame and an opaque `#181715` sidebar. The theme is forced dark (`nativeTheme.themeSource`).
-  - Sidebar content, top to bottom: the brand (22 px mark + "Frontier" 15 px weight 600), the live Session entry while a session is open, the places you work in (Today, Goals, Map, Stats), a "Look back" group (Lookup, Trails, Library) under an 11 px `text-muted` heading, and Settings at the bottom. Items: 32 px high, radius 8, 16 px Lucide icon (stroke 1.75, `text-muted`) + 13 px label (`text-secondary`); hover `rgba(238,234,226,0.05)`; selected `rgba(238,234,226,0.09)` with `text` label and accent icon. Each item has a hover hint saying what the place is for.
+  - Sidebar content, top to bottom: the brand (22 px mark + "Frontier" 15 px weight 600), the live Session entry while a session is open or being planned (its 12 px hint on the right says "Thinking…" while the tutor works, "Your turn" when a card arrived while you were elsewhere, otherwise "Continue" or "Open now"), the places you work in (Today, Goals, Map, Stats), a "Look back" group (Lookup, Trails, Library) under an 11 px `text-muted` heading, and Settings at the bottom. Items: 32 px high, radius 8, 16 px Lucide icon (stroke 1.75, `text-muted`) + 13 px label (`text-secondary`); hover `rgba(238,234,226,0.05)`; selected `rgba(238,234,226,0.09)` with `text` label and accent icon. Each item has a hover hint saying what the place is for.
   - Below 1024 px window width the sidebar is 64 px, icons only.
   - Main column: padding 56 top, 64 sides, 48 bottom; vertical gap 36 between blocks. Content max width **720 px**, left-aligned (not centred). Every screen title has a one-line `t-lead` under it saying what the screen is for.
   - Right panel: 420 px (at least 340), padding 48 / 36, `bg-panel`, border-left `border`, vertical gap 22–28.
@@ -88,6 +88,11 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
   - Lists inside cards: 14 px vertical / 20 px horizontal padding, 1px `border-strong` dividers.
 
 ## 5. Components
+
+### Background work (R5)
+- **Planning a session**: the Session screen shows the goal as a caption, "Planning your session" in Display and one lead line saying the learner can leave, then three 8 px accent dots in a slow wave (1.6 s, staggered 0.2 s; still at 60% with reduced motion).
+- **An answer being judged**: the answer stays in the conversation as sent, with a thinking row under it: "Judging…" for answers to questions (graded cards, free recall), "Thinking…" for everything else, then Stop and "Esc to stop and edit" while it can still stop. The same shows when the learner comes back to the screen.
+- **A failed answer**: one error notice above the conversation ("Your answer did not go through. … It is still in the field to send again.") and the answer back in the field.
 
 ### Brand mark (R4)
 A 24-unit circle: the left half filled `text` (what you know), the right half a dashed 1.6 accent arc (what lies beyond), and a 2.5 accent dot in the centre on a 4-unit gap in the background colour (you, on the edge). 22 px in the sidebar, 56 px on the welcome screen.
@@ -159,7 +164,7 @@ Cards on `surface` with an 18 px heading and a 13 px muted note saying how to re
 
 ## 6. Motion
 - Default transitions 150–200 ms ease-out (hover, selection, expanding history).
-- The only looping animations: the current map node's pulse, the listening bars, the live Session dot in the rail and the dots while a goal is being mapped. The Map's layout moves while it settles (a second or two after a change, or while an idea is dragged), the camera glides 360 ms to a chosen idea, and Replay how it grew runs about 6 s when asked; with reduced motion the layout settles at once and the camera jumps. Steps of the goal wizard and the welcome fade in once (260–400 ms). Respect `prefers-reduced-motion` (disable all of them).
+- The only looping animations: the current map node's pulse, the listening bars, the live Session dot in the rail, the dots while a goal is being mapped and the dots while a session is planned. The Map's layout moves while it settles (a second or two after a change, or while an idea is dragged), the camera glides 360 ms to a chosen idea, and Replay how it grew runs about 6 s when asked; with reduced motion the layout settles at once and the camera jumps. Steps of the goal wizard and the welcome fade in once (260–400 ms). Respect `prefers-reduced-motion` (disable all of them).
 
 ## 7. Accessibility
 Real buttons, links, inputs and labels; visible focus rings (2 px accent outline, 2 px offset); icon-only controls get labels; all text AA; the map has a text alternative (the ideas shown, listed by state, each one selectable), and the search reaches any idea by name.

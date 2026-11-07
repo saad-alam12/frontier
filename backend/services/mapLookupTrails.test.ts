@@ -16,6 +16,7 @@ import { fuzzyScore, looksLikeQuestion, lookup, openCard, searchIdeas } from './
 import { mapView, nodeCard } from './map';
 import { listTrails, trail } from './trails';
 import { abandonSession, respond, startSession } from './session';
+import { SessionWork } from './sessionWork';
 
 async function setup() {
   const db = openDatabase(':memory:');
@@ -139,7 +140,7 @@ describe('trails', () => {
       const picks = [...text.matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1] as string).slice(0, 2);
       return { title: 'Profiles and replies', orientation: 'Two ideas today.', steps: picks.map((nodeId) => ({ nodeId, why: 'needed' })) };
     });
-    const deps = { db, provider };
+    const deps = { db, provider, work: new SessionWork() };
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, { answer: '' });
     for (let i = 0; i < 4 && snap.phase === 'teach'; i += 1) snap = await respond(deps, snap.id, { answer: 'my answer', confidence: 0.66 });
