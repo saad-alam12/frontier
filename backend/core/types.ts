@@ -183,6 +183,8 @@ export interface Goal {
   gaps: BackgroundGap[];
   /** A re-map waiting to be made or approved; null when there is none. */
   remap: GoalRemap | null;
+  /** Something the learner asked to add, being worked out or waiting for a yes; null when there is none. */
+  addition: GoalAddition | null;
   /** Minutes added by going deeper on simplified ideas, on top of the time as the learner gave it. */
   extraMinutes: number;
 }
@@ -224,6 +226,29 @@ export type GoalRemap = { state: 'requested'; at: string; causes?: RemapCause[] 
 export const CONTEXT_MAX_CHARS = 4000;
 
 /**
+ * What the compiler would add to a goal for the learner's request (design §3.2, additions); nothing
+ * changes until the learner says yes.
+ */
+export interface AdditionProposal {
+  /** Whether the request belongs to this goal; when it does not, `reason` says why in one sentence. */
+  fits: boolean;
+  reason: string | null;
+  /** Read from the wording: how the goal relates to a field (several broad ideas) or one aspect (fewer, deeper). */
+  shape: 'broad' | 'deep';
+  capabilities: { statement: string; targets: { ref: string; depth: number; core: boolean }[] }[];
+  newNodes: { tempId: string; kind: NodeKind; name: string; statement: string }[];
+}
+
+/** An addition the learner asked for: being worked out in the background, ready to preview, or failed. */
+export type GoalAddition =
+  | { state: 'requested'; request: string; at: string }
+  | { state: 'ready'; request: string; at: string; proposal: AdditionProposal }
+  | { state: 'failed'; request: string; at: string; message: string };
+
+/** How long a request to add to a goal may be, in characters: a sentence or two. */
+export const ADDITION_MAX_CHARS = 500;
+
+/**
  * How deep the goal's language goes (design §3.1): intuition (plain words and pictures, no formulas),
  * working (the key notation and formulas, explained and used), rigorous (precise definitions,
  * derivations, proofs).
@@ -243,6 +268,8 @@ export interface Capability {
   statement: string;
   order: number;
   masteredAt: string | null;
+  /** The learner's words when the capability came from adding to the goal; null otherwise. */
+  request: string | null;
 }
 
 export interface Target {

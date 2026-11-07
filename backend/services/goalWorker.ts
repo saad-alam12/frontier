@@ -1,7 +1,9 @@
 /**
  * The goal worker: decides what a goal still needs (read its material, profile its exams, compile,
- * propose a re-map) and does it in the background, one run per goal at a time.
+ * work out an addition the learner asked for, propose a re-map) and does it in the background, one
+ * run per goal at a time.
  */
+import type { Embedder } from '../ingest/embedder';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { getGoal, listGoals, listMaterials } from '../store/goals';
@@ -10,9 +12,10 @@ import { compileGoal, extractedSources, profileGoal } from './goals';
 import type { GoalWorkState } from './goals';
 import type { IngestionService } from './ingestion';
 import { pendingRemapNeed, proposeRemap, redrawDraft } from './remap';
+import { proposeAddition } from './addition';
 
 /** What a goal still needs before it is up to date, in order. Pure decision over stored state. */
-export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | 'redraw' | 'remap' | null {
+export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | 'redraw' | 'add' | 'remap' | null {
   const goal = getGoal(db, goalId);
   if (!goal) return null;
   const materials = listMaterials(db, goalId);
@@ -25,8 +28,11 @@ export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' |
   if (readable.some((s) => !goal.compiledSources.includes(s))) return 'compile';
   // a draft changed after it was mapped: nothing is approved yet, so it is mapped again
   if (goal.status === 'draft' && goal.remap?.state === 'requested') return 'redraw';
-  // a re-map the learner asked for, or one their missing background calls for (proposed, never applied)
-  if (goal.status === 'active' && (goal.remap?.state === 'requested' || (goal.remap === null && pendingRemapNeed(db, goal) !== 'none'))) return 'remap';
+  if (goal.addition?.state === 'requested' && goal.status !== 'draft') return 'add';
+  // a re-map the learner asked for, or one their missing background calls for (proposed, never
+  // applied); not while an addition waits, so the learner weighs one proposal at a time
+  const adding = goal.addition !== null && goal.addition.state !== 'failed';
+  if (goal.status === 'active' && !adding && (goal.remap?.state === 'requested' || (goal.remap === null && pendingRemapNeed(db, goal) !== 'none'))) return 'remap';
   return null;
 }
 
@@ -45,6 +51,8 @@ export interface GoalWorkerDeps {
   db: () => Database;
   provider: () => LlmProvider;
   ingestion: () => IngestionService;
+  /** Matches an addition's request to library ideas by meaning. */
+  embedder?: () => Embedder;
   onChange: (goalId: string) => void;
 }
 
@@ -103,12 +111,14 @@ export class GoalWorker {
             ? await this.step(goalId, 'compiling', remapMessage(this.deps.db(), goalId), () => proposeRemap(options, goalId))
             : step === 'redraw'
               ? await this.step(goalId, 'compiling', 'Mapping your goal again for your changes', () => redrawDraft(options, goalId))
-              : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal(options, goalId));
+              : step === 'add'
+                ? await this.step(goalId, 'adding', 'Working out what to add', () => proposeAddition({ ...options, embedder: this.deps.embedder?.(), ingestion: this.deps.ingestion() }, goalId))
+                : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal(options, goalId));
       if (!ok) return;
     }
   }
 
-  private async step(goalId: string, state: 'profiling' | 'compiling', message: string, fn: () => Promise<unknown>): Promise<boolean> {
+  private async step(goalId: string, state: 'profiling' | 'compiling' | 'adding', message: string, fn: () => Promise<unknown>): Promise<boolean> {
     this.set(goalId, { state, message });
     try {
       await fn();

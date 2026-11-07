@@ -6,7 +6,32 @@ import type { LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
 
 const DepthSchema = z.number().int().min(1).max(5);
-const TargetsSchema = z.array(z.object({ ref: z.string().trim().min(1), depth: DepthSchema, core: z.boolean().default(false) }));
+/** Targets name an idea by its id from the list shown, or by the tempId of a new node. */
+export const TargetsSchema = z.array(z.object({ ref: z.string().trim().min(1), depth: DepthSchema, core: z.boolean().default(false) }));
+/** An idea the compiler needs that the list does not have: created unverified. */
+export const NewNodeSchema = z.object({
+  tempId: z.string().regex(/^m\d{1,3}$/, 'tempId must look like m1, m2, ...'),
+  kind: z.enum(['claim', 'procedure', 'term']),
+  name: z.string().trim().min(2).max(120),
+  statement: z.string().trim().min(5).max(800),
+});
+
+/** The tempIds of the new nodes; a repeated one is an issue. */
+export function newNodeIds(ctx: z.RefinementCtx, nodes: { tempId: string }[]): Set<string> {
+  const temp = new Set<string>();
+  nodes.forEach((n, i) => {
+    if (temp.has(n.tempId)) ctx.addIssue({ code: 'custom', path: ['newNodes', i, 'tempId'], message: `duplicate tempId ${n.tempId}` });
+    temp.add(n.tempId);
+  });
+  return temp;
+}
+
+/** Every target refers to an idea the compiler was shown or to one of its new nodes. */
+export function checkTargetRefs(ctx: z.RefinementCtx, targets: { ref: string }[], path: (string | number)[], knownIds: Set<string>, temp: Set<string>): void {
+  targets.forEach((t, j) => {
+    if (!knownIds.has(t.ref) && !temp.has(t.ref)) ctx.addIssue({ code: 'custom', path: [...path, j, 'ref'], message: `unknown id ${t.ref}; use an id from the graph or a tempId from newNodes` });
+  });
+}
 
 export interface GraphSummaryEntry {
   id: string;
@@ -47,32 +72,15 @@ export function buildCompileSchema(
       capabilities: z.array(z.object({ statement: z.string().trim().min(10).max(300), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
       extend: z.array(z.object({ capabilityId: z.string().trim().min(1), targets: TargetsSchema.min(1).max(30) })).max(15).default([]),
       retire: z.array(z.string().trim().min(1)).max(15).default([]),
-      newNodes: z
-        .array(
-          z.object({
-            tempId: z.string().regex(/^m\d{1,3}$/, 'tempId must look like m1, m2, ...'),
-            kind: z.enum(['claim', 'procedure', 'term']),
-            name: z.string().trim().min(2).max(120),
-            statement: z.string().trim().min(5).max(800),
-          }),
-        )
-        .max(60)
-        .default([]),
+      newNodes: z.array(NewNodeSchema).max(60).default([]),
       backgroundGoal: z
         .object({ text: z.string().trim().min(5).max(200), hours: z.number().min(1).max(400) })
         .nullable()
         .default(null),
     })
     .superRefine((value, ctx) => {
-      const temp = new Set<string>();
-      value.newNodes.forEach((n, i) => {
-        if (temp.has(n.tempId)) ctx.addIssue({ code: 'custom', path: ['newNodes', i, 'tempId'], message: `duplicate tempId ${n.tempId}` });
-        temp.add(n.tempId);
-      });
-      const checkRefs = (targets: { ref: string }[], path: (string | number)[]) =>
-        targets.forEach((t, j) => {
-          if (!knownIds.has(t.ref) && !temp.has(t.ref)) ctx.addIssue({ code: 'custom', path: [...path, j, 'ref'], message: `unknown id ${t.ref}; use an id from the graph or a tempId from newNodes` });
-        });
+      const temp = newNodeIds(ctx, value.newNodes);
+      const checkRefs = (targets: { ref: string }[], path: (string | number)[]) => checkTargetRefs(ctx, targets, path, knownIds, temp);
       value.capabilities.forEach((c, i) => checkRefs(c.targets, ['capabilities', i, 'targets']));
       value.extend.forEach((e, i) => {
         if (!existingIds.has(e.capabilityId)) ctx.addIssue({ code: 'custom', path: ['extend', i, 'capabilityId'], message: `unknown capability ${e.capabilityId}` });
@@ -157,13 +165,13 @@ function remapTask(request: RemapRequest): string {
   return `${request.causes.map((c) => CHANGE_TASK[c]).join(' ')} Keep what still fits; when missing background is listed below, take it into account too.`;
 }
 
-const FOCUS_TEXT: Record<GoalFocus, string> = {
+export const FOCUS_TEXT: Record<GoalFocus, string> = {
   concepts: 'conceptual understanding: what things mean, why they hold, how they connect',
   math: 'mathematical rigour: definitions, derivations and proofs',
   practice: 'practical application: using it on real tasks, including writing code where the subject has it',
 };
 
-const ASSESSMENT_TEXT: Record<Assessment, string> = {
+export const ASSESSMENT_TEXT: Record<Assessment, string> = {
   written_exam: 'a written exam',
   oral_exam: 'an oral exam',
   presentation_or_project: 'a presentation or project',
@@ -248,6 +256,6 @@ function round(hours: number): string {
   return hours >= 10 ? String(Math.round(hours)) : String(Math.round(hours * 2) / 2);
 }
 
-function truncate(s: string, n: number): string {
+export function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }

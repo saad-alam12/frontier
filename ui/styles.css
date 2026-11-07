@@ -2130,8 +2130,9 @@ button.map-label:hover {
   line-height: 1.55;
 }
 
-/* A proposed map, next to the plan the learner has. */
-.remap-panel {
+/* A proposed map, next to the plan the learner has; and an addition, from asking to deciding. */
+.remap-panel,
+.addition-panel {
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -2139,6 +2140,64 @@ button.map-label:hover {
   border-radius: 22px;
   background: var(--surface-raised);
   box-shadow: inset 0 0 0 1px var(--ring);
+}
+.addition-wait {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.addition-wait .idea-field {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  gap: 8px;
+}
+.addition-wait .idea-dot {
+  width: 10px;
+  height: 10px;
+}
+/* The compiler's word that a request reads like a goal of its own. */
+.addition-misfit {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(232, 194, 122, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(232, 194, 122, 0.22);
+  color: var(--text-soft);
+}
+.addition-skills,
+.addition-changed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.addition-skills li {
+  position: relative;
+  padding-left: 16px;
+  color: var(--text-soft);
+}
+.addition-skills li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.addition-changed {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+/* A skill the learner added in their own words: a quiet line under it. */
+.added-mark {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 .background-goal {
   display: flex;

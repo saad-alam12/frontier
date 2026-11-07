@@ -66,7 +66,13 @@ export class AppContext {
 
   goalWorker(): GoalWorker {
     if (!this.cachedGoalWorker) {
-      this.cachedGoalWorker = new GoalWorker({ db: () => this.db(), provider: () => this.provider(), ingestion: () => this.ingestion(), onChange: (goalId) => this.emit('goals.changed', { goalId }) });
+      this.cachedGoalWorker = new GoalWorker({
+        db: () => this.db(),
+        provider: () => this.provider(),
+        ingestion: () => this.ingestion(),
+        embedder: () => this.embedder(),
+        onChange: (goalId) => this.emit('goals.changed', { goalId }),
+      });
     }
     return this.cachedGoalWorker;
   }

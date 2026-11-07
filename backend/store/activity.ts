@@ -12,6 +12,7 @@ export type ActivityKind =
   | 'time'
   | 'goal.created'
   | 'goal.approved'
+  | 'goal.extended'
   | 'budget.changed'
   | 'material.added'
   | 'session.started'

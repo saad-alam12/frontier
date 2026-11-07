@@ -17,9 +17,9 @@ const goals: GoalContext = {
     ['g2', { id: 'g2', text: 'paused', priority: 5, status: 'paused', createdAt: '', compiledAt: null }],
   ]),
   capabilities: new Map([
-    ['cap1', { id: 'cap1', goalId: 'g1', statement: 's', order: 0, masteredAt: null }],
-    ['cap2', { id: 'cap2', goalId: 'g1', statement: 's', order: 1, masteredAt: null }],
-    ['cap3', { id: 'cap3', goalId: 'g2', statement: 's', order: 0, masteredAt: null }],
+    ['cap1', { id: 'cap1', goalId: 'g1', statement: 's', order: 0, masteredAt: null, request: null }],
+    ['cap2', { id: 'cap2', goalId: 'g1', statement: 's', order: 1, masteredAt: null, request: null }],
+    ['cap3', { id: 'cap3', goalId: 'g2', statement: 's', order: 0, masteredAt: null, request: null }],
   ]),
   targets: [
     { capabilityId: 'cap1', nodeId: 'c', depth: 3, idealDepth: 3, core: true, approvedDepth: null, simplified: null },

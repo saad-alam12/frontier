@@ -30,10 +30,10 @@ const EXAMPLES = ['Pass my linear algebra exam with a 1.3', 'Learn machine learn
  * it, then the plan that time buys, which you approve. Steps 1–3 only collect; after step 3 the goal
  * exists as a draft and is mapped in the background; the plan step re-plans live as the time moves.
  */
-export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | null; onDone: (goalId: string) => void; onCancel: () => void }) {
+export function GoalWizard({ draft, initialText, onDone, onCancel }: { draft: GoalDetail | null; initialText?: string; onDone: (goalId: string) => void; onCancel: () => void }) {
   const d = draft?.goal;
   const [step, setStep] = useState<Step>(draft ? 'plan' : 'goal');
-  const [text, setText] = useState(d?.text ?? '');
+  const [text, setText] = useState(d?.text ?? initialText?.replace(/\n/g, ' ') ?? '');
   const [kind, setKind] = useState<GoalKind | null>(d?.kind ?? null);
   const [assessment, setAssessment] = useState<Assessment | null>(d?.assessment ?? null);
   const [date, setDate] = useState(d?.date ?? '');

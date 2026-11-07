@@ -15,6 +15,7 @@ import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
 import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, capitalize, dateLabel, formatDate, goalName, isExam, plural } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { ContextNote } from './ContextField';
+import { AddComposer, AdditionPanel } from './AddToGoal';
 
 const SKILLS_SHOWN = 6;
 /** A lecture counts as done once this share of its ideas is yours. */
@@ -30,6 +31,7 @@ export function GoalPage({
   onStartSession,
   onGoDeeper,
   onChanged,
+  onNewGoal,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -38,6 +40,8 @@ export function GoalPage({
   /** Go deeper on simplified ideas (all, or these): their time joins the goal and a session on them opens. */
   onGoDeeper: (nodeIds?: string[]) => Promise<void>;
   onChanged: () => void;
+  /** Start the new-goal flow with this sentence (an addition that reads like a goal of its own). */
+  onNewGoal: (text: string) => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -47,6 +51,7 @@ export function GoalPage({
   const [allSkills, setAllSkills] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +186,7 @@ export function GoalPage({
 
       <WorkNotice detail={detail} onRetry={() => void run('compile', async () => void (await call('goals.compile', { goalId: goal.id })))} />
       {error && <Notice error>{error}</Notice>}
+      <AdditionPanel goal={goal} onChanged={onChanged} onNewGoal={onNewGoal} />
       {goal.remap?.state === 'ready' && <RemapPanel goalId={goal.id} caption={goal.wantedLevel ? 'A new map for the depth you want' : 'A new map for your time'} onChanged={onChanged} />}
       {compiled && goal.status === 'active' && goal.level === null && goal.remap === null && detail.work.state === 'idle' && (
         <div className="button-row">
@@ -198,6 +204,15 @@ export function GoalPage({
               setEditingTime(false);
               onChanged();
             }} />
+          ) : adding ? (
+            <AddComposer
+              goalId={goal.id}
+              onClose={() => setAdding(false)}
+              onSent={() => {
+                setAdding(false);
+                onChanged();
+              }}
+            />
           ) : (
             <>
               <ProgressFigures progress={progress} />
@@ -222,6 +237,8 @@ export function GoalPage({
                   {busy === 'session' ? 'Planning…' : "Start today's session"}
                 </Button>
                 <Button onClick={() => setEditingTime(true)}>{goal.budget || goal.wantedLevel ? 'Change the time' : 'Set the time'}</Button>
+                {/* one proposal at a time: not while an addition or a new map waits for an answer */}
+                {goal.addition === null && goal.remap?.state !== 'ready' && <Button onClick={() => setAdding(true)}>Add to this goal</Button>}
               </div>
             </>
           )}
@@ -496,7 +513,10 @@ function SkillRow({
       <button type="button" className="row skill-head" aria-expanded={open} onClick={onToggle}>
         <span className="flex min-w-0 items-start gap-[10px]">
           <span className={open ? 'chevron is-open' : 'chevron'} aria-hidden="true" />
-          <Markdown text={skill.statement} inline />
+          <span className="flex min-w-0 flex-col gap-[2px]">
+            <Markdown text={skill.statement} inline />
+            {skill.request && <span className="added-mark">You added this · “{skill.request}”</span>}
+          </span>
         </span>
         <span className={`t-small shrink-0 ${skill.planned ? SKILL_TONE[skill.status] : 'text-muted'}`}>{skill.planned ? SKILL_LABEL[skill.status] : 'Left out'}</span>
       </button>
@@ -707,7 +727,8 @@ function RemapPanel({ goalId, caption, onChanged }: { goalId: string; caption: s
 
 function WorkNotice({ detail, onRetry }: { detail: GoalDetail; onRetry: () => void }) {
   const { work } = detail;
-  if (work.state === 'idle') return null;
+  // an addition being worked out shows on its own panel
+  if (work.state === 'idle' || work.state === 'adding') return null;
   if (work.state === 'failed')
     return (
       <div className="button-row">

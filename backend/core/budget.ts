@@ -76,6 +76,11 @@ export const LEVEL_MINUTES: readonly number[] = [0, 7, 18, 5, 8, 8];
 export const LEVEL_VALUE: readonly number[] = [0, 0.35, 1, 0.45, 0.25, 0.15];
 /** Targets the compiler marks core (the goal fails without them) weigh this much more. */
 export const CORE_WEIGHT = 2;
+/**
+ * Targets of what the learner asked to add weigh this much more, on top of core: a fixed time makes
+ * room for the request rather than leaving the request itself out.
+ */
+export const REQUESTED_WEIGHT = 1.5;
 /** Goal minutes one idea learned in depth counts for; sizes the map the compiler is asked for. */
 export const IDEA_MINUTES = 30;
 
@@ -126,6 +131,8 @@ export interface PlanTarget {
   weight?: number;
   /** The compiler marked it core: the goal fails without it. */
   core?: boolean;
+  /** It belongs to something the learner asked to add to the goal. */
+  requested?: boolean;
 }
 
 export interface PlanNode {
@@ -187,8 +194,8 @@ interface Level {
 
 /**
  * Spend every goal's remaining budget on idea levels, best value per minute first (design §6).
- * Value is goal priority × part weight × core weight × (1 + log centrality) × the level's value. An
- * idea climbs to the depth the goal asks once its first level is bought (explaining and deriving are
+ * Value is goal priority × part weight × core weight × requested weight × (1 + log centrality) × the
+ * level's value. An idea climbs to the depth the goal asks once its first level is bought (explaining and deriving are
  * worth more per minute than recognizing), so the most useful ideas are learned properly before more
  * ideas join, and core ideas and shared foundations come before goal-specific detail.
  * An idea several goals want is paid once, split between the goals that can afford it; a goal that
@@ -205,7 +212,8 @@ export function allocate(goals: PlanGoal[], targets: PlanTarget[], nodes: Map<st
   for (const t of live) {
     const byGoal = wants.get(t.nodeId) ?? new Map<string, { depth: number; weight: number }>();
     const prev = byGoal.get(t.goalId);
-    byGoal.set(t.goalId, { depth: Math.max(prev?.depth ?? 0, t.idealDepth), weight: Math.max(prev?.weight ?? 0, (t.weight ?? 1) * (t.core ? CORE_WEIGHT : 1)) });
+    const weight = (t.weight ?? 1) * (t.core ? CORE_WEIGHT : 1) * (t.requested ? REQUESTED_WEIGHT : 1);
+    byGoal.set(t.goalId, { depth: Math.max(prev?.depth ?? 0, t.idealDepth), weight: Math.max(prev?.weight ?? 0, weight) });
     wants.set(t.nodeId, byGoal);
   }
 

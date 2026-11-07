@@ -19,6 +19,7 @@ import type { LookupAnswer, LookupHit } from '../services/lookup';
 import type { Trail, TrailItem, TrailSummary } from '../services/trails';
 import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget';
 import type { RemapView } from '../services/remap';
+import type { AdditionView } from '../services/addition';
 import type { TickInput } from '../services/activity';
 import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
 import type { EraseRequest, ErasePreview, EraseResult, EraseScope } from '../services/erase';
@@ -26,7 +27,7 @@ export type { EraseRequest, ErasePreview, EraseResult, EraseScope };
 import type { GoalBudget } from '../core/types';
 import type { ImageUpload } from '../core/attachments';
 
-export type { GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
+export type { AdditionView, GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
 
 export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailSummary };
@@ -100,6 +101,14 @@ export interface ApiMethods {
   'goals.goDeeper': { input: { goalId: string; nodeIds?: string[] }; output: { minutes: number; nodeIds: string[] } };
   /** Ask for a new map for the goal's time (drawn in the background, then proposed). */
   'goals.remapRequest': { input: { goalId: string }; output: GoalDetail };
+  /** Add to the goal in the learner's words: worked out in the background, then previewed. */
+  'goals.additionRequest': { input: { goalId: string; request: string }; output: GoalDetail };
+  /** What the addition brings and what it does to the plan; null until it is worked out. */
+  'goals.additionView': { input: { goalId: string }; output: AdditionView | null };
+  /** Add it: the new skills join the goal; existing skills and approved depths stay. */
+  'goals.additionApprove': { input: { goalId: string }; output: GoalDetail };
+  /** Do not add it (also cancels one being worked out, or a failed one). */
+  'goals.additionDismiss': { input: { goalId: string }; output: GoalDetail };
   /** Learn an expected (unverified) idea anyway. */
   'goals.startUnverified': { input: { goalId: string; nodeId: string }; output: GoalDetail };
   /** Opens a file picker; adds the files to the library unread and guesses each one's role. */

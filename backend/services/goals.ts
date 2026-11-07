@@ -51,6 +51,7 @@ import { ideaMinutes } from '../core/budget';
 import { attributeTime, goalBudgetMinutes, goalProgress, learnerSpeedNow, spentByGoal } from './budget';
 import type { GoalProgress } from './budget';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
+import type { KnowledgeView } from './knowledge';
 import { candidatesForGoal } from './planner';
 import { goalSchedule } from './practice';
 import type { GoalSchedule } from './practice';
@@ -71,7 +72,8 @@ export interface MaterialView {
   owned: number;
 }
 
-export type GoalWorkState = { state: 'idle' } | { state: 'reading' | 'profiling' | 'compiling'; message: string } | { state: 'failed'; message: string };
+/** What the goal worker is doing for a goal; `adding` works out an addition, which shows on its own panel. */
+export type GoalWorkState = { state: 'idle' } | { state: 'reading' | 'profiling' | 'compiling' | 'adding'; message: string } | { state: 'failed'; message: string };
 
 export interface GoalDetail {
   goal: Goal;
@@ -269,7 +271,7 @@ export function goDeeper(db: Database, goalId: string, nodeIds?: string[]): { mi
 }
 
 /** Add the current depth of every idea the goal targets that is not in its baseline yet. */
-function recordBaseline(db: Database, goalId: string): void {
+export function recordBaseline(db: Database, goalId: string): void {
   const depths: Record<string, Depth> = {};
   for (const t of listTargets(db, goalId, { all: true })) depths[t.nodeId] = getState(db, t.nodeId)?.depth ?? 0;
   extendBaseline(db, goalId, depths);
@@ -329,12 +331,7 @@ export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInp
     .filter((n): n is KnowledgeNode => n !== undefined)
     .map((n) => ({ id: n.id, kind: n.kind, name: n.name, statement: n.statement, inMaterial: inMaterial.has(n.id), elsewhere: elsewhere.has(n.id) ? (view.owned.has(n.id) ? 'known' : 'other goal') : undefined }));
 
-  const existing: ExistingCapability[] = listCapabilities(db, goalId).map((c) => ({
-    id: c.id,
-    statement: c.statement,
-    mastered: c.masteredAt !== null,
-    targets: existingTargets.filter((t) => t.capabilityId === c.id).map((t) => ({ nodeId: t.nodeId, name: view.nodes.get(t.nodeId)?.name ?? t.nodeId, depth: t.idealDepth })),
-  }));
+  const existing = existingCapabilities(db, goalId, view);
   const newMaterial = sources.filter((s) => !goal.compiledSources.includes(s)).map((s) => getSource(db, s)?.title ?? s);
   const budgetTotal = goalBudgetMinutes(db, goal);
   return {
@@ -360,6 +357,17 @@ export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInp
       level: goal.level,
     },
   };
+}
+
+/** The goal's capabilities as the compiler sees them: each with its targets at the depth the goal asks. */
+export function existingCapabilities(db: Database, goalId: string, view: KnowledgeView = loadKnowledge(db)): ExistingCapability[] {
+  const targets = listTargets(db, goalId, { all: true });
+  return listCapabilities(db, goalId).map((c) => ({
+    id: c.id,
+    statement: c.statement,
+    mastered: c.masteredAt !== null,
+    targets: targets.filter((t) => t.capabilityId === c.id).map((t) => ({ nodeId: t.nodeId, name: view.nodes.get(t.nodeId)?.name ?? t.nodeId, depth: t.idealDepth })),
+  }));
 }
 
 /** What a compile writes; a re-map's proposal has the same shape (without extensions or retirements). */
@@ -461,7 +469,8 @@ export async function guessRole(db: Database, provider: LlmProvider, sourceId: s
   return guessMaterialRole(provider, { title: source?.title ?? '', text });
 }
 
-function dedupeTargets(targets: NewTarget[]): NewTarget[] {
+/** One target per idea: the deepest depth asked, core if any asked it as core. */
+export function dedupeTargets(targets: NewTarget[]): NewTarget[] {
   const best = new Map<string, NewTarget>();
   for (const t of targets) {
     const prev = best.get(t.nodeId);

@@ -2,7 +2,7 @@ import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
 import { CONTEXT_MAX_CHARS } from '../core/types';
-import type { Assessment, BackgroundGap, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, GoalRemap, MaterialRole, RemapCause, Target, UpcomingUnit } from '../core/types';
+import type { Assessment, BackgroundGap, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalAddition, GoalMaterial, GoalRemap, MaterialRole, RemapCause, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
@@ -33,6 +33,7 @@ interface GoalRow {
   context: string | null;
   gaps: string;
   remap: string | null;
+  addition: string | null;
   extra_minutes: number;
 }
 interface CapabilityRow {
@@ -41,6 +42,7 @@ interface CapabilityRow {
   statement: string;
   ord: number;
   mastered_at: string | null;
+  request: string | null;
 }
 interface TargetRow {
   capability_id: string;
@@ -81,9 +83,10 @@ const toGoal = (r: GoalRow): Goal => ({
   context: r.context,
   gaps: parseJson<BackgroundGap[]>(r.gaps, []),
   remap: parseJson<GoalRemap | null>(r.remap, null),
+  addition: parseJson<GoalAddition | null>(r.addition, null),
   extraMinutes: r.extra_minutes,
 });
-const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at });
+const toCapability = (r: CapabilityRow): Capability => ({ id: r.id, goalId: r.goal_id, statement: r.statement, order: r.ord, masteredAt: r.mastered_at, request: r.request });
 const toTarget = (r: TargetRow): Target => ({
   capabilityId: r.capability_id,
   nodeId: r.node_id,
@@ -259,6 +262,10 @@ export function requestRemap(db: Database, goalId: string, causes: RemapCause[] 
   saveRemap(db, goalId, { state: 'requested', at: nowIso(), ...(merged.length ? { causes: merged } : {}) });
 }
 
+export function saveAddition(db: Database, goalId: string, addition: GoalAddition | null): void {
+  db.prepare('UPDATE goals SET addition = ? WHERE id = ?').run(addition ? JSON.stringify(addition) : null, goalId);
+}
+
 export function startUnverified(db: Database, goalId: string, nodeId: string): void {
   const goal = getGoal(db, goalId);
   if (!goal || goal.startedUnverified.includes(nodeId)) return;
@@ -293,16 +300,16 @@ export interface NewTarget {
   core?: boolean;
 }
 
-/** Add capabilities after the existing ones, with their targets. */
-export function addCapabilities(db: Database, goalId: string, capabilities: { statement: string; targets: NewTarget[] }[]): Capability[] {
+/** Add capabilities after the existing ones, with their targets; `request` is the learner's words for an addition. */
+export function addCapabilities(db: Database, goalId: string, capabilities: { statement: string; targets: NewTarget[] }[], request: string | null = null): Capability[] {
   const start = (db.prepare('SELECT COALESCE(MAX(ord) + 1, 0) AS n FROM capabilities WHERE goal_id = ?').get(goalId) as { n: number }).n;
-  const insertCap = db.prepare('INSERT INTO capabilities (id, goal_id, statement, ord, mastered_at) VALUES (?, ?, ?, ?, NULL)');
+  const insertCap = db.prepare('INSERT INTO capabilities (id, goal_id, statement, ord, mastered_at, request) VALUES (?, ?, ?, ?, NULL, ?)');
   const out: Capability[] = [];
   capabilities.forEach((cap, i) => {
     const id = newId('cap');
-    insertCap.run(id, goalId, cap.statement, start + i);
+    insertCap.run(id, goalId, cap.statement, start + i, request);
     addTargets(db, id, cap.targets);
-    out.push({ id, goalId, statement: cap.statement, order: start + i, masteredAt: null });
+    out.push({ id, goalId, statement: cap.statement, order: start + i, masteredAt: null, request });
   });
   return out;
 }
@@ -363,7 +370,7 @@ export function removeMaterialsOf(db: Database, sourceIds: Iterable<string>): vo
  */
 export function resetGoalMap(db: Database, goalId: string): void {
   db.prepare('DELETE FROM capabilities WHERE goal_id = ?').run(goalId);
-  db.prepare("UPDATE goals SET compiled_at = NULL, compiled_sources = '[]', coverage = NULL, baseline = '{}', remap = NULL, started_unverified = '[]' WHERE id = ?").run(goalId);
+  db.prepare("UPDATE goals SET compiled_at = NULL, compiled_sources = '[]', coverage = NULL, baseline = '{}', remap = NULL, addition = NULL, started_unverified = '[]' WHERE id = ?").run(goalId);
 }
 
 export function deleteCapabilities(db: Database, ids: string[]): void {

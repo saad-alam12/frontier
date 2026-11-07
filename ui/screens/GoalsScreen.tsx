@@ -9,7 +9,8 @@ import { GoalPage } from './goals/GoalPage';
 import { GoalWizard } from './goals/GoalWizard';
 import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
 
-export type GoalsView = { name: 'list' } | { name: 'new' } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
+/** `text` starts a new goal with a sentence (an addition that reads like a goal of its own). */
+export type GoalsView = { name: 'list' } | { name: 'new'; text?: string } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
 
 export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (s: ScreenName) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>; initial?: GoalsView }) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
@@ -36,6 +37,7 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
       <GoalWizard
         key={view.name === 'draft' ? view.goalId : 'new'}
         draft={view.name === 'draft' ? find(view.goalId) : null}
+        initialText={view.name === 'new' ? view.text : undefined}
         onCancel={() => void refresh().then(() => setView({ name: 'list' }))}
         onDone={(goalId) => void refresh().then(() => setView({ name: 'goal', goalId }))}
       />
@@ -72,6 +74,7 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
             onNavigate('session');
           }}
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}
+          onNewGoal={(text) => setView({ name: 'new', text })}
         />
       );
     }

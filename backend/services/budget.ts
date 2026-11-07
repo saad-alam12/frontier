@@ -89,7 +89,7 @@ interface PlanInputs {
 function planInputs(db: Database, options: { include?: string; uncapped?: string } = {}): PlanInputs {
   const goals = listGoals(db).filter((g) => g.status === 'active' || g.id === options.include);
   const goalIds = new Set(goals.map((g) => g.id));
-  const caps = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
+  const capabilities = new Map(listCapabilities(db).map((c) => [c.id, c]));
   const nodes = new Map(listNodes(db).map((n) => [n.id, n]));
   const states = listStates(db);
   const index = indexChains(listChains(db));
@@ -107,7 +107,8 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
 
   const targets: PlanTarget[] = [];
   for (const t of listTargets(db, undefined, { all: true })) {
-    const goalId = caps.get(t.capabilityId);
+    const capability = capabilities.get(t.capabilityId);
+    const goalId = capability?.goalId;
     if (!goalId || !goalIds.has(goalId) || !nodes.has(t.nodeId)) continue;
     const covered = coverCount.get(goalId)?.get(t.nodeId) ?? 0;
     const cap = goalId === options.uncapped ? null : t.approvedDepth;
@@ -118,6 +119,7 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
       idealDepth: Math.min(t.idealDepth, cap ?? 5) as Depth,
       weight: Math.min(1.6, 1 + 0.15 * Math.max(0, covered - 1)),
       core: t.core,
+      requested: capability?.request != null,
     });
   }
   const targeted = new Set(targets.map((t) => t.nodeId));
@@ -190,10 +192,11 @@ export interface PlanPreview {
 
 /**
  * What a goal's plan looks like with a given budget, without saving anything: for the preview while
- * the learner sets the time, before approving.
+ * the learner sets the time, before approving. A new time lifts the approved caps (it is a new plan to
+ * approve); `keepCaps` keeps them, for changes that keep the approved plan (an addition).
  */
-export function previewPlan(db: Database, goalId: string, budget: GoalBudget | null): PlanPreview | null {
-  const inputs = planInputs(db, { include: goalId, uncapped: goalId });
+export function previewPlan(db: Database, goalId: string, budget: GoalBudget | null, options: { keepCaps?: boolean } = {}): PlanPreview | null {
+  const inputs = planInputs(db, { include: goalId, uncapped: options.keepCaps ? undefined : goalId });
   if (!inputs.goals.some((g) => g.id === goalId)) return null;
   const allocation = runAllocation(db, inputs, { goalId, budget });
   const plan = allocation.goals.get(goalId);

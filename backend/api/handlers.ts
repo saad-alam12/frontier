@@ -25,6 +25,7 @@ import { deleteSource } from '../store/sources';
 import { getProbeSet } from '../store/probes';
 import { getSession } from '../store/sessions';
 import { approveRemap, dismissRemap, remapView } from '../services/remap';
+import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 
@@ -135,6 +136,22 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'goals.compile': async ({ goalId }) => {
       await ctx.goalWorker().compileNow(goalId);
+      return detail(goalId);
+    },
+    'goals.additionRequest': ({ goalId, request }) => {
+      requestAddition(ctx.db(), goalId, request);
+      ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
+    },
+    'goals.additionView': ({ goalId }) => additionView(ctx.db(), goalId),
+    'goals.additionApprove': ({ goalId }) => {
+      applyAddition(ctx.db(), goalId);
+      ctx.goalWorker().refresh(goalId); // a re-map held back while the addition waited may run now
+      return detail(goalId);
+    },
+    'goals.additionDismiss': ({ goalId }) => {
+      dismissAddition(ctx.db(), goalId);
+      ctx.goalWorker().refresh(goalId);
       return detail(goalId);
     },
     'goals.startUnverified': ({ goalId, nodeId }) => {
