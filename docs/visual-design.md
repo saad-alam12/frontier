@@ -92,7 +92,8 @@ The owner's taste: Apple (macOS), Claude and Codex/OpenAI apps and their ads. **
 ### Background work (R5)
 - **Planning a session**: the Session screen shows the goal as a caption, "Planning your session" in Display and one lead line saying the learner can leave, then three 8 px accent dots in a slow wave (1.6 s, staggered 0.2 s; still at 60% with reduced motion).
 - **An answer being judged**: the answer stays in the conversation as sent, with a thinking row under it: "Judging…" for answers to questions (graded cards, free recall), "Thinking…" for everything else, then Stop and "Esc to stop and edit" while it can still stop. The same shows when the learner comes back to the screen.
-- **A failed answer**: one error notice above the conversation ("Your answer did not go through. … It is still in the field to send again.") and the answer back in the field.
+- **A failed answer**: one error notice under the answer field, where the eyes are ("Your answer did not go through. … It is still in the field to send again.") and the answer back in the field. When the answer was judged and saved but the next card failed, the notice says so and the step shows **Try again** instead of a field.
+- **Errors in plain words**: every model error is one plain sentence (the model could not be reached, is busy, gave an answer Frontier could not use, the login did not work); the technical text is the notice's hover text.
 
 ### Choose what to learn (R5)
 - A 620 px sheet (the shared sheet style) whose content scrolls between the fixed title and button row when the window is short. Top to bottom, 22 px apart: a small segmented control (Pick ideas · Describe it); the "what"; a settings group (rows like Settings) with Goal (a quiet select, "No goal" first) and, with a goal, "Count this in the goal's time" with a switch and a 12 px muted line saying where the time goes; the missing background; notices.
@@ -114,7 +115,7 @@ Every confirmation is a modal sheet on the native `<dialog>`: 440 px, radius 18,
 Buttons scale to 0.97 while pressed; secondary buttons take the hover fill. Inputs show an accent border and a 3 px `accent-halo` ring while focused. Clickable rows in list cards take the hover fill.
 
 ### Breadcrumb
-`Course / Lecture 5 / Jacobian of a composition`. Readable names, not folder slugs. Separators `/` in `node-muted`, earlier items `text-secondary` and clickable, current item `text`. 15 px.
+`Course / Lecture 5 / Jacobian of a composition`. Readable names, not folder slugs. Separators `/` in `node-muted`, earlier items `text-secondary` and clickable, current item `text`. 15 px. Always one line: long names end in an ellipsis, earlier items give way first, and a session named after its one idea shows the name once.
 
 ### Step path (horizontal)
 The six session steps (Predict, Explain, Check, Connect, Own words, Use). Each point 11 px: done = filled `text`; current = filled `accent` + 4 px `accent-halo`; upcoming = 1.5 px ring `node-muted`. Connectors 1 px `border-strong` with 8 px gaps to each point. Labels 12 px below the point (10 px gap), current label `text` weight 500, others `text-muted`. Clicking a done point scrolls the session history to it.

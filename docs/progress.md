@@ -1,5 +1,26 @@
 # Progress
 
+## Summary of R5: background work, goals by depth, your own sessions, flashcards (2026-11-07, local then cloud session)
+
+**What works.** All seven sections of `docs/feedback-round-5.md` are built.
+- **Sessions keep working when you leave.** After you send an answer you can go to any place. The answer is still judged. The sidebar says "Thinking…", then "Your turn". Come back and you see the result, or the error with your answer still in the field.
+- **Goal context.** Each goal has an optional text: "Anything the plan should know?". The map reads it. If you change it on a mapped goal, a new map is proposed for you to approve.
+- **Goals with no time limit.** Choose a depth instead of hours: Big picture, Working knowledge or In full. The plan says how long that takes.
+- **Add to a goal in words.** "Add to this goal" takes a sentence. Frontier shows what it would add (or says it does not fit). Nothing changes until you press Add.
+- **Choose what to learn.** Pick ideas from your map, or describe what you want. Frontier warns about missing background and lets you add it first or start anyway. A switch says if the time counts toward a goal. With no goal it is free study.
+- **Flashcards for hard facts.** Cards are written after a session finishes an idea (on or off per goal, at most N). A new Cards place reviews them with FSRS. Select text in a session and press "Make a flashcard". A session answer that recalls a card's fact counts as a review.
+- **A finished app (§7).** Every screen was checked in screenshots on sandbox data, also at 960 px. Errors from the model now read as plain sentences. The session error sits under your answer. Clicking the place you are on returns to its top. The map keeps labels on the main ideas when zoomed out. Many small alignment and wording fixes.
+- **Fixes from two code reviews.** 7 bugs in goals and sessions and 6 in flashcards. The biggest: an answer that was judged is never graded twice when the next step fails, and an addition can no longer be wiped by a new map.
+
+298 tests pass. Typecheck and lint are clean.
+
+**Try first.** Send an answer in a session and go to Map at once; come back. Then add something to a goal in words, and review your first flashcards. Steps are under "Next step".
+
+**Blocked or untested here.**
+- All new model work ran only on the fake model: the session maker, the card writer, the goal addition and context in the map. Their real quality is yours to judge.
+- In the cloud sandbox the app used the Claude login by mistake for a few calls (one goal map, two tutor answers) before the sandbox was switched to a provider with no key. No owner data was touched.
+- Practice answers still take no images or quotes (as in R4).
+
 ## Summary of R4: plan dots that explain, erasing from the map, screenshots and quotes, a finished look (2026-11-06, local session)
 
 **What works.** All four points of your R3 feedback are built.
@@ -93,35 +114,24 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | R2 Time budgets, Stats, clearer app | Done | Owner's request after M6 (see Owner feedback); 160 tests; reviewed by the owner (R3 request) |
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
 | R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
-| R5 Background work, goals by depth, your own sessions, flashcards | In progress | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally on the Mac with helper agents |
+| R5 Background work, goals by depth, your own sessions, flashcards | Done, checkpoint ready | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally with helper agents, finished in a cloud session (review fixes, §7); 298 tests |
 
 ## Next step
 
-**R5 is built and merged; it moves to a cloud session overnight (2026-11-07).** §1 to §6 are merged on this branch (286 tests, typecheck and lint clean). What is left, in order:
+**CHECKPOINT R5 READY** (branch `claude/build-progress-m4-oxebft-hro0rq`, also pushed as `claude/build-progress-m4-oxebft`).
 
-1. **Bug fixes from the two read-only reviews.** Done (`R5: fixes from review`, see Decisions).
-2. **Do §7, the UI pass** (`docs/feedback-round-5.md` §7). A local helper captured the screens and listed rough spots before it was stopped; they are listed below. Fix those, then go through what it did not reach. Run the app on a sandbox (see Commands; build realistic data with a script that uses the services and `FakeProvider`) and check every screen in screenshots.
-   **Rough spots for §7** (from the local helper's screenshots; moved here from the deleted review file):
+Do these steps on your Mac:
 
-A local helper captured every main screen on a sandbox with realistic data and listed these before it was stopped. Fix them as part of §7, then look at what it did not reach.
+1. `git fetch`, then `git checkout claude/build-progress-m4-oxebft`, `git pull`, `npm install`, `npm run dev`. Your database migrates by itself (migrations 12 and 13).
+2. **Background work.** Open a session. Send an answer. At once click Map. The sidebar says "Thinking…", then "Your turn". Click Session: the result is there. Send another answer and press Esc while it says "Judging…": the answer comes back to edit.
+3. **Goal context.** Open a goal, Edit goal, write a line in "Anything the plan should know?" and save. A new map is proposed. Approve it or keep yours.
+4. **No time limit.** Goals, New goal. On the time step choose "No time limit" and a depth. Check the plan's estimate. Then on a goal page press "Change the time" and switch between time and depth.
+5. **Add to a goal.** On a goal page press "Add to this goal" and write, for example, "how it relates to classical machine learning". Wait for the preview. Check what it adds and the new time. Press Add or Cancel. Try a far topic too: it should say it does not fit.
+6. **Choose what to learn.** On Today press "Choose what to learn". Pick two ideas, look at the missing background, add it first. Or "Describe it" with a sentence. Start the session, then check Stats for free study.
+7. **Flashcards.** Finish an idea in a session: cards appear in Cards after a short wait (only for hard facts; zero is normal). In a session, select a formula and press "Make a flashcard". Review in Cards with Space and keys 1 to 4. Check a goal's card settings in Edit goal.
+8. **Look and feel.** Click through every place. Tell me what still looks rough or unclear.
 
-1. **Stats "Time against budgets"** says "planned ahead" for a goal with no time limit: add `noLimit` to the budget rows in `services/stats.ts` and pass it to `BudgetBar`, so it reads "about 18 hours left" with a "No time limit" mark.
-2. **Budget bar** shows "0 min planned ahead" when nothing is planned (Goals list, goal page, Stats): hide it.
-3. **Sidebar:** clicking the place you are already on does nothing (on a goal page, Goals stays on the page). A repeat click should return to the place's top level (Goals list, Cards review, Trails list), in `ui/App.tsx`.
-4. **Goal page:** "Start today's session" shows while a session is already open (should be "Continue session"); it should be secondary while an addition or new-map proposal waits (one primary action per view); drop the unclear "On your own · Open-ended" line under the title (and "On your own" in the Goals list) and show "No time limit" for such goals.
-5. **Goals list lead** "a plan that fits the time you give it" no longer holds for goals with no time limit.
-6. **Session breadcrumb** wraps (a trailing "/" with the current item on the next line) and repeats the idea name when the session title equals it; "Make a flashcard" sits in the same row. Collapse the duplicate and stop the wrap.
-7. **Session footer:** cut "Pause keeps this session open. Your answers are saved either way." into hover hints on the buttons.
-8. **Today:** hide "0 ideas practised" in "The last seven days".
-9. **Trails:** hide "No idea finished" in the list; make the bare start time ("03:07 · In progress") read as a start time.
-10. **Stats:** "Shared ideas" shows only its note with no empty sentence (give it one, like "Hardest ideas"); the topic select wraps to its own line under the filters.
-11. **Settings:** the Provider select is smaller (about 40 px, smaller text) than the model selects (44 px); row padding differs between cards (18 against 20); the Erase chips show no selected state.
-12. **Map:** no labels at the default zoom; the small dashed-ring ideas at the edge are not in the legend (find out what they are).
-13. **Cards:** the segmented control, goal select and "Write a card" button look like different heights; measure and align.
-14. **Not looked at yet:** the new-goal flow (all four steps, both time choices), Edit goal, the Choose what to learn sheet, Session with no session open, planning, judging, the end dialog, the selection bar, the flashcard sheet, All cards with its finished and empty states, the Map idea card and view panel, the add-to-goal field, waiting and not-a-fit states, and the narrow window (about 960 px).
-
-3. **Close R5:** the R5 summary at the top of this file, "CHECKPOINT R5 READY" here with exact steps for the owner, tests, typecheck, lint, push.
-4. **Overnight extras, on a separate branch** `claude/r6-overnight` cut from this branch after step 3 (the owner wants to review them apart from R5). The owner asked for more UI/UX improvement and new features that reduce friction and make Frontier more useful as an all-in-one tool for everything they want to learn. Keep to the design's principles (LLMs judge, code mechanizes; low effort on logistics; licensing rules), one commit per feature, tests for each, every screen checked in screenshots. Record each choice under Decisions on that branch, and end with a short, very simple summary of what changed at the top of this file on that branch. Push that branch; leave this branch at the R5 checkpoint.
+Write what you find under "Owner feedback". The overnight extras are on a separate branch, `claude/r6-overnight`, to review apart from R5.
 
 ## Owner feedback
 
@@ -185,6 +195,7 @@ Full list with acceptance checks: `docs/feedback-round-1.md`. In short:
 - `npm test` runs unit and integration tests with the fake provider (no network).
 - `npm run typecheck`, `npm run lint`.
 - `npm run build` builds the desktop app for this platform into `release/` (unsigned); `npm run build:mac`, `build:win`, `build:linux` for a specific one.
+- `npx tsx scripts/sandbox.ts <sandbox folder> [--open-session]` builds a sandbox for screenshots: settings with a provider that never reaches a real model, two goals (one with no time limit), past sessions, a free session, flashcards, a draft plan and an addition to review, all through the real services and the fake model. Then start the app on it as below.
 - `npm run seed [path]` loads the 36-node example graph into a database (default `~/Frontier/frontier.db`).
 - `npm run live:session [-- maxCards]` seeds the example graph into a temporary database and walks a few teaching cards with the real model and canned answers; prints every card and grade.
 - `npm run live:ingest -- path/to/lecture.pdf [db path]` ingests one real file with the real model and the local embedding model (downloads bge-small-en-v1.5, about 130 MB, on first use), then prints the delta sentence.
@@ -233,6 +244,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-07: The R5 UI pass (§7). Model errors are shown through one helper (`ui/lib/errors.ts`) as plain sentences, with the original as the notice's hover text. The session's error notice sits under the answer. A repeat click on the current place remounts it at its top level. The breadcrumb never wraps. Up to 14 of the most connected ideas keep their labels at any zoom on the Map, on a plate. A goal with no time limit says "No time limit" instead of "On your own · Open-ended". The sandbox for screenshots uses the API provider with no key, after it used the Claude login by mistake for a few calls.
 
 - 2026-11-07: Fixes from the R5 review. (1) An addition is never worked out while a new map is drawn or waits, and "Add to this goal" is hidden then; when both wait, the map goes first and the addition is drawn on it. (2) A planned session recalls and carries only from the goal's planned sessions, so a counted chosen session in between no longer hides a half-done idea (design §4.5 updated). (3) A session maker's new idea named like one on the map is planned as that idea, from the learner's depth, and appears once. (4) When a model call fails after an answer was judged and written (the next card, or the next idea's first card), the session is saved with the card owed: the screen says the answer was saved and shows Try again, which only writes the card; nothing is graded twice. Finished ideas reach the card writer only after the state is saved. (5) A failed session start is shown once on the Session screen, then forgotten, so the sidebar stops offering it. (6) A new map keeps "You added this" (and its weight) on capabilities over the ideas the learner asked for. (7) Free study on a goal's ideas counts as time studied for the learner's speed (still no goal's time). Cards: a card a session credited first never uses up the day's new cards; card settings are read again when automatic cards land; saving an edit keeps the All cards search; review keys do nothing while a sheet is open; a long selection is cut to fit instead of refused.
 
