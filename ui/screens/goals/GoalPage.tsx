@@ -13,6 +13,7 @@ import { Markdown } from '../../components/Markdown';
 import { VerticalPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
 import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
+import { GoalCardsLine } from '../../components/CardsLine';
 import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, capitalize, dateLabel, formatDate, goalName, isExam, plural } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { ContextNote } from './ContextField';
@@ -34,6 +35,7 @@ export function GoalPage({
   onLearn,
   onChanged,
   onNewGoal,
+  onReviewCards,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -46,6 +48,7 @@ export function GoalPage({
   onChanged: () => void;
   /** Start the new-goal flow with this sentence (an addition that reads like a goal of its own). */
   onNewGoal: (text: string) => void;
+  onReviewCards: () => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -248,6 +251,8 @@ export function GoalPage({
           )}
         </div>
       )}
+
+      <GoalCardsLine goalId={goal.id} onReview={onReviewCards} />
 
       {compiled && (
         <Section title="Check where you stand" meta={probe ? 'Answers are kept until you submit' : undefined}>

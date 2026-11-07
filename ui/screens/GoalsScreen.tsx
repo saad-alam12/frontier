@@ -18,11 +18,14 @@ export function GoalsScreen({
   onNavigate,
   onGoDeeper,
   onChoose,
+  onReviewCards,
   initial,
 }: {
   onNavigate: (s: ScreenName) => void;
   onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
   onChoose: (init: ChooseInit) => void;
+  /** Review one goal's flashcards on the Cards screen. */
+  onReviewCards: (goalId: string) => void;
   initial?: GoalsView;
 }) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
@@ -88,6 +91,7 @@ export function GoalsScreen({
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}
           onNewGoal={(text) => setView({ name: 'new', text })}
           onLearn={(nodeIds) => onChoose({ goalId: detail.goal.id, pick: nodeIds })}
+          onReviewCards={() => onReviewCards(detail.goal.id)}
         />
       );
     }

@@ -1,0 +1,641 @@
+/*
+ * Flashcards: the Cards screen, the flashcard sheet, the selection bar, card lines and the switch.
+ * This file loads before styles.css, so a rule that overrides a shared one carries one more class.
+ */
+
+/* ---------- Switch (on and off settings) ---------- */
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ring);
+  transition: background 150ms ease-out;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 180ms ease-out;
+}
+.switch[aria-checked='true'] {
+  background: var(--accent);
+}
+.switch[aria-checked='true']::after {
+  transform: translateX(16px);
+}
+.switch:disabled {
+  opacity: 0.45;
+}
+.switch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+}
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.card-max {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.card-max .input {
+  width: 76px;
+  min-height: 36px;
+  text-align: center;
+}
+
+/* ---------- Sidebar count ---------- */
+
+.nav-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.nav-item[aria-current='page'] .nav-count {
+  color: var(--text-secondary);
+}
+
+/* ---------- A quiet line: cards to review (Today, a goal page) ---------- */
+
+.cards-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 10px 8px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.cards-line svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.cards-line strong {
+  font-weight: 500;
+  color: var(--text);
+}
+.cards-line .btn {
+  margin-left: auto;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+/* ---------- Selection bar (a session message) ---------- */
+
+.selection-bar {
+  position: fixed;
+  z-index: 40;
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  transform: translate(-50%, calc(-100% - 8px));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  animation: selection-in 120ms ease-out;
+}
+.selection-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.selection-bar button + button {
+  box-shadow: inset 1px 0 0 rgba(20, 19, 17, 0.16);
+}
+.selection-bar button:first-child {
+  padding-left: 14px;
+  border-radius: 999px 0 0 999px;
+}
+.selection-bar button:last-child {
+  padding-right: 14px;
+  border-radius: 0 999px 999px 0;
+}
+.selection-bar button:only-child {
+  border-radius: 999px;
+}
+.selection-bar button:hover {
+  background: rgba(20, 19, 17, 0.07);
+}
+@keyframes selection-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- The flashcard sheet ---------- */
+
+.card-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 18px;
+  color: var(--text);
+}
+.card-sheet:focus {
+  outline: none;
+}
+.card-sheet .sheet-lead {
+  margin: -8px 0 0;
+  color: var(--text-secondary);
+}
+.card-face {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card-face-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.card-face-box {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 60px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text);
+  text-align: left;
+  cursor: text;
+  transition: box-shadow 150ms ease-out;
+}
+.card-face-box:hover {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+.card-face-box.is-front {
+  font-size: 18px;
+  line-height: 1.45;
+}
+.card-face-box.is-back {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+.card-face-box .placeholder {
+  color: var(--text-muted);
+}
+textarea.card-face-box {
+  display: block;
+  resize: none;
+  font-family: var(--font-sans);
+  outline: none;
+  field-sizing: content;
+  max-height: 260px;
+}
+textarea.card-face-box:focus {
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-halo);
+}
+.sheet-actions .link-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.card-face-box.is-loading {
+  cursor: default;
+}
+.card-face-preview {
+  padding: 0 4px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.shimmer-line {
+  display: block;
+  height: 12px;
+  margin: 6px 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-selected), var(--chip-selected), var(--surface-selected));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.sheet-actions .is-start {
+  margin-right: auto;
+  align-self: center;
+}
+
+/* Idea tags on a card, with a search to add one. */
+.idea-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.idea-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-selected);
+  color: var(--text-button);
+  font-size: 13px;
+}
+.idea-tag > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.idea-tag button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+}
+.idea-tag button:hover {
+  color: var(--text);
+}
+/* The matches show in the sheet's flow: a modal sheet scrolls, so a floating list would be cut off. */
+.idea-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  min-width: 220px;
+}
+.idea-search .input {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.idea-suggest {
+  max-height: 176px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.idea-suggest button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+.idea-suggest button:hover,
+.idea-suggest button.is-active {
+  background: var(--hover);
+}
+.idea-suggest .empty {
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- Review ---------- */
+
+.cards-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.cards-toolbar .push {
+  margin-left: auto;
+}
+.cards-toolbar .btn {
+  min-height: 36px;
+  font-size: 13px;
+}
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 260px;
+  box-sizing: border-box;
+  padding: 32px 36px 30px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  animation: card-in 200ms ease-out;
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.review-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.review-meta .ideas {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-back {
+  padding-top: 22px;
+  border-top: 1px solid var(--border-strong);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-soft);
+  animation: fade-in 180ms ease-out;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+}
+.rating-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.rating-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ring);
+  color: var(--text);
+  text-align: left;
+  transition: background 150ms ease-out, box-shadow 150ms ease-out, transform 120ms ease-out;
+}
+.rating-button:not(:disabled):hover {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--node-muted);
+}
+.rating-button:not(:disabled):active {
+  transform: scale(0.97);
+}
+.rating-button:disabled {
+  opacity: 0.45;
+}
+.rating-button .label {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 15px;
+  font-weight: 500;
+}
+.rating-button .when {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+kbd.key {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-selected);
+  box-shadow: inset 0 -1px 0 var(--ring);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+.review-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.review-done {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 36px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  animation: card-in 240ms ease-out;
+}
+.done-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.review-done p {
+  margin: 0;
+}
+
+/* ---------- All cards ---------- */
+
+.card-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.card-filters .input {
+  flex: 1 1 240px;
+  min-height: 40px;
+}
+/* styles.css loads after this file, so the list's own rules need the extra class to win */
+.list-card.card-list > li {
+  padding: 0;
+}
+.card-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 18px;
+  width: 100%;
+  padding: 14px 20px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.card-list > li {
+  transition: background 150ms ease-out;
+}
+.card-list > li:hover {
+  background: var(--hover);
+}
+.card-list > li:first-child {
+  border-radius: 18px 18px 0 0;
+}
+.card-list > li:last-child {
+  border-radius: 0 0 18px 18px;
+}
+.card-list > li:only-child {
+  border-radius: 18px;
+}
+.card-row .front {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.card-row .status {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.card-row .status.is-due {
+  color: var(--accent-text);
+}
+.card-row .meta {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.card-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 20px 18px;
+}
+.card-row-body .back {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+.card-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+/* ---------- An idea's flashcards (the map's idea card) ---------- */
+
+.idea-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.idea-cards ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.idea-cards li + li {
+  border-top: 1px solid var(--border-strong);
+}
+.idea-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: left;
+}
+.idea-card-row:hover {
+  color: var(--accent-text);
+}
+.idea-card-row .when {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.idea-card-back {
+  padding: 0 14px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-card,
+  .review-done,
+  .review-back,
+  .selection-bar,
+  .shimmer-line {
+    animation: none;
+  }
+  .switch::after {
+    transition: none;
+  }
+}

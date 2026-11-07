@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { StatsFilter, StatsRange, StatsView } from '../../backend/api/contract';
+import type { CardStats, StatsFilter, StatsRange, StatsView } from '../../backend/api/contract';
 import { formatHours } from '../../backend/core/budget';
 import { call } from '../api';
 import { Screen } from '../components/Shell';
-import { Meter } from '../components/controls';
+import { DefGrid, Meter } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar } from '../components/budget';
 import { Calendar, Calibration, FREE_STUDY, HourBars, Lines, WeeklyBars, seriesColor, shortDate } from '../components/charts';
@@ -24,10 +24,12 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 export function StatsScreen() {
   const [filter, setFilter] = useState<StatsFilter>({ goalId: null, topicId: null, range: '30d' });
   const [view, setView] = useState<StatsView | null>(null);
+  const [cards, setCards] = useState<CardStats | null>(null);
 
   useEffect(() => {
     let live = true;
     void call('stats.view', filter).then((v) => live && setView(v));
+    void call('cards.stats', { goalId: filter.goalId, range: filter.range }).then((c) => live && setCards(c));
     return () => {
       live = false;
     };
@@ -136,6 +138,19 @@ export function StatsScreen() {
                 <Lines points={view.retention.curve.map((c) => ({ x: String(c.day), values: [c.recall] }))} series={[{ label: 'Recall', color: '#7489e6' }]} yFormat={pct} xLabel={(d) => (d === '0' ? 'Today' : `In ${d} days`)} yMax={1} area height={160} />
               )}
             </Card>
+
+            {cards && cards.total > 0 && !filter.topicId && (
+              <Card title="Flashcards" note="Reviews on the Cards screen, and the facts your answers in sessions and practice recalled on their own.">
+                <DefGrid
+                  rows={[
+                    { label: 'Reviews', value: cards.reviews ? `${cards.reviews}${cards.remembered !== null ? `, ${pct(cards.remembered)} remembered` : ''}` : 'None in this range' },
+                    { label: 'Time', value: formatHours(cards.minutes) },
+                    { label: 'Recalled in use', value: `${cards.recalledInUse} in sessions and practice` },
+                    { label: 'Cards', value: `${cards.total}, ${cards.toReview} to review now` },
+                  ]}
+                />
+              </Card>
+            )}
 
             <Card title="How sure, how right" note="Your average score at each confidence. The tick marks what the confidence claims; a bar short of it means overconfidence.">
               <Calibration rows={view.calibration} />

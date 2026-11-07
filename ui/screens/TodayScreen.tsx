@@ -6,6 +6,7 @@ import { BrandMark, Screen } from '../components/Shell';
 import { Button, Meter, MetaLine, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar, paceSentence } from '../components/budget';
+import { TodayCards } from '../components/CardsLine';
 import { formatHours } from '../../backend/core/budget';
 import { ASSESSMENT_LABEL } from './goals/labels';
 import type { GoalsView } from './GoalsScreen';
@@ -19,12 +20,14 @@ export function TodayScreen({
   onOpenGoals,
   onOpenPractice,
   onChoose,
+  onOpenCards,
 }: {
   onNavigate: (s: ScreenName) => void;
   onOpenGoals: (view: GoalsView) => void;
   onOpenPractice: (setId: string) => void;
   /** "Choose what to learn", beside the planned start. */
   onChoose: () => void;
+  onOpenCards: () => void;
 }) {
   const [showAllFading, setShowAllFading] = useState(false);
   const [today, setToday] = useState<TodayView | null>(null);
@@ -115,6 +118,7 @@ export function TodayScreen({
       {error && <Notice error>{error}</Notice>}
 
       <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} onChoose={onChoose} />
+      <TodayCards main={!today.session && !today.practice && !lead} onReview={onOpenCards} />
       {today.drafts.map((d) => (
         <div key={d.goalId} className="next-card is-quiet">
           <div className="mode">

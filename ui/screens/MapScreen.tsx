@@ -8,6 +8,7 @@ import { MapCanvas } from '../components/MapCanvas';
 import { MapViewPanel } from '../components/MapViewPanel';
 import { NodeCardView } from '../components/NodeCard';
 import type { ChooseInit } from '../components/ChooseSheet';
+import { IdeaFlashcards } from '../components/IdeaFlashcards';
 import { seriesColor } from '../components/charts';
 import { DEFAULT_SETTINGS, buildGraph, growthOrder, mergeSettings, plain, visibleIdeas } from '../lib/mapGraph';
 import type { MapSettings } from '../lib/mapGraph';
@@ -32,18 +33,21 @@ export function MapScreen({
   onOpenTrail,
   onGoDeeper,
   onChoose,
+  initialId = null,
 }: {
   onOpenTrail: (sessionId: string) => void;
   onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
   /** "Learn this now" on an idea's card: the sheet opens with it picked (and its goal, when it has one). */
   onChoose: (init: ChooseInit) => void;
+  /** An idea to open on arrival ("Show on map"). */
+  initialId?: string | null;
 }) {
   const [map, setMap] = useState<MapView | null>(null);
   const [settings, setSettings] = useState<MapSettings>(loadSettings);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialId);
   const [card, setCard] = useState<NodeCard | null>(null);
   const [query, setQuery] = useState('');
-  const [focus, setFocus] = useState<{ id: string; seq: number } | null>(null);
+  const [focus, setFocus] = useState<{ id: string; seq: number } | null>(initialId ? { id: initialId, seq: 1 } : null);
   const [hops, setHops] = useState(0);
   const [panel, setPanel] = useState(false);
   const [full, setFull] = useState(false);
@@ -84,7 +88,7 @@ export function MapScreen({
   const graphRef = useRef<{ key: string; graph: ReturnType<typeof buildGraph> } | null>(null);
   if (map && graphRef.current?.key !== structure) graphRef.current = { key: structure, graph: buildGraph(map, visible) };
   const graph = map ? (graphRef.current?.graph ?? null) : null;
-  const filterKey = `${JSON.stringify(settings.show)}|${goalId}|${settings.simplifiedOnly}|${settings.hideLoose}|${localId}|${hops}`;
+  const filterKey = `${JSON.stringify(settings.show)}|${goalId}|${settings.simplifiedOnly}|${settings.cardsOnly}|${settings.hideLoose}|${localId}|${hops}`;
   const [fitKey, setFitKey] = useState(0);
   useEffect(() => setFitKey((k) => k + 1), [filterKey]);
 
@@ -111,7 +115,9 @@ export function MapScreen({
     document.addEventListener('fullscreenchange', onChange);
     const onKey = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      // keys inside a sheet (a flashcard being written) are the sheet's
+      const inSheet = e.target instanceof Element && e.target.closest('dialog') !== null;
+      if (typing || inSheet || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'f' || e.key === 'F') toggleFull();
       if (e.key === 'Escape' && !document.fullscreenElement) setSelected(null);
     };
@@ -236,6 +242,7 @@ export function MapScreen({
               onChoose({ pick: [id], goalId: goals.length === 1 ? goals[0] : null });
             }}
             compact
+            extra={<IdeaFlashcards key={card.id} idea={{ id: card.id, name: card.name }} />}
           />
         </aside>
       )}

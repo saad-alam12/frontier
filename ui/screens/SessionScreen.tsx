@@ -9,6 +9,8 @@ import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
 import { ResponseExtras, clearAnswerExtras, useAnswerExtras, withExtras } from '../components/AnswerExtras';
 import { QuoteReply } from '../components/QuoteReply';
+import { CardSheet } from '../components/CardSheet';
+import type { CardSheetStart } from '../components/CardSheet';
 import { FrontierPanel } from '../components/FrontierPanel';
 import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
@@ -40,6 +42,9 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   /** Set after Esc stopped an answer, so the field comes back focused for editing. */
   const [stopped, setStopped] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** The flashcard sheet, from a selection or the Make a flashcard button. */
+  const [cardSheet, setCardSheet] = useState<CardSheetStart | null>(null);
+  const [cardSaved, setCardSaved] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const currentRef = useRef<HTMLDivElement>(null);
 
@@ -100,7 +105,13 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   const stop = () => {
     if (snap && stoppable) void call('session.cancel', { sessionId: snap.id });
   };
-  useEscape(stoppable, stop);
+  // with the flashcard sheet open, Esc closes the sheet and leaves the answer being judged alone
+  useEscape(stoppable && cardSheet === null, stop);
+  useEffect(() => {
+    if (!cardSaved) return;
+    const t = window.setTimeout(() => setCardSaved(false), 2400);
+    return () => window.clearTimeout(t);
+  }, [cardSaved]);
   const pause = () =>
     run('pause', async () => {
       if (!snap) return;
@@ -194,7 +205,12 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   return (
     <Screen aside={panel} asideLabel={current ? 'Your frontier' : "Today's plan"} asideGap={current ? 22 : 28} mainRef={mainRef}>
       <div className="flex flex-col gap-[26px]">
-        <Breadcrumb items={crumbs} />
+        <div className="section-head">
+          <Breadcrumb items={crumbs} />
+          <button type="button" className="link-button shrink-0" onClick={() => setCardSheet({ mode: 'request' })} aria-live="polite">
+            {cardSaved ? 'Flashcard saved' : 'Make a flashcard'}
+          </button>
+        </div>
         {snap.phase === 'teach' && current && current.stageCount > 1 && (
           <StepPath
             steps={current.stages.map((stage, i) => ({
@@ -209,7 +225,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
       {notice && <Notice error>{notice}</Notice>}
 
-      <QuoteReply containerRef={mainRef} />
+      <QuoteReply containerRef={mainRef} onMakeCard={(selection) => setCardSheet({ mode: 'selection', selection })} />
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
@@ -243,6 +259,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
         <p>Everything you learned so far is kept. Your next session starts where you stopped, at the same step of this idea.</p>
         <p>To come back to this very session instead, choose Pause.</p>
       </ConfirmDialog>
+      {cardSheet && <CardSheet start={cardSheet} ideas={sessionIdeas(snap)} goalId={snap.goalId} sessionId={snap.id} onClose={() => setCardSheet(null)} onSaved={() => setCardSaved(true)} />}
     </Screen>
   );
 }
@@ -269,6 +286,15 @@ function Planning({ goalTitle }: { goalTitle: string | null }) {
       </div>
     </Screen>
   );
+}
+
+/** A card made in a session is about the idea being taught, or else the one last worked on. */
+function sessionIdeas(snap: SessionSnapshot): { id: string; name: string }[] {
+  if (snap.current) return [{ id: snap.current.nodeId, name: snap.current.name }];
+  const last = [...snap.history.nodes].reverse().find((n) => n.items.length > 0);
+  if (last) return [{ id: last.nodeId, name: last.name }];
+  const first = snap.plan.steps[0];
+  return first ? [{ id: first.nodeId, name: first.name }] : [];
 }
 
 function historyLength(snap: SessionSnapshot): number {

@@ -6,6 +6,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { cardsOnlyOn, deleteUntaggedCards } from '../store/cards';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { deleteEmbeddings } from '../store/embeddings';
@@ -37,6 +38,8 @@ export interface ErasePreview {
   learned: number;
   /** Sources removed from the Library. */
   sources: number;
+  /** Flashcards left with no idea, which go too. */
+  cards: number;
 }
 
 export interface EraseResult extends ErasePreview {
@@ -57,6 +60,7 @@ interface ErasePlan {
   sourceIds: string[];
   chainIds: string[];
   learned: number;
+  cards: number;
 }
 
 function planErase(db: Database, request: EraseRequest): ErasePlan {
@@ -82,10 +86,10 @@ function planErase(db: Database, request: EraseRequest): ErasePlan {
     .map((c) => c.id);
   const withEvidence = nodesWithEvidence(db);
   const learned = [...nodeIds].filter((id) => withEvidence.has(id)).length;
-  return { nodeIds, sourceIds, chainIds, learned };
+  return { nodeIds, sourceIds, chainIds, learned, cards: cardsOnlyOn(db, nodeIds).length };
 }
 
-const countsOf = (plan: ErasePlan): ErasePreview => ({ ideas: plan.nodeIds.size, links: plan.chainIds.length, learned: plan.learned, sources: plan.sourceIds.length });
+const countsOf = (plan: ErasePlan): ErasePreview => ({ ideas: plan.nodeIds.size, links: plan.chainIds.length, learned: plan.learned, sources: plan.sourceIds.length, cards: plan.cards });
 
 /** What `eraseFromMap` would remove, changing nothing. */
 export function previewErase(db: Database, request: EraseRequest): ErasePreview {
@@ -95,7 +99,8 @@ export function previewErase(db: Database, request: EraseRequest): ErasePreview 
 /**
  * Erase for good. Ideas go with every chain touching them, their evidence and states (the one
  * exception to append-only evidence, because the learner asked), embeddings and goal targets; worked
- * examples, coverage and misconceptions on them go by cascade. Sources go from the Library with their
+ * examples, coverage and misconceptions on them go by cascade, and so do their flashcard tags; a
+ * flashcard left with no idea goes too. Sources go from the Library with their
  * stored files. Past sessions and practice stay, so trails still replay (by the names they recorded);
  * open practice and probe sets that ask about an erased idea are closed. Goals keep their other targets
  * and are re-planned; a goal left with no capabilities, and every goal when the whole map goes, is reset
@@ -123,6 +128,7 @@ export function eraseFromMap(deps: EraseDeps, request: EraseRequest): EraseResul
     removeTargetsOf(db, ideas);
     for (const setId of openSetsWith(db, plan.nodeIds)) closePracticeSet(db, setId);
     retireNodes(db, ideas);
+    deleteUntaggedCards(db);
     removeMaterialsOf(db, plan.sourceIds);
     for (const id of plan.sourceIds) {
       dropSourceRefs(db, id);

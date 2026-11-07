@@ -50,6 +50,9 @@ export function MapViewPanel({ view, settings, onChange }: { view: MapView; sett
           <Toggle on={settings.simplifiedOnly} onClick={() => set({ simplifiedOnly: !settings.simplifiedOnly })}>
             Only simplified ideas
           </Toggle>
+          <Toggle on={settings.cardsOnly} onClick={() => set({ cardsOnly: !settings.cardsOnly })}>
+            Only ideas with flashcards
+          </Toggle>
           <Toggle on={settings.hideLoose} onClick={() => set({ hideLoose: !settings.hideLoose })}>
             Hide ideas with no links
           </Toggle>

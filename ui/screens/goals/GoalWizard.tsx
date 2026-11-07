@@ -14,6 +14,7 @@ import { MaterialPicker } from './MaterialPicker';
 import type { Material } from './MaterialPicker';
 import { Question } from './GoalForm';
 import { ContextField } from './ContextField';
+import { GoalCardSettingsField, saveCardSettings, useGoalCardSettings } from '../../components/CardSettings';
 
 type Step = 'goal' | 'material' | 'time' | 'plan';
 const STEPS: { key: Step; label: string }[] = [
@@ -269,6 +270,12 @@ function PlanStep({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
+  const [cards, setCards] = useGoalCardSettings(goalId);
+  /** The draft exists, so its flashcard choice is kept at once, like everything else on this step. */
+  const changeCards = (value: typeof cards) => {
+    setCards(value);
+    if (value.max >= 1) void saveCardSettings(goalId, value);
+  };
 
   const refresh = useCallback(async () => setDetail(await call('goals.get', { goalId })), [goalId]);
   useEffect(() => {
@@ -393,6 +400,7 @@ function PlanStep({
           </div>
         )
       )}
+      <GoalCardSettingsField value={cards} onChange={changeCards} />
       {error && <Notice error>{error}</Notice>}
       <div className="wizard-nav">
         <Button kind="quiet" onClick={onBack}>

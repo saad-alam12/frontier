@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react';
+import { GalleryVerticalEnd } from 'lucide-react';
 import { clearAnswerExtras, setQuote, useAnswerExtras } from './AnswerExtras';
+import './Cards.css';
 
 interface Pill {
   text: string;
+  /** The whole message the selection is in, for a flashcard drafted from it. */
+  message: string;
   top: number;
   left: number;
 }
 
 /**
  * Select text inside a message of the conversation (a card, an explanation, feedback, an earlier
- * answer) and a "Reply" pill appears just above it; clicking it puts the selection above the answer
- * box as a quote. It only appears while an answer box that takes quotes is open.
+ * answer) and a small bar appears just above it: Reply puts the selection above the answer box as a
+ * quote (only while an answer box that takes quotes is open), and Make a flashcard (always) drafts a
+ * card from it.
  */
-export function QuoteReply({ containerRef }: { containerRef: React.RefObject<HTMLElement | null> }) {
+export function QuoteReply({ containerRef, onMakeCard }: { containerRef: React.RefObject<HTMLElement | null>; onMakeCard?: (selection: { text: string; message: string }) => void }) {
   const { targets } = useAnswerExtras();
   const [pill, setPill] = useState<Pill | null>(null);
 
@@ -30,23 +35,39 @@ export function QuoteReply({ containerRef }: { containerRef: React.RefObject<HTM
   // leaving the session screen drops unsent images and quotes, so another session never inherits them
   useEffect(() => clearAnswerExtras, []);
 
-  if (!pill || targets === 0) return null;
+  if (!pill || (targets === 0 && !onMakeCard)) return null;
+  const done = () => {
+    document.getSelection()?.removeAllRanges();
+    setPill(null);
+  };
   return (
-    <button
-      type="button"
-      className="reply-pill"
-      style={{ top: pill.top, left: pill.left }}
-      // keep the selection alive until the click lands
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => {
-        setQuote(pill.text);
-        document.getSelection()?.removeAllRanges();
-        setPill(null);
-      }}
-    >
-      <QuoteIcon />
-      Reply
-    </button>
+    // keep the selection alive until the click lands
+    <div className="selection-bar" role="toolbar" aria-label="Selected text" style={{ top: pill.top, left: pill.left }} onMouseDown={(e) => e.preventDefault()}>
+      {targets > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setQuote(pill.text);
+            done();
+          }}
+        >
+          <QuoteIcon />
+          Reply
+        </button>
+      )}
+      {onMakeCard && (
+        <button
+          type="button"
+          onClick={() => {
+            onMakeCard({ text: pill.text, message: pill.message });
+            done();
+          }}
+        >
+          <GalleryVerticalEnd size={14} strokeWidth={1.75} aria-hidden="true" />
+          Make a flashcard
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -57,14 +78,16 @@ function pillFor(container: HTMLElement | null): Pill | null {
   const node = range.commonAncestorContainer;
   const element = node instanceof Element ? node : node.parentElement;
   if (!element || !container.contains(element)) return null;
-  // the answer being written is not a message, and neither are controls
-  if (element.closest('.answer-surface, textarea, input, button')) return null;
+  // the answer being written is not a message, and neither are controls or an open sheet
+  if (element.closest('.answer-surface, textarea, input, button, dialog')) return null;
   const message = element.closest('article, section');
   if (!message || !container.contains(message)) return null;
   const text = selectedText(range) || selection.toString().trim();
   if (!text) return null;
+  const whole = document.createRange();
+  whole.selectNodeContents(message);
   const rect = range.getBoundingClientRect();
-  return { text, top: rect.top, left: rect.left + rect.width / 2 };
+  return { text, message: selectedText(whole), top: rect.top, left: rect.left + rect.width / 2 };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
 import { VerticalPath } from './paths';
@@ -18,6 +19,7 @@ export function NodeCardView({
   onGoDeeper,
   onLearn,
   compact,
+  extra,
 }: {
   card: NodeCard;
   onSelect: (nodeId: string) => void;
@@ -27,6 +29,8 @@ export function NodeCardView({
   /** "Learn this now": choose a session on this idea. */
   onLearn?: (nodeId: string) => void;
   compact?: boolean;
+  /** More about the idea from the screen showing it (the Map adds its flashcards), above the sources. */
+  extra?: ReactNode;
 }) {
   const link = (r: IdeaRef, sep?: string) => (
     <button key={r.id} type="button" className="link-button idea-link" data-sep={sep} onClick={() => onSelect(r.id)}>
@@ -122,6 +126,8 @@ export function NodeCardView({
           ))}
         </div>
       )}
+
+      {extra}
 
       {(card.sources.length > 0 || card.firstSession) && (
         <div className="flex flex-col gap-[6px]">

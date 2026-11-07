@@ -15,12 +15,13 @@ const node = (id: string, patch: Partial<MapNodeView> = {}): MapNodeView => ({
   simplified: false,
   topic: null,
   learnedAt: null,
+  cards: 0,
   ...patch,
 });
 
 // a, b → c (two premises: a junction); c → d; e is loose
 const view: Pick<MapView, 'nodes' | 'chains'> = {
-  nodes: [node('a', { state: 'owned', depth: 2 }), node('b', { state: 'fringe' }), node('c', { goals: ['g1'], simplified: true }), node('d'), node('e', { state: 'fringe' })],
+  nodes: [node('a', { state: 'owned', depth: 2 }), node('b', { state: 'fringe' }), node('c', { goals: ['g1'], simplified: true }), node('d', { cards: 2 }), node('e', { state: 'fringe' })],
   chains: [
     { id: 'k1', premises: ['a', 'b'], conclusion: 'c' },
     { id: 'k2', premises: ['c'], conclusion: 'd' },
@@ -36,6 +37,7 @@ describe('map graph', () => {
     expect([...visibleIdeas(view, { ...DEFAULT_SETTINGS, goalId: 'g1' }, null)].sort()).toEqual(['a', 'b', 'c']);
     expect([...visibleIdeas(view, { ...DEFAULT_SETTINGS, simplifiedOnly: true }, null)]).toEqual(['c']);
     expect(visibleIdeas(view, { ...DEFAULT_SETTINGS, hideLoose: true }, null).has('e')).toBe(false);
+    expect([...visibleIdeas(view, { ...DEFAULT_SETTINGS, cardsOnly: true }, null)]).toEqual(['d']);
     // the local graph ignores the state filter: one step from c
     expect([...visibleIdeas(view, { ...DEFAULT_SETTINGS, show: { owned: false, fringe: false, beyond: true } }, { id: 'c', hops: 1 })].sort()).toEqual(['a', 'b', 'c', 'd']);
   });

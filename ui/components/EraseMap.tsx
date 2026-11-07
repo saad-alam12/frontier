@@ -176,6 +176,7 @@ export function EraseMap() {
               {preview.links > 0 ? ` and ${count(preview.links, 'link')} between them` : ''}.{' '}
               {preview.learned > 0 ? `What you learned about ${preview.learned === preview.ideas ? (preview.ideas === 1 ? 'it' : 'them') : `${preview.learned} of them`} goes too.` : 'You have not studied any of them yet.'}
               {preview.sources > 0 && ` It also removes ${count(preview.sources, 'source')} from your Library, with the copies of their files.`}
+              {preview.cards > 0 && ` ${preview.cards === 1 ? 'One flashcard is' : `${preview.cards} flashcards are`} only about these ideas and ${preview.cards === 1 ? 'goes' : 'go'} with them.`}
             </p>
             <p className="m-0 mt-[10px]">This cannot be undone.</p>
           </>

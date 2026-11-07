@@ -19,8 +19,8 @@ import { coveredNodeIds, getSource } from '../store/sources';
 import { listChains, listNodes } from '../store/world';
 
 const DAY_MS = 86_400_000;
-/** Surfaces whose time counts as studying (browsing the map or library does not). */
-const STUDY = new Set(['session', 'practice', 'probe']);
+/** Surfaces whose time counts as studying (browsing the map or library does not); flashcard reviews count for the card's goal. */
+const STUDY = new Set(['session', 'practice', 'probe', 'cards']);
 
 /** Teaching resources a per-resource budget counts. */
 export function teachingResources(db: Database, goalId: string): string[] {

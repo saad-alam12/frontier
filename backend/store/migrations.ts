@@ -365,6 +365,49 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE capabilities ADD COLUMN request TEXT;
     `,
   },
+  {
+    version: 13,
+    sql: `
+      -- R5: flashcards for hard facts. A card is tagged with one or more ideas (a card left with none is
+      -- deleted by the code that removes ideas); its schedule is derived from its append-only reviews.
+      CREATE TABLE cards (
+        id TEXT PRIMARY KEY,
+        front TEXT NOT NULL,
+        back TEXT NOT NULL,
+        goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+        origin TEXT NOT NULL CHECK (origin IN ('auto', 'selection', 'request', 'hand')),
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        suspended_at TEXT
+      );
+      CREATE INDEX cards_goal ON cards(goal_id);
+
+      CREATE TABLE card_ideas (
+        card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        PRIMARY KEY (card_id, node_id)
+      );
+      CREATE INDEX card_ideas_node ON card_ideas(node_id);
+
+      CREATE TABLE card_reviews (
+        id TEXT PRIMARY KEY,
+        card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        at TEXT NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 4),
+        source TEXT NOT NULL CHECK (source IN ('review', 'session', 'practice')),
+        session_id TEXT
+      );
+      CREATE INDEX card_reviews_card ON card_reviews(card_id, at);
+
+      -- Automatic cards per goal: on or off, and at most this many. A goal with no row uses the defaults (on, 40).
+      CREATE TABLE goal_card_settings (
+        goal_id TEXT PRIMARY KEY REFERENCES goals(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL,
+        max_cards INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {
