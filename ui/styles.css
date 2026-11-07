@@ -2390,6 +2390,79 @@ button.map-label:hover {
   background: var(--bg-panel);
   box-shadow: inset 0 0 0 1px var(--border);
 }
+/* The plan of a goal with no time limit: what it will take, in place of the time control. */
+.plan-estimate-number {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--accent-text);
+}
+
+/* Sizing a goal: a time, or a depth with no time limit (R5). */
+.time-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  container-type: inline-size;
+}
+.radio-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+/* three depths side by side get too narrow to read in a narrow column: one under the other instead */
+@container (max-width: 600px) {
+  .radio-cards.is-stacked {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+.radio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  text-align: left;
+  transition: background 150ms ease-out, box-shadow 150ms ease-out;
+}
+.radio-card:hover {
+  background: var(--surface-raised);
+}
+.radio-card[aria-checked='true'] {
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--text-secondary);
+}
+.radio-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.radio-card-line {
+  padding-left: 24px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.radio-dot {
+  flex: 0 0 14px;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--node-muted);
+  transition: background 150ms ease-out, box-shadow 150ms ease-out;
+}
+.radio-card[aria-checked='true'] .radio-dot {
+  border: 0;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-halo);
+}
 
 /* ---------- Goal page hero ---------- */
 

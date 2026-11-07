@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from '../../api';
-import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind, PlanPreview } from '../../../backend/api/contract';
+import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind, GoalLevel, PlanPreview } from '../../../backend/api/contract';
 import { Screen } from '../../components/Shell';
 import { Button, ChoiceChips, Field, Notice } from '../../components/controls';
 import { StepPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
-import { IdeaField, TimePicker, planSummary, trimSentence } from '../../components/budget';
+import { IdeaField, TimePicker, estimateLine, planSummary, trimSentence } from '../../components/budget';
+import { TimeChoice, WANTED_LEVEL_TITLE } from '../../components/TimeChoice';
 import { submitOnModEnter } from '../../components/AnswerSurface';
 import { ASSESSMENT_OPTIONS, FocusChips, KIND_OPTIONS, LEVEL_LABEL, dateLabel, isExam } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
@@ -42,6 +43,9 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
   const [context, setContext] = useState(d?.context ?? '');
   const [materials, setMaterials] = useState<Material[]>(draft?.materials.map((m) => ({ sourceId: m.sourceId, title: m.title, role: m.role })) ?? []);
   const [budget, setBudget] = useState<GoalBudget | null>(d?.budget ?? null);
+  /** Fitted to a time, or no time limit at a chosen depth; both values are kept while switching. */
+  const [limited, setLimited] = useState(d?.wantedLevel == null);
+  const [level, setLevel] = useState<GoalLevel>(d?.wantedLevel ?? 'working');
   const [goalId, setGoalId] = useState<string | null>(d?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +62,8 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
     assessment: assessment ?? 'none',
     targetGrade: isExam(assessment) && grade.trim() ? grade.trim() : null,
     date: dateName && date ? date : null,
-    budget: time,
+    budget: limited ? time : null,
+    wantedLevel: limited ? null : level,
     focus,
     background: background.trim() || null,
     context: context.trim() || null,
@@ -186,12 +191,19 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
             <div className="flex flex-col gap-[12px]">
               <h1 className="t-display">How much time do you give it?</h1>
               <p className="t-lead m-0">
-                Your time decides the map. With less, the few ideas that matter most, learned properly; with more, more ideas and deeper. Each idea takes about half an hour. You can change the time whenever things change.
+                {limited
+                  ? 'Your time decides the map. With less, the few ideas that matter most, learned properly; with more, more ideas and deeper. Each idea takes about half an hour.'
+                  : 'How deep you go decides the map: every idea that depth needs for your goal, and an estimate of the time it takes.'}{' '}
+                You can change this whenever things change.
               </p>
             </div>
-            <TimePicker
-              value={time}
-              onChange={setBudget}
+            <TimeChoice
+              limited={limited}
+              onLimited={setLimited}
+              budget={time}
+              onBudget={setBudget}
+              level={level}
+              onLevel={setLevel}
               resources={teaching}
               allowPerResource={kind === 'course' || teaching > 0}
               defaultWeeks={weeksUntil(dateName && date ? date : null)}
@@ -200,7 +212,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
           </section>
         )}
 
-        {step === 'plan' && goalId && <PlanStep goalId={goalId} budget={time} onBudget={setBudget} onBack={() => setStep('time')} onDone={onDone} />}
+        {step === 'plan' && goalId && <PlanStep goalId={goalId} budget={limited ? time : null} wantedLevel={limited ? null : level} onBudget={setBudget} onBack={() => setStep('time')} onDone={onDone} />}
       </div>
     </Screen>
   );
@@ -234,9 +246,24 @@ function WizardNav({ onBack, onNext, nextLabel = 'Continue', nextDisabled }: { o
 
 /**
  * The plan for the time: while the goal is mapped, a quiet placeholder; then how many sessions and
- * ideas it comes to, the ideas as a field of dots, and the time control, which re-plans live.
+ * ideas it comes to, the ideas as a field of dots, and the time control, which re-plans live. With no
+ * time limit (`budget` null) the estimate takes the time control's place.
  */
-function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string; budget: GoalBudget; onBudget: (b: GoalBudget) => void; onBack: () => void; onDone: (goalId: string) => void }) {
+function PlanStep({
+  goalId,
+  budget,
+  wantedLevel,
+  onBudget,
+  onBack,
+  onDone,
+}: {
+  goalId: string;
+  budget: GoalBudget | null;
+  wantedLevel: GoalLevel | null;
+  onBudget: (b: GoalBudget) => void;
+  onBack: () => void;
+  onDone: (goalId: string) => void;
+}) {
   const [detail, setDetail] = useState<GoalDetail | null>(null);
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -297,38 +324,75 @@ function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string
   }
 
   const plan = preview?.plan;
-  const summary = plan ? planSummary(plan) : null;
+  const summary = plan ? planSummary(plan, { noLimit: budget === null }) : null;
+  const redrawing = work.state === 'compiling' || detail.goal.remap?.state === 'requested';
   const teaching = detail.materials.filter((m) => m.role === 'teaching').length;
   const shared = preview?.ideas.filter((i) => i.sharedWith.length > 0) ?? [];
   const coverage = detail.goal.coverage;
+  // an empty list would still take a gap in the column
+  const notes = [
+    coverage && coverage !== 'complete' && detail.materials.length > 0
+      ? `Your material covers ${coverage === 'partial' ? 'part' : 'a piece'} of this goal. The rest of the map comes from what the goal needs, and your material grounds the parts it covers.`
+      : null,
+    shared.length > 0 ? `${shared.length} ${shared.length === 1 ? 'idea is' : 'ideas are'} shared with ${[...new Set(shared.flatMap((s) => s.sharedWith))].join(', ')}: learned once, counted once.` : null,
+    plan ? trimSentence(plan) : null,
+    preview?.roomForMore ? 'Your time holds more than this map. Map more ideas to use it, or keep the plan short.' : null,
+  ].filter((n): n is string => n !== null);
   return (
     <section className="wizard-step">
       <div className="flex flex-col gap-[10px]">
         <div className="t-caption text-muted">{detail.goal.title ?? detail.goal.text}</div>
-        <h1 className="t-display">{summary?.headline ?? 'Your plan'}</h1>
+        <h1 className="t-display">{summary ? (wantedLevel ? `${WANTED_LEVEL_TITLE[wantedLevel]} · ${summary.headline}` : summary.headline) : 'Your plan'}</h1>
         {summary && <p className="t-lead m-0">{summary.detail}.</p>}
       </div>
+      {work.state === 'failed' ? (
+        <div className="button-row">
+          <Notice error>{work.message}</Notice>
+          <Button onClick={() => void run('retry', async () => void (detail.goal.remap?.state === 'requested' ? await call('goals.remapRequest', { goalId }) : await call('goals.compile', { goalId })))}>Try again</Button>
+        </div>
+      ) : (
+        redrawing && (
+          <div className="work-notice" role="status">
+            <span className="dot is-current" aria-hidden="true" />
+            <span>{work.state === 'idle' ? 'Mapping your goal again for your changes' : work.message}. The plan below is the one from before.</span>
+          </div>
+        )
+      )}
       {detail.goal.scope && (
         <div className="scope-note">
           <div className="t-caption text-muted">{detail.goal.level ? LEVEL_LABEL[detail.goal.level] : 'What it means for your time'}</div>
           <p className="m-0">{detail.goal.scope}</p>
         </div>
       )}
-      {preview && <IdeaField ideas={preview.ideas} />}
-      <ul className="plan-notes">
-        {coverage && coverage !== 'complete' && detail.materials.length > 0 && <li>Your material covers {coverage === 'partial' ? 'part' : 'a piece'} of this goal. The rest of the map comes from what the goal needs, and your material grounds the parts it covers.</li>}
-        {shared.length > 0 && (
-          <li>
-            {shared.length} {shared.length === 1 ? 'idea is' : 'ideas are'} shared with {[...new Set(shared.flatMap((s) => s.sharedWith))].join(', ')}: learned once, counted once.
-          </li>
-        )}
-        {plan && trimSentence(plan) && <li>{trimSentence(plan)}</li>}
-        {preview?.roomForMore && <li>Your time holds more than this map. Map more ideas to use it, or keep the plan short.</li>}
-      </ul>
-      <div className="plan-time">
-        <h2 className="t-heading">Change the time and watch the plan change</h2>
-        <TimePicker value={budget} onChange={onBudget} resources={teaching} allowPerResource={detail.goal.kind === 'course' || teaching > 0} defaultWeeks={weeksUntil(detail.goal.date)} />
-      </div>
+      {preview && <IdeaField ideas={preview.ideas} noLimit={budget === null} />}
+      {notes.length > 0 && (
+        <ul className="plan-notes">
+          {notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
+      {budget ? (
+        <div className="plan-time">
+          <h2 className="t-heading">Change the time and watch the plan change</h2>
+          <TimePicker value={budget} onChange={onBudget} resources={teaching} allowPerResource={detail.goal.kind === 'course' || teaching > 0} defaultWeeks={weeksUntil(detail.goal.date)} />
+        </div>
+      ) : (
+        plan && (
+          <div className="plan-time">
+            <div className="section-head">
+              <div className="t-caption text-muted">No time limit · {wantedLevel ? WANTED_LEVEL_TITLE[wantedLevel] : ''}</div>
+              <button type="button" className="link-button" onClick={onBack}>
+                Change
+              </button>
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <span className="plan-estimate-number">{estimateLine(plan)}</span>
+              <span className="t-small text-secondary">What the plan takes at your pace. Adding to the goal adds to it.</span>
+            </div>
+          </div>
+        )
+      )}
       {error && <Notice error>{error}</Notice>}
       <div className="wizard-nav">
         <Button kind="quiet" onClick={onBack}>
@@ -351,10 +415,10 @@ function PlanStep({ goalId, budget, onBudget, onBack, onDone }: { goalId: string
           )}
           <Button
             kind="primary"
-            disabled={busy !== null || !plan}
+            disabled={busy !== null || !plan || redrawing}
             onClick={() =>
               void run('approve', async () => {
-                await call('goals.update', { goalId, form: { budget } });
+                await call('goals.update', { goalId, form: { budget, wantedLevel } });
                 await call('goals.approve', { goalId });
                 onDone(goalId);
               })

@@ -19,6 +19,10 @@ Say it in two fields:
 
 Write every new idea at the chosen level. At `intuition` a statement never needs a formula to make sense.
 
+## Goals with no time limit
+
+Some learners give a goal no time limit and choose how deep they want it instead: the big picture (`intuition`), working knowledge (`working`) or in full (`rigorous`). Then the level is theirs, and your job is to decide what it means for this goal. That depends on everything else they told you: "the big picture" of transformers for someone who wants to talk to their team about them is a handful of ideas in plain words; "in full" of linear algebra for an exam is definitions, theorems and their proofs, as the course has them. Read the level together with the goal's sentence, its context, focus, assessment and the learner's background, and map every idea that understanding needs: no fewer (a gap the learner would trip over) and no more (an idea that understanding does not use). Time plays no part: do not shrink or pad the map to any number of hours. Each idea is still whole and learnable in at most half an hour, and the map still has between 4 and 80 ideas. The scope says what the learner will be able to do at the end and what that level leaves out.
+
 ## Capabilities
 
 Write can-do statements, each testable by a task the learner could be given. "Can find all pure-strategy Nash equilibria of a 3×3 game and justify each" is testable; "understands equilibrium" is not. Order them from foundational to advanced. A first compile has 3 to 15; a goal of an hour or two (one article, one video) can have just one or two.

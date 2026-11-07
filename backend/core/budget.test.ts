@@ -175,6 +175,20 @@ describe('allocate', () => {
     const plan = allocate([goal('g', null)], targets, byId(nodes));
     expect([...plan.planned.values()].every((d) => d === 5)).toBe(true);
   });
+
+  it('estimates a goal with no time limit as the sum of its costs at the learner speed, beside a goal with a budget', () => {
+    const open = course('open', 10, 3);
+    const tight = course('tight', 30, 4);
+    const nodes = byId([...open.nodes, ...tight.nodes]);
+    for (const speed of [1, 1.6]) {
+      const plan = allocate([goal('open', null), goal('tight', 2)], [...open.targets, ...tight.targets], nodes, speed);
+      // no budget trims it, whatever the other goal does
+      expect(open.targets.every((t) => plan.planned.get(`${t.capabilityId}|${t.nodeId}`) === 3)).toBe(true);
+      const sum = open.nodes.reduce((s, n) => s + ideaMinutes(n.kind, 0, 3, speed), 0);
+      expect(plan.goals.get('open')?.plannedMinutes).toBe(Math.round(sum));
+      expect(plan.goals.get('open')?.ideas.cut).toBe(0);
+    }
+  });
 });
 
 describe('pace', () => {

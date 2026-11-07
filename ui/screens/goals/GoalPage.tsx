@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { call, isCancelled } from '../../api';
-import type { GoalBudget, GoalDetail, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
+import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
-import { BudgetBar, IdeaField, TimePicker, paceSentence, planSummary, trimSentence } from '../../components/budget';
+import { BudgetBar, IdeaField, estimateLine, paceSentence, planSummary, trimSentence } from '../../components/budget';
+import { TimeChoice } from '../../components/TimeChoice';
 import { useSurface } from '../../lib/activity';
 import { depthName } from '../../lib/stages';
 import { Breadcrumb, Screen } from '../../components/Shell';
@@ -180,7 +181,7 @@ export function GoalPage({
 
       <WorkNotice detail={detail} onRetry={() => void run('compile', async () => void (await call('goals.compile', { goalId: goal.id })))} />
       {error && <Notice error>{error}</Notice>}
-      {goal.remap?.state === 'ready' && <RemapPanel goalId={goal.id} onChanged={onChanged} />}
+      {goal.remap?.state === 'ready' && <RemapPanel goalId={goal.id} caption={goal.wantedLevel ? 'A new map for the depth you want' : 'A new map for your time'} onChanged={onChanged} />}
       {compiled && goal.status === 'active' && goal.level === null && goal.remap === null && detail.work.state === 'idle' && (
         <div className="button-row">
           <span className="t-small text-secondary">This goal was mapped before plans fitted the time.</span>
@@ -220,7 +221,7 @@ export function GoalPage({
                 <Button kind="primary" onClick={() => void run('session', onStartSession)} disabled={!compiled || busy !== null}>
                   {busy === 'session' ? 'Planning…' : "Start today's session"}
                 </Button>
-                <Button onClick={() => setEditingTime(true)}>{goal.budget ? 'Change the time' : 'Set the time'}</Button>
+                <Button onClick={() => setEditingTime(true)}>{goal.budget || goal.wantedLevel ? 'Change the time' : 'Set the time'}</Button>
               </div>
             </>
           )}
@@ -336,7 +337,10 @@ export function GoalPage({
 
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
 
-/** Ideas ready against the plan, time against the budget, and this week against the rhythm. */
+/**
+ * Ideas ready against the plan, time against the budget, and this week against the rhythm. With no
+ * time limit: the time studied and the estimate of what is left.
+ */
 function ProgressFigures({ progress }: { progress: GoalProgress }) {
   const { plan } = progress;
   const inPlan = plan.ideas.total - plan.ideas.cut;
@@ -356,6 +360,15 @@ function ProgressFigures({ progress }: { progress: GoalProgress }) {
         </span>
         <span className="figure-label">{progress.budget ? 'of your time' : 'studied'}</span>
       </div>
+      {progress.noLimit && (
+        <div className="figure">
+          <span className="figure-number">
+            <span className="figure-of">about </span>
+            {formatHours(plan.plannedMinutes)}
+          </span>
+          <span className="figure-label">left, estimated</span>
+        </div>
+      )}
       {progress.weeklyTarget !== null && (
         <div className="figure">
           <span className="figure-number">
@@ -376,6 +389,7 @@ function ProgressFigures({ progress }: { progress: GoalProgress }) {
 function PaceNotes({ progress }: { progress: GoalProgress }) {
   const pace = paceSentence(progress);
   const trim = trimSentence(progress.plan);
+  if (progress.noLimit) return null;
   if (!progress.budget) return <p className="t-small m-0 text-secondary">Give the goal a time and the plan is sized to it: the most useful ideas first.</p>;
   if (!pace && !trim) return null;
   return (
@@ -386,35 +400,62 @@ function PaceNotes({ progress }: { progress: GoalProgress }) {
   );
 }
 
-/** Change the time with the plan re-computed live, then save. */
+/**
+ * Change the time, or switch between a time and no time limit, with the plan re-computed live, then
+ * save. A new amount of time re-plans the same map; a new depth or a switch asks for a new map.
+ */
 function TimeEditor({ detail, onClose, onSaved }: { detail: GoalDetail; onClose: () => void; onSaved: () => void }) {
   const { goal } = detail;
   const [budget, setBudget] = useState<GoalBudget>(goal.budget ?? defaultBudget(goal.kind, goal.date));
+  const [limited, setLimited] = useState(goal.wantedLevel === null);
+  const [level, setLevel] = useState<GoalLevel>(goal.wantedLevel ?? goal.level ?? 'working');
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [saving, setSaving] = useState(false);
   const teaching = detail.materials.filter((m) => m.role === 'teaching').length;
+  const planned = limited ? budget : null;
   useEffect(() => {
     let live = true;
-    const t = window.setTimeout(() => void call('goals.preview', { goalId: goal.id, budget }).then((p) => live && setPreview(p)), 120);
+    const t = window.setTimeout(() => void call('goals.preview', { goalId: goal.id, budget: planned }).then((p) => live && setPreview(p)), 120);
     return () => {
       live = false;
       window.clearTimeout(t);
     };
-  }, [goal.id, budget]);
-  const summary = preview ? planSummary(preview.plan) : null;
+  }, [goal.id, planned]);
+  const summary = preview ? planSummary(preview.plan, { noLimit: !limited }) : null;
+  const wanted = limited ? null : level;
+  // the map was drawn for a time or for a depth: changing which (or the depth) draws a new one to approve
+  const remaps = wanted !== goal.wantedLevel;
   return (
     <div className="flex flex-col gap-[22px]">
       <div className="flex flex-col gap-[4px]">
         <h2 className="t-heading">How much time do you give it?</h2>
-        <p className="t-small m-0 text-secondary">The plan keeps what you know and re-spends the time that is left, most useful ideas first.</p>
+        <p className="t-small m-0 text-secondary">
+          {remaps
+            ? limited
+              ? 'The plan fits this time when you save, and a new map sized to it is drawn for you to approve.'
+              : 'Saving draws a new map for this depth for you to approve. Your map stays until you choose.'
+            : limited
+              ? 'The plan keeps what you know and re-spends the time that is left, most useful ideas first.'
+              : 'The plan holds every idea at its full depth. Changing the depth draws a new map for you to approve.'}
+        </p>
       </div>
-      <TimePicker value={budget} onChange={setBudget} resources={teaching} allowPerResource={goal.kind === 'course' || teaching > 0} defaultWeeks={weeksUntil(goal.date)} />
+      <TimeChoice
+        limited={limited}
+        onLimited={setLimited}
+        budget={budget}
+        onBudget={setBudget}
+        level={level}
+        onLevel={setLevel}
+        resources={teaching}
+        allowPerResource={goal.kind === 'course' || teaching > 0}
+        defaultWeeks={weeksUntil(goal.date)}
+      />
       {summary && preview && (
         <div className="flex flex-col gap-[12px]">
           <div>
-            <span className="font-medium">{summary.headline}</span> <span className="text-secondary">· {summary.detail}</span>
+            <span className="font-medium">{limited ? summary.headline : estimateLine(preview.plan)}</span> <span className="text-secondary">· {summary.detail}</span>
           </div>
-          <IdeaField ideas={preview.ideas} />
+          <IdeaField ideas={preview.ideas} noLimit={!limited} />
         </div>
       )}
       <div className="button-row">
@@ -423,10 +464,10 @@ function TimeEditor({ detail, onClose, onSaved }: { detail: GoalDetail; onClose:
           disabled={saving}
           onClick={() => {
             setSaving(true);
-            void call('goals.update', { goalId: goal.id, form: { budget } }).then(onSaved, () => setSaving(false));
+            void call('goals.update', { goalId: goal.id, form: { budget: planned, wantedLevel: wanted } }).then(onSaved, () => setSaving(false));
           }}
         >
-          {saving ? 'Saving…' : 'Save the new time'}
+          {saving ? 'Saving…' : 'Save'}
         </Button>
         <Button kind="quiet" onClick={onClose}>
           Cancel
@@ -593,7 +634,7 @@ function mockStart(date: string): string | null {
  * they have: same time, how many sessions and ideas each gives, the new map's dots. Nothing changes
  * until they choose it.
  */
-function RemapPanel({ goalId, onChanged }: { goalId: string; onChanged: () => void }) {
+function RemapPanel({ goalId, caption, onChanged }: { goalId: string; caption: string; onChanged: () => void }) {
   const [view, setView] = useState<RemapView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
@@ -622,7 +663,7 @@ function RemapPanel({ goalId, onChanged }: { goalId: string; onChanged: () => vo
   return (
     <section className="remap-panel" aria-label="A new map">
       <div className="flex flex-col gap-[8px]">
-        <div className="t-caption text-accent-text">A new map for your time</div>
+        <div className="t-caption text-accent-text">{caption}</div>
         <p className="t-lead m-0">{view.reason}</p>
       </div>
       <DefGrid

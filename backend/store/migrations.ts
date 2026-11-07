@@ -355,8 +355,10 @@ const MIGRATIONS: { version: number; sql: string }[] = [
   {
     version: 12,
     sql: `
-      -- R5: the learner's context for a goal (reasons, purpose, constraints, what to focus on or skip).
+      -- R5: the learner's context for a goal (reasons, purpose, constraints, what to focus on or skip),
+      -- and the depth wanted for a goal with no time limit (null: the goal is fitted to its time).
       ALTER TABLE goals ADD COLUMN context TEXT;
+      ALTER TABLE goals ADD COLUMN wanted_level TEXT;
     `,
   },
 ];

@@ -290,7 +290,7 @@ function GoalRow({ goal, busy, onOpen, onMock }: { goal: TodayGoal; busy: string
           small
           items={[
             goal.assessment !== 'none' ? `${ASSESSMENT_LABEL[goal.assessment]}${when ? ` ${when}` : ''}` : null,
-            p ? `${formatHours(p.spentMinutes)}${p.totalMinutes ? ` of ${formatHours(p.totalMinutes)}` : ''}` : null,
+            p ? `${formatHours(p.spentMinutes)}${p.totalMinutes ? ` of ${formatHours(p.totalMinutes)}` : p.noLimit ? ` · about ${formatHours(p.plan.plannedMinutes)} left` : ''}` : null,
             p && p.weeklyTarget ? `${formatHours(p.weekMinutes)} of ${formatHours(p.weeklyTarget)} this week` : null,
             s.due.length ? `${s.due.length} fading` : null,
             goal.simplified ? `${goal.simplified} simplified` : null,

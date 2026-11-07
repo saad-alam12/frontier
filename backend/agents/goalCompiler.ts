@@ -31,7 +31,11 @@ export interface ExistingCapability {
  * capabilities (one for a short goal) and say what the goal means for its time (level and scope); a
  * recompile only adds, extends or (rarely) retires.
  */
-export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<string>, options: { minCapabilities?: number; askCoverage?: boolean; remap?: boolean } = {}) {
+export function buildCompileSchema(
+  knownIds: Set<string>,
+  existingIds: Set<string>,
+  options: { minCapabilities?: number; askCoverage?: boolean; remap?: boolean; levelGiven?: boolean } = {},
+) {
   const minCapabilities = options.minCapabilities ?? 3;
   const askCoverage = options.askCoverage ?? false;
   return z
@@ -78,7 +82,8 @@ export function buildCompileSchema(knownIds: Set<string>, existingIds: Set<strin
         if (!existingIds.has(id)) ctx.addIssue({ code: 'custom', path: ['retire', i], message: `unknown capability ${id}` });
       });
       if (existingIds.size === 0 && value.capabilities.length < minCapabilities) ctx.addIssue({ code: 'custom', path: ['capabilities'], message: `a first compile needs at least ${minCapabilities} capabilities` });
-      if (existingIds.size === 0 && !value.level) ctx.addIssue({ code: 'custom', path: ['level'], message: 'say how deep the goal goes for this time: intuition, working or rigorous' });
+      // with no time limit the learner chose the level; the compiler decides what it means
+      if (existingIds.size === 0 && !value.level && !options.levelGiven) ctx.addIssue({ code: 'custom', path: ['level'], message: 'say how deep the goal goes for this time: intuition, working or rigorous' });
       if (existingIds.size === 0 && !value.scope) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'say in one or two plain sentences what the goal means in the time given' });
       if (askCoverage && !value.coverage) ctx.addIssue({ code: 'custom', path: ['coverage'], message: 'judge whether the material covers the goal: complete, partial or fragment' });
       if (!options.remap && value.backgroundGoal) ctx.addIssue({ code: 'custom', path: ['backgroundGoal'], message: 'a separate goal is only suggested when re-mapping' });
@@ -103,6 +108,8 @@ export interface GoalCompilerInput {
   newMaterial: string[];
   /** The time the learner gives the goal, in hours; null when not set. */
   budgetHours: number | null;
+  /** No time limit: how deep the learner wants the goal. The map is sized by depth, not time. */
+  wantedLevel: GoalLevel | null;
   /** Minutes already spent; the rest is what the map is sized for. */
   spentHours: number;
   focus: GoalFocus[];
@@ -136,6 +143,13 @@ const REMAP_TASK: Record<Exclude<RemapRequest['kind'], 'changed'>, string> = {
 
 const CHANGE_TASK: Record<RemapCause, string> = {
   context: "The learner changed the goal's context (above). Map the goal again so the map follows it: its reasons and purpose, what it asks to focus on, and what it asks to leave out.",
+  level: 'The learner changed how this goal is sized: by the depth they want with no time limit, or by a time they give it (above). Map the goal again for that.',
+};
+
+const WANTED_TEXT: Record<GoalLevel, string> = {
+  intuition: 'the big picture: what it is, why it works and how the parts fit, in plain words and pictures, with no formulas',
+  working: 'working knowledge: the key ideas with their notation and formulas, explained and used on small examples',
+  rigorous: 'in full: precise definitions, derivations and proofs',
 };
 
 function remapTask(request: RemapRequest): string {
@@ -177,7 +191,11 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
       `## Time\nThe learner gives this goal about ${round(input.budgetHours)} hours in total${input.spentHours > 0.5 ? `, of which about ${round(left)} are left` : ''}. An idea learned in depth takes about half an hour of that, an overview about seven minutes. Size the map for the time: about ${ideaCountFor((left || input.budgetHours) * 60)} ideas in all, counting the ones already targeted.`,
     );
   }
-  if (input.level) sections.push(`## Level so far\nThe goal has been read at the ${input.level} level. Keep new ideas at that level unless the task says otherwise.`);
+  if (input.wantedLevel) {
+    sections.push(
+      `## How deep: no time limit\nThe learner gives this goal no time limit. They want it ${WANTED_TEXT[input.wantedLevel]} (level \`${input.wantedLevel}\`). Decide what that means for this goal, read together with its sentence, context, focus, assessment and the learner's background, and map every idea that understanding needs: no fewer and no more, between 4 and 80, each whole and at most half an hour. Do not size the map by time. The level is \`${input.wantedLevel}\`; say in \`scope\` what the learner will be able to do at the end and what is left out.`,
+    );
+  } else if (input.level) sections.push(`## Level so far\nThe goal has been read at the ${input.level} level. Keep new ideas at that level unless the task says otherwise.`);
   if (input.examProfile) {
     const p = input.examProfile;
     sections.push(`## Exam profile (from past exams)\n${p.summary}\nFormat: ${p.format}. Duration: ${p.durationMinutes ?? 'unknown'} minutes. Aids: ${p.aids}. Question types: ${p.questionTypes.join('; ')}. Difficulty: ${p.difficulty}.`);
@@ -214,7 +232,13 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
     submit: {
       name: 'submit_compile',
       description: 'Submit the title, new capabilities, extensions, retirements and any new nodes.',
-      schema: buildCompileSchema(knownIds, input.remap ? new Set<string>() : existingIds, { minCapabilities: input.remap || (input.budgetHours !== null && input.budgetHours <= 3) ? 1 : 3, askCoverage: input.askCoverage, remap: input.remap !== undefined }),
+      schema: buildCompileSchema(knownIds, input.remap ? new Set<string>() : existingIds, {
+        // a short goal, a re-map and a goal sized by depth may need only one or two skills
+        minCapabilities: input.remap || input.wantedLevel || (input.budgetHours !== null && input.budgetHours <= 3) ? 1 : 3,
+        askCoverage: input.askCoverage,
+        remap: input.remap !== undefined,
+        levelGiven: input.wantedLevel !== null,
+      }),
     },
   });
   return result.data;

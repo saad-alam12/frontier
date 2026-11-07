@@ -241,6 +241,8 @@ export interface ResourceTime {
 
 export interface GoalProgress {
   budget: GoalBudget | null;
+  /** No time limit: the plan holds every idea at its full depth and its minutes are an estimate, not a budget. */
+  noLimit: boolean;
   /** The true total in minutes. */
   totalMinutes: number | null;
   spentMinutes: number;
@@ -296,6 +298,7 @@ export function goalProgress(db: Database, goalId: string, now = new Date()): Go
 
   return {
     budget: goal.budget,
+    noLimit: goal.wantedLevel !== null,
     totalMinutes: total,
     spentMinutes: Math.round(spentMinutes),
     weekMinutes: Math.round(weekMinutes),

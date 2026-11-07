@@ -143,8 +143,13 @@ export interface Goal {
   targetGrade: string | null;
   /** Exam or deadline, ISO date (YYYY-MM-DD). */
   date: string | null;
-  /** The time the learner gives the goal, as they entered it; null when not set. */
+  /** The time the learner gives the goal, as they entered it; null when not set or when there is no time limit. */
   budget: GoalBudget | null;
+  /**
+   * Set for a goal with no time limit: how deep the learner wants it, which the compiler reads with the
+   * goal and its context. Null for a goal fitted to a time (and for goals from before R2 with no budget).
+   */
+  wantedLevel: GoalLevel | null;
   /** What kind of understanding the learner wants; empty means a balanced mix. */
   focus: GoalFocus[];
   /** Whether the goal's first material covers the whole goal, judged at compile; null before. */
@@ -206,8 +211,8 @@ export interface RemapProposal {
   backgroundGoal: { text: string; hours: number } | null;
 }
 
-/** What the learner changed that asks for a new map. */
-export type RemapCause = 'context';
+/** What the learner changed that asks for a new map: the context, or how deep they want to go (or a time instead). */
+export type RemapCause = 'context' | 'level';
 
 /**
  * A re-map waiting to be drawn (`requested`) or approved (`ready`). `causes` says what the learner

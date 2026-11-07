@@ -9,7 +9,7 @@ import type { RemapRequest } from '../agents/goalCompiler';
 import { formatHours } from '../core/budget';
 import { remapNeed, sameRemap } from '../core/goals';
 import type { RemapNeed } from '../core/goals';
-import type { BackgroundGap, Goal, GoalLevel, RemapProposal } from '../core/types';
+import type { BackgroundGap, Goal, GoalLevel, RemapCause, RemapProposal } from '../core/types';
 import type { Database } from '../store/db';
 import { dryRun, nowIso, transaction } from '../store/db';
 import { approvePlannedDepths, getGoal, saveGaps, saveRemap } from '../store/goals';
@@ -68,9 +68,9 @@ export async function proposeRemap(options: CompileOptions, goalId: string): Pro
   const { input } = compileInput(db, goal);
   const result = await runGoalCompiler(provider, { ...input, remap: request });
   const proposal: RemapProposal = {
-    reason: reasonFor(request, fresh),
+    reason: reasonFor(request, fresh, goal.wantedLevel),
     title: result.title,
-    level: result.level ?? goal.level ?? 'working',
+    level: goal.wantedLevel ?? result.level ?? goal.level ?? 'working',
     scope: result.scope ?? goal.scope ?? '',
     capabilities: result.capabilities,
     newNodes: result.newNodes,
@@ -101,7 +101,7 @@ export async function redrawDraft(options: CompileOptions, goalId: string): Prom
     const now = getGoal(db, goalId);
     // approved meanwhile (the request becomes a proposal), or changed again (drawn next)
     if (!now || now.status !== 'draft' || !sameRemap(now.remap, goal.remap)) return;
-    applyProposal(db, now, { reason: '', title: result.title, level: result.level ?? now.level ?? 'working', scope: result.scope ?? now.scope ?? '', capabilities: result.capabilities, newNodes: result.newNodes, backgroundGoal: null });
+    applyProposal(db, now, { reason: '', title: result.title, level: now.wantedLevel ?? result.level ?? now.level ?? 'working', scope: result.scope ?? now.scope ?? '', capabilities: result.capabilities, newNodes: result.newNodes, backgroundGoal: null });
     saveRemap(db, goalId, null);
   });
   refreshGoalFields(db);
@@ -113,9 +113,20 @@ function gapList(gaps: BackgroundGap[]): string {
   return items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : (items[0] ?? '');
 }
 
-function reasonFor(request: RemapRequest, gaps: BackgroundGap[]): string {
+/** How a chosen depth reads in a sentence: "You chose working knowledge". */
+const WANTED_PHRASE: Record<GoalLevel, string> = { intuition: 'the big picture', working: 'working knowledge', rigorous: 'to learn it in full' };
+
+/** Why the learner's edit led to a new map, in their terms. */
+function changeReason(causes: RemapCause[], wanted: GoalLevel | null): string {
+  const depth = wanted ? `you chose ${WANTED_PHRASE[wanted]}, with no time limit` : 'you gave this goal a time';
+  if (causes.includes('context') && causes.includes('level')) return `Your context changed, and ${depth}. The new map follows both.`;
+  if (causes.includes('context')) return 'Your context changed. The new map follows it.';
+  return wanted ? `You chose ${WANTED_PHRASE[wanted]}, with no time limit. The new map holds what that depth needs.` : 'You gave this goal a time. The new map is sized to it.';
+}
+
+function reasonFor(request: RemapRequest, gaps: BackgroundGap[], wanted: GoalLevel | null): string {
   const left = request.hoursLeft;
-  if (request.kind === 'changed') return 'Your context changed. The new map follows it.';
+  if (request.kind === 'changed') return changeReason(request.causes, wanted);
   if (request.kind === 'fill') return `Your answers showed you are missing ${gapList(gaps)}. Your time covers it, so the new map teaches it first.`;
   if (request.kind === 'simplify') {
     return `Your answers showed you are missing ${gapList(gaps)}${left !== null ? `, and this goal has about ${formatHours(left * 60)} left` : ''}. The new map gets you a usable understanding without it.`;

@@ -13,6 +13,7 @@ interface GoalRow {
   target_grade: string | null;
   date: string | null;
   budget: string | null;
+  wanted_level: GoalLevel | null;
   focus: string;
   coverage: Coverage | null;
   baseline: string;
@@ -60,6 +61,7 @@ const toGoal = (r: GoalRow): Goal => ({
   targetGrade: r.target_grade,
   date: r.date,
   budget: parseJson<GoalBudget | null>(r.budget, null),
+  wantedLevel: r.wanted_level,
   focus: parseJson<GoalFocus[]>(r.focus, []),
   coverage: r.coverage,
   baseline: parseJson<Record<string, Depth>>(r.baseline, {}),
@@ -100,6 +102,8 @@ export interface GoalInput {
   targetGrade?: string | null;
   date?: string | null;
   budget?: GoalBudget | null;
+  /** No time limit, at this depth; a goal has a time or no time limit, never both. */
+  wantedLevel?: GoalLevel | null;
   focus?: GoalFocus[];
   priority?: number;
   /** What the learner already knows about it, in their words. */
@@ -115,13 +119,18 @@ function cleanContext(context: string | null | undefined): string | null {
   return text || null;
 }
 
+function checkTimeChoice(g: Pick<GoalInput, 'budget' | 'wantedLevel'>): void {
+  if (g.budget && g.wantedLevel) throw new Error('A goal has either a time or no time limit, not both.');
+}
+
 /** A new goal is active unless created as a draft to preview its plan first. */
 export function createGoal(db: Database, input: GoalInput | string, options: { priority?: number; draft?: boolean } = {}): Goal {
   const g: GoalInput = typeof input === 'string' ? { text: input, priority: options.priority ?? 1 } : input;
+  checkTimeChoice(g);
   const id = newId('goal');
   const now = nowIso();
   db.prepare(
-    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at, background, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)',
+    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, wanted_level, focus, priority, status, created_at, approved_at, compiled_at, background, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)',
   ).run(
     id,
     g.text,
@@ -130,6 +139,7 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
     g.targetGrade ?? null,
     g.date ?? null,
     g.budget ? JSON.stringify(g.budget) : null,
+    g.wantedLevel ?? null,
     JSON.stringify(g.focus ?? []),
     g.priority ?? 1,
     options.draft ? 'draft' : 'active',
@@ -144,14 +154,19 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
 export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> & { status?: Goal['status'] }): void {
   const current = getGoal(db, id);
   if (!current) return;
+  checkTimeChoice(patch);
   const next = { ...current, ...patch };
-  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ?, background = ?, context = ? WHERE id = ?').run(
+  // a goal has a time or no time limit: setting one clears the other
+  if (patch.budget) next.wantedLevel = null;
+  if (patch.wantedLevel) next.budget = null;
+  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, wanted_level = ?, focus = ?, priority = ?, status = ?, background = ?, context = ? WHERE id = ?').run(
     next.text,
     next.kind,
     next.assessment,
     next.targetGrade,
     next.date,
     next.budget ? JSON.stringify(next.budget) : null,
+    next.wantedLevel,
     JSON.stringify(next.focus),
     next.priority,
     next.status,

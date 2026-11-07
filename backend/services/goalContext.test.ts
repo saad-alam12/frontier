@@ -148,8 +148,8 @@ describe('goal context', () => {
   });
 
   it('counts only a real change of the context as a cause', () => {
-    expect(remapCauses({ context: null }, { context: '  ' })).toEqual([]);
-    expect(remapCauses({ context: 'For work' }, { context: 'For work ' })).toEqual([]);
-    expect(remapCauses({ context: null }, { context: 'For work' })).toEqual(['context']);
+    expect(remapCauses({ context: null, wantedLevel: null }, { context: '  ', wantedLevel: null })).toEqual([]);
+    expect(remapCauses({ context: 'For work', wantedLevel: null }, { context: 'For work ', wantedLevel: null })).toEqual([]);
+    expect(remapCauses({ context: null, wantedLevel: null }, { context: 'For work', wantedLevel: null })).toEqual(['context']);
   });
 });

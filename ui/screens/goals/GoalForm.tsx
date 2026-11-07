@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { call } from '../../api';
-import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind } from '../../../backend/api/contract';
+import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind, GoalLevel } from '../../../backend/api/contract';
 import { describeBudget } from '../../../backend/core/budget';
 import { Breadcrumb, Screen } from '../../components/Shell';
 import { Button, ChoiceChips, DefGrid, Field, Notice } from '../../components/controls';
-import { TimePicker } from '../../components/budget';
+import { TimeChoice, WANTED_LEVEL_TITLE } from '../../components/TimeChoice';
 import { ASSESSMENT_OPTIONS, ASSESSMENT_PHRASE, FocusChips, KIND_OPTIONS, capitalize, dateLabel, formatDate, goalName, isExam, materialSummary } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
@@ -26,6 +26,8 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
   const [background, setBackground] = useState(g.background ?? '');
   const [context, setContext] = useState(g.context ?? '');
   const [budget, setBudget] = useState<GoalBudget>(g.budget ?? defaultBudget(g.kind, g.date));
+  const [limited, setLimited] = useState(g.wantedLevel === null);
+  const [level, setLevel] = useState<GoalLevel>(g.wantedLevel ?? g.level ?? 'working');
   const [materials, setMaterials] = useState<Material[]>(existing.materials.map((m) => ({ sourceId: m.sourceId, title: m.title, role: m.role })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,14 +41,17 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
     assessment,
     targetGrade: isExam(assessment) && grade.trim() ? grade.trim() : null,
     date: dateName && date ? date : null,
-    budget,
+    budget: limited ? budget : null,
+    wantedLevel: limited ? null : level,
     focus,
     background: background.trim() || null,
     context: context.trim() || null,
     materials: materials.map((m) => ({ sourceId: m.sourceId, role: m.role })),
   });
   // a mapped goal answers a new context with a new map to approve, so say so before saving
-  const contextNote = (g.context ?? '').trim() !== context.trim() && existing.capabilities.length > 0 ? 'Saving proposes a new map that follows it. Your map stays until you choose.' : null;
+  const mapped = existing.capabilities.length > 0;
+  const contextNote = (g.context ?? '').trim() !== context.trim() && mapped ? 'Saving proposes a new map that follows it. Your map stays until you choose.' : null;
+  const depthNote = (limited ? null : level) !== g.wantedLevel && mapped ? 'Saving proposes a new map for this choice. Your map stays until you choose.' : null;
 
   const save = async () => {
     if (!text.trim() || busy) return;
@@ -69,7 +74,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
           { label: 'Kind', value: kind === 'course' ? 'Course' : 'On your own' },
           { label: 'Target', value: assessment === 'none' ? 'Not assessed' : isExam(assessment) && grade.trim() ? `${grade.trim()} in ${ASSESSMENT_PHRASE[assessment]}` : capitalize(ASSESSMENT_PHRASE[assessment]) },
           ...(dateName ? [{ label: 'Date', value: date ? formatDate(date) : '—' }] : []),
-          { label: 'Time', value: `${describeBudget(budget, teaching).total}, ${describeBudget(budget, teaching).detail}` },
+          { label: 'Time', value: limited ? `${describeBudget(budget, teaching).total}, ${describeBudget(budget, teaching).detail}` : `No time limit, ${WANTED_LEVEL_TITLE[level].toLowerCase()}` },
           { label: 'Material', value: materialSummary(materials, kind === 'course') },
         ]}
       />
@@ -124,8 +129,18 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
           <input id="goal-background" className="input" value={background} onChange={(e) => setBackground(e.target.value)} />
         </Field>
         <ContextField value={context} onChange={setContext} note={contextNote} />
-        <Question label="How much time do you give it?">
-          <TimePicker value={budget} onChange={setBudget} resources={teaching} allowPerResource={kind === 'course' || teaching > 0} defaultWeeks={weeksUntil(date || null)} />
+        <Question label="How much time do you give it?" hint={depthNote ?? undefined}>
+          <TimeChoice
+            limited={limited}
+            onLimited={setLimited}
+            budget={budget}
+            onBudget={setBudget}
+            level={level}
+            onLevel={setLevel}
+            resources={teaching}
+            allowPerResource={kind === 'course' || teaching > 0}
+            defaultWeeks={weeksUntil(date || null)}
+          />
         </Question>
         <Question label="Material">
           <MaterialPicker materials={materials} onChange={setMaterials} />

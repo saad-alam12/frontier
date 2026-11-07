@@ -157,17 +157,18 @@ export function createGoalFromForm(db: Database, form: GoalForm, options: { draf
 }
 
 /**
- * Save an edit. A new time re-plans at once. A change to what the map is drawn around (the context)
- * asks for a new map: a mapped goal gets a proposal to approve (design §3.2, step 7a); a draft, with
- * nothing approved yet, is simply mapped again.
+ * Save an edit. A new time (or a switch to no time limit) re-plans at once. A change to what the map
+ * is drawn around (the context, how deep the goal goes) asks for a new map: a mapped goal gets a
+ * proposal to approve (design §3.2, step 7a); a draft, with nothing approved yet, is simply mapped again.
  */
 export function updateGoalFromForm(db: Database, goalId: string, form: Partial<GoalForm>): void {
   const before = getGoal(db, goalId);
-  const retimed = 'budget' in form && JSON.stringify(form.budget ?? null) !== JSON.stringify(before?.budget ?? null);
+  let retimed = false;
   transaction(db, () => {
     const { materials, ...fields } = form;
     updateGoal(db, goalId, fields);
     const after = getGoal(db, goalId);
+    retimed = JSON.stringify(after?.budget ?? null) !== JSON.stringify(before?.budget ?? null) || after?.wantedLevel !== before?.wantedLevel;
     const causes = before && after ? remapCauses(before, after) : [];
     // a draft not mapped yet may be mapping right now from what it said before, so it asks too
     if (causes.length && before && (before.status === 'draft' || before.compiledAt !== null)) requestRemap(db, goalId, causes);
@@ -177,7 +178,7 @@ export function updateGoalFromForm(db: Database, goalId: string, form: Partial<G
       for (const m of materials) if (!had.has(m.sourceId)) logEvent(db, 'material.added', { goalId, sourceId: m.sourceId }, { role: m.role });
     }
     if (retimed) {
-      logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: form.budget ?? null });
+      logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: after?.budget ?? null, ...(after?.wantedLevel !== before?.wantedLevel ? { fromLevel: before?.wantedLevel ?? null, toLevel: after?.wantedLevel ?? null } : {}) });
       // a new time is a new plan to approve: it re-plans from the ideal depths
       clearApprovedDepths(db, goalId);
     }
@@ -350,6 +351,7 @@ export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInp
       existing,
       newMaterial: existing.length ? newMaterial : [],
       budgetHours: budgetTotal === null ? null : budgetTotal / 60,
+      wantedLevel: goal.wantedLevel,
       spentHours: (spentByGoal(attributeTime(db)).get(goalId) ?? 0) / 60,
       focus: goal.focus,
       askCoverage: goal.coverage === null && sources.length > 0,
@@ -391,7 +393,8 @@ export function applyCompile(db: Database, goal: Goal, result: CompileOutput, so
     goalId,
     result.title,
     sources.filter((s) => getSource(db, s)?.status === 'done' || goal.compiledSources.includes(s)),
-    { level: result.level, scope: result.scope },
+    // with no time limit the goal's level is the one the learner chose
+    { level: goal.wantedLevel ?? result.level, scope: result.scope },
   );
   if (result.coverage) saveCoverage(db, goalId, result.coverage);
   if (goal.status !== 'draft') recordBaseline(db, goalId);

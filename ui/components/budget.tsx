@@ -160,15 +160,24 @@ export function TimePicker({
 
 /**
  * Time as one bar: spent, then the time the plan holds ahead, then budget the plan leaves free. A tick
- * marks where the budget's rhythm puts you by now.
+ * marks where the budget's rhythm puts you by now. With no time limit the time ahead is an estimate.
  */
-export function BudgetBar({ progress, compact, caption }: { progress: Pick<GoalProgress, 'totalMinutes' | 'spentMinutes' | 'expectedByNow'> & { plannedMinutes: number }; compact?: boolean; caption?: boolean }) {
-  const { totalMinutes, spentMinutes, expectedByNow, plannedMinutes } = progress;
+export function BudgetBar({
+  progress,
+  compact,
+  caption,
+}: {
+  progress: Pick<GoalProgress, 'totalMinutes' | 'spentMinutes' | 'expectedByNow'> & Partial<Pick<GoalProgress, 'noLimit'>> & { plannedMinutes: number };
+  compact?: boolean;
+  caption?: boolean;
+}) {
+  const { totalMinutes, spentMinutes, expectedByNow, plannedMinutes, noLimit } = progress;
+  const ahead = noLimit ? `about ${formatHours(plannedMinutes)} left` : `${formatHours(plannedMinutes)} planned ahead`;
   const total = Math.max(totalMinutes ?? spentMinutes + plannedMinutes, 1);
   const spentPct = Math.min(100, (spentMinutes / total) * 100);
   const plannedPct = Math.min(100 - spentPct, (plannedMinutes / total) * 100);
   const tick = expectedByNow !== null && totalMinutes ? Math.min(100, (expectedByNow / total) * 100) : null;
-  const label = `${formatHours(spentMinutes)} spent, ${formatHours(plannedMinutes)} planned ahead${totalMinutes ? ` of ${formatHours(totalMinutes)}` : ''}`;
+  const label = `${formatHours(spentMinutes)} spent, ${ahead}${totalMinutes ? ` of ${formatHours(totalMinutes)}` : ''}`;
   return (
     <div className={compact ? 'budget-bar is-compact' : 'budget-bar'}>
       <div className="budget-track" role="img" aria-label={label} title={label}>
@@ -178,7 +187,7 @@ export function BudgetBar({ progress, compact, caption }: { progress: Pick<GoalP
       </div>
       {compact && caption && (
         <div className="t-caption text-muted">
-          {formatHours(spentMinutes)} spent{totalMinutes !== null ? ` of ${formatHours(totalMinutes)}` : ''} · {formatHours(plannedMinutes)} planned ahead
+          {formatHours(spentMinutes)} spent{totalMinutes !== null ? ` of ${formatHours(totalMinutes)}` : ''} · {ahead}
         </div>
       )}
       {!compact && (
@@ -187,7 +196,7 @@ export function BudgetBar({ progress, compact, caption }: { progress: Pick<GoalP
             <i className="swatch is-spent" /> {formatHours(spentMinutes)} spent
           </span>
           <span>
-            <i className="swatch is-planned" /> {formatHours(plannedMinutes)} planned ahead
+            <i className="swatch is-planned" /> {ahead}
           </span>
           {totalMinutes !== null && <span className="text-muted">of {formatHours(totalMinutes)}</span>}
         </div>
@@ -256,8 +265,9 @@ function DotTip({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
 /**
  * The ideas of a plan as a field of dots: deep, overview, already yours, left out. Hovering or
  * focusing a dot says which idea it is and what the plan does with it; arrow keys move between dots.
+ * With no time limit nothing is left out, so the legend does not offer it.
  */
-export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
+export function IdeaField({ ideas, noLimit }: { ideas: PlanIdea[]; noLimit?: boolean }) {
   const tip = useTip();
   const moveFocus = (e: React.KeyboardEvent<HTMLUListElement>) => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
@@ -302,9 +312,11 @@ export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
         <span>
           <i className="idea-dot is-known" /> Already yours
         </span>
-        <span>
-          <i className="idea-dot is-cut" /> Left out
-        </span>
+        {!noLimit && (
+          <span>
+            <i className="idea-dot is-cut" /> Left out
+          </span>
+        )}
         {ideas.some((i) => i.simplified) && (
           <span>
             <i className="idea-dot is-deep">
@@ -326,19 +338,37 @@ export function IdeaField({ ideas }: { ideas: PlanIdea[] }) {
   );
 }
 
-/** "About 6 sessions · 14 ideas" and what they are. */
-export function planSummary(plan: GoalPlan): { headline: string; detail: string } {
+/** Sessions the plan comes to: at least one while anything is left to learn. */
+function sessionsOf(plan: GoalPlan): number {
+  return Math.max(plan.sessions, plan.ideas.total - plan.ideas.cut > plan.ideas.ready ? 1 : 0);
+}
+
+/**
+ * "About 6 sessions · 14 ideas" and what they are. With no time limit the time and sessions show apart,
+ * as the estimate, so the headline is the ideas and the detail leaves the time out.
+ */
+export function planSummary(plan: GoalPlan, options: { noLimit?: boolean } = {}): { headline: string; detail: string } {
   const inPlan = plan.ideas.total - plan.ideas.cut;
-  const sessions = Math.max(plan.sessions, inPlan > plan.ideas.ready ? 1 : 0);
-  const headline = `${sessions === 0 ? 'Nothing left to learn' : `About ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`} · ${inPlan} ${inPlan === 1 ? 'idea' : 'ideas'}`;
+  const sessions = sessionsOf(plan);
+  const ideas = `${inPlan} ${inPlan === 1 ? 'idea' : 'ideas'}`;
+  const headline = options.noLimit ? ideas : `${sessions === 0 ? 'Nothing left to learn' : `About ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`} · ${ideas}`;
   const parts = [plan.ideas.deep ? `${plan.ideas.deep} in depth` : '', plan.ideas.overview ? `${plan.ideas.overview} as an overview` : '', plan.ideas.ready ? `${plan.ideas.ready} already yours` : '', plan.ideas.cut ? `${plan.ideas.cut} left out` : ''].filter(Boolean);
-  const time = plan.plannedMinutes > 0 ? `, about ${formatHours(plan.plannedMinutes)} of learning` : '';
+  const time = plan.plannedMinutes > 0 && !options.noLimit ? `, about ${formatHours(plan.plannedMinutes)} of learning` : '';
   return { headline, detail: `${parts.join(', ')}${time}` };
+}
+
+/** With no time limit the plan's time is an estimate: "About 14 hours · about 19 sessions". */
+export function estimateLine(plan: GoalPlan): string {
+  const sessions = sessionsOf(plan);
+  if (sessions === 0) return 'Nothing left to learn';
+  return `About ${formatHours(plan.plannedMinutes)} · about ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`;
 }
 
 /** A plain sentence on pace; null when there is nothing clear to say. */
 export function paceSentence(progress: GoalProgress): { text: string; tone: 'calm' | 'warn' | 'good' } | null {
   const { pace } = progress;
+  // with no time limit there is no time to be behind or ahead of: the estimate simply follows the learner
+  if (progress.noLimit) return null;
   if (pace.kind === 'behind_time') return { text: `You have put in ${formatHours(progress.spentMinutes)} of the ${formatHours(progress.expectedByNow ?? 0)} your rhythm planned by now. Less time means a smaller plan: find a slot this week, or change the time.`, tone: 'warn' };
   if (pace.kind === 'slow') return { text: `Ideas are taking about ${(pace.ratio ?? 2).toFixed(1)}× the planned time. The plan has shrunk to fit; give the goal more time to keep its depth.`, tone: 'warn' };
   if (pace.kind === 'fast') return { text: 'You are learning faster than planned, so the goal will finish early. To use the time, change it and the plan will go deeper.', tone: 'good' };

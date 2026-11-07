@@ -2,7 +2,7 @@
  * Goal mechanics (design §3): the depth-distribution sanity check, the status of a skill, and when
  * missing background or an edit calls for a new map.
  */
-import type { Depth, GoalRemap, RemapCause } from './types';
+import type { Depth, GoalLevel, GoalRemap, RemapCause } from './types';
 
 /** Above this share of targets at depth 3 or more, a compile is over-targeting (design §2.3: most ideas need 1–2). */
 export const DEEP_TARGET_LIMIT = 0.5;
@@ -44,15 +44,20 @@ export function remapNeed(gaps: { hours: number }[], hoursLeft: number | null): 
 /** What the learner sets on a goal that the map is drawn around, beyond its sentence and time. */
 export interface MapShaping {
   context: string | null;
+  /** The depth wanted with no time limit; null for a goal fitted to a time. */
+  wantedLevel: GoalLevel | null;
 }
 
 /**
  * What an edit changed that calls for a new map (design §3.2): a mapped goal asks for one when its
- * context changes. Whitespace alone is not a change.
+ * context changes, or how deep it should go: another wanted level, or a switch between a time and no
+ * time limit (a map sized to a time does not hold what a depth needs, and the other way round).
+ * A new amount of time is not a cause: the plan re-fits the same map. Whitespace alone is not a change.
  */
 export function remapCauses(before: MapShaping, after: MapShaping): RemapCause[] {
   const causes: RemapCause[] = [];
   if ((before.context ?? '').trim() !== (after.context ?? '').trim()) causes.push('context');
+  if (before.wantedLevel !== after.wantedLevel) causes.push('level');
   return causes;
 }
 
