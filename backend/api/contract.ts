@@ -89,6 +89,8 @@ export interface ApiMethods {
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
   'goals.list': { input: undefined; output: GoalDetail[] };
   'goals.get': { input: { goalId: string }; output: GoalDetail };
+  /** Save the goal as Markdown notes where the learner chooses; null when they cancel. */
+  'goals.exportNotes': { input: { goalId: string }; output: { path: string | null } };
   /**
    * Creates the goal with its material; reading, profiling and compiling continue in the background.
    * A draft is compiled and previewed; it joins the plan when approved.

@@ -1,4 +1,7 @@
-import { dialog, ipcMain } from 'electron';
+import { writeFile } from 'node:fs/promises';
+import { app, dialog, ipcMain } from 'electron';
+import { join } from 'node:path';
+import { exportGoalNotes } from '../services/notes';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
@@ -120,6 +123,13 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
     'goals.list': () => listGoals(ctx.db()).map((g) => detail(g.id)),
     'goals.get': ({ goalId }) => detail(goalId),
+    'goals.exportNotes': async ({ goalId }) => {
+      const { fileName, markdown } = exportGoalNotes(ctx.db(), goalId);
+      const result = await dialog.showSaveDialog({ defaultPath: join(app.getPath('documents'), fileName), filters: [{ name: 'Markdown', extensions: ['md'] }] });
+      if (result.canceled || !result.filePath) return { path: null };
+      await writeFile(result.filePath, markdown, 'utf8');
+      return { path: result.filePath };
+    },
     'goals.create': ({ form, draft }) => {
       const goal = createGoalFromForm(ctx.db(), { ...form, text: form.text.trim() }, { draft });
       ctx.goalWorker().refresh(goal.id);

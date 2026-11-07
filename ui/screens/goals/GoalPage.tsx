@@ -60,6 +60,13 @@ export function GoalPage({
   const [open, setOpen] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState(false);
   const [adding, setAdding] = useState(false);
+  /** Where the notes were saved, for a short confirmation. */
+  const [exported, setExported] = useState<string | null>(null);
+  useEffect(() => {
+    if (!exported) return;
+    const t = window.setTimeout(() => setExported(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [exported]);
   /** The goal an open session belongs to (null for a free session); undefined when none is open. */
   const [openSession, setOpenSession] = useState<string | null | undefined>(undefined);
 
@@ -173,9 +180,25 @@ export function GoalPage({
     <Screen aside={aside} asideLabel="Today and material">
       <div className="section-head">
         <Breadcrumb items={[{ label: 'Goals', onClick: onBack }, { label: goalName(detail) }]} />
-        <button type="button" className="link-button shrink-0" onClick={onEdit}>
-          Edit goal
-        </button>
+        <span className="flex shrink-0 items-baseline gap-[18px]">
+          <button
+            type="button"
+            className="link-button"
+            title="Save this goal's ideas, your own words and your flashcards as a Markdown file"
+            disabled={busy !== null}
+            onClick={() =>
+              void run('export', async () => {
+                const { path } = await call('goals.exportNotes', { goalId: goal.id });
+                setExported(path);
+              })
+            }
+          >
+            {exported ? 'Notes saved' : 'Export notes'}
+          </button>
+          <button type="button" className="link-button" onClick={onEdit}>
+            Edit goal
+          </button>
+        </span>
       </div>
 
       <section className="flex flex-col gap-[12px]">
