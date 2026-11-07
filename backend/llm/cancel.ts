@@ -10,6 +10,14 @@ export class CommitGate {
   private readonly controller = new AbortController();
   private committed = false;
 
+  /** `onCommit` runs once the first call has answered, so a screen can stop offering Stop. */
+  constructor(private readonly onCommit?: () => void) {}
+
+  /** True until the first call has answered. */
+  get stoppable(): boolean {
+    return !this.committed && !this.controller.signal.aborted;
+  }
+
   /** Stop the request if it has not committed yet. True when it will stop. */
   cancel(): boolean {
     if (this.committed) return false;
@@ -31,6 +39,7 @@ export class CommitGate {
     const result = await Promise.race([call, whenAborted(signal)]);
     if (signal.aborted) throw new CancelledError();
     this.committed = true;
+    this.onCommit?.();
     return result;
   }
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ChartNoAxesColumn, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
+import { useSessionWork } from '../lib/sessionWork';
 
 export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
 
@@ -42,10 +43,14 @@ export function BrandMark({ size = 22, on = 'var(--bg-sidebar)' }: { size?: numb
 }
 
 /**
- * The sidebar: the mark, a live Session entry while a session is open, the places you work in, the
- * places you look back in, and Settings at the bottom.
+ * The sidebar: the mark, a live Session entry while a session is open (or being planned), the places
+ * you work in, the places you look back in, and Settings at the bottom.
  */
 export function NavRail({ current, onSelect, sessionActive }: { current: ScreenName; onSelect: (s: ScreenName) => void; sessionActive: boolean }) {
+  const { work, unseen } = useSessionWork();
+  const here = current === 'session';
+  // quiet live status: the tutor at work, or a card (or a failed answer) waiting for the learner
+  const status = work?.status === 'running' ? 'Thinking…' : unseen && !here ? 'Your turn' : here ? 'Open now' : 'Continue';
   const item = ({ name, label, icon: Icon, hint }: NavEntry) => (
     <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={hint}>
       <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -59,11 +64,13 @@ export function NavRail({ current, onSelect, sessionActive }: { current: ScreenN
         <BrandMark />
         <span className="brand-name">Frontier</span>
       </div>
-      {(sessionActive || current === 'session') && (
-        <button type="button" className="nav-live" aria-current={current === 'session' ? 'page' : undefined} onClick={() => onSelect('session')} title="Your session is open">
+      {(sessionActive || work !== null || here) && (
+        <button type="button" className="nav-live" aria-current={here ? 'page' : undefined} onClick={() => onSelect('session')} title={work?.status === 'running' ? 'Frontier is working on your session' : 'Your session is open'}>
           <span className="live-dot" aria-hidden="true" />
           <span>Session</span>
-          <span className="nav-live-hint">{current === 'session' ? 'Open now' : 'Continue'}</span>
+          <span className="nav-live-hint" aria-live="polite">
+            {status}
+          </span>
         </button>
       )}
       <div className="nav-group">{PRIMARY.map(item)}</div>

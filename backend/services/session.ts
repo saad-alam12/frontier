@@ -4,12 +4,12 @@
  */
 import { runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
+import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
 import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
 import { PASS_SCORE } from '../core/types';
-import type { Depth, Goal } from '../core/types';
-import { CommitGate } from '../llm/cancel';
+import type { Depth, Goal, GoalLevel } from '../core/types';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
@@ -21,6 +21,7 @@ import { getState } from '../store/evidence';
 import { getGoal, listTargets } from '../store/goals';
 import { activeSession, appendSessionEvent, createSession, endSession, getSession, listEndedSessions, listSessionEvents, saveSessionState } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
+import { deleteDrafts } from '../store/drafts';
 import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
 import { recordEvidence, setOwnStatement } from './evidence';
@@ -33,6 +34,7 @@ import { MAX_PLAN_NODES, candidatesForGoal, planFocusSession, planSession } from
 import { practiceView, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps, PracticeView } from './practice';
 import type { LessonPlan, LessonStep } from './planner';
+import type { SessionWork, SessionWorkView } from './sessionWork';
 
 export type Phase = 'reconstruct' | 'orient' | 'teach' | 'practice' | 'close' | 'preview' | 'done';
 export type NodeStatus = 'pending' | 'active' | 'done';
@@ -45,7 +47,8 @@ export interface NodeHistoryEntry {
 }
 
 export interface SessionState {
-  goalId: string;
+  /** The goal whose frame the tutor uses; null for a free session with no goal. */
+  goalId: string | null;
   plan: LessonPlan;
   phase: Phase;
   stepIndex: number;
@@ -68,6 +71,19 @@ export interface SessionState {
   practiceRevealed?: string | null;
   /** Minutes an idea carried over from an ended session already had there; they count toward its half hour. */
   priorMinutes?: Record<string, number>;
+  /** A session the learner chose (design §4.5); absent for planned sessions. */
+  free?: FreeSession | null;
+}
+
+/** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
+export interface FreeSession {
+  /** What they asked for in their words, or null when they picked ideas. */
+  description: string | null;
+  /** The ideas they picked, by name (empty for a description). */
+  picked: string[];
+  /** The session's time counts toward its goal; otherwise it is free study. */
+  counted: boolean;
+  level: GoalLevel;
 }
 
 /** Where the learner stopped inside an idea: the open card and the loop state around it. */
@@ -85,10 +101,12 @@ export interface ResumePoint {
 /** What the renderer sees. Answer keys and rubrics never leave the backend. */
 export interface SessionSnapshot {
   id: string;
-  goalId: string;
+  goalId: string | null;
   goalText: string;
-  /** The goal's short name for the breadcrumb (its sentence until compiled). */
+  /** The goal's short name for the breadcrumb (its sentence until compiled); "Free study" with no goal. */
   goalTitle: string;
+  /** What the learner asked for, in a session they chose. */
+  free: Pick<FreeSession, 'description' | 'picked' | 'counted'> | null;
   startedAt: string;
   status: SessionRecord['status'];
   phase: Phase;
@@ -121,6 +139,8 @@ export interface SessionSnapshot {
   practice: PracticeView | null;
   /** The practice problem whose solution is showing, waiting for "Next". */
   practiceRevealed: string | null;
+  /** An answer still being judged (or one that failed), so the screen shows it as sent after leaving and coming back. */
+  work: SessionWorkView | null;
 }
 
 /** One answered step: the card as shown, the learner's answer exactly as given, the rating. */
@@ -176,11 +196,13 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
   ingestion?: IngestionService;
   /** Where answer images are stored; needed only when a response attaches any. */
   attachmentsDir?: string;
+  /** The work in flight, which keeps running when the Session screen closes. */
+  work: SessionWork;
 }
 
-export function currentSession(db: Database): SessionSnapshot | null {
+export function currentSession(db: Database, work?: SessionWork): SessionSnapshot | null {
   const session = activeSession<SessionState>(db);
-  return session ? snapshot(db, normalized(session)) : null;
+  return session ? snapshot(db, normalized(session), work) : null;
 }
 
 /**
@@ -197,11 +219,20 @@ function normalized(session: SessionRecord<SessionState>): SessionRecord<Session
   return { ...session, state: { ...session.state, plan: { ...session.state.plan, steps }, edge: normalizeEdge(session.state.edge) } };
 }
 
-/** Open a session on the goal (or return the open one). `focus`: a session the learner chose, going deeper on those ideas. */
+/**
+ * Open a session on the goal (or return the open one). `focus`: a session the learner chose, going
+ * deeper on those ideas. Planning runs as the session's work, so it goes on when the screen closes.
+ */
 export async function startSession(deps: SessionDeps, goalId: string, focus?: string[]): Promise<SessionSnapshot> {
   const { db } = deps;
   const active = activeSession<SessionState>(db);
-  if (active) return snapshot(db, normalized(active));
+  if (active) return snapshot(db, normalized(active), deps.work);
+  const sessionId = await deps.work.run({ kind: 'start', sessionId: null, goalId, sent: null, stoppable: false }, () => openGoalSession(deps, goalId, focus), (id) => id);
+  return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>, deps.work);
+}
+
+async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[] | undefined): Promise<string> {
+  const { db } = deps;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
@@ -235,7 +266,7 @@ export async function startSession(deps: SessionDeps, goalId: string, focus?: st
   logEvent(db, 'session.started', { goalId, sessionId: session.id }, { steps: plan.steps.length });
   appendSessionEvent(db, session.id, 'start', { goalId, plan: { title: plan.title, steps: plan.steps.map((s) => s.nodeId) }, resumes: carried ? { nodeId: carried.step.nodeId, fromSessionId: carried.resume.fromSessionId } : null });
   if (carried) carryEvents(db, carried.resume.fromSessionId, session.id, carried.step.nodeId);
-  return snapshot(db, session);
+  return session.id;
 }
 
 /** Pause keeps the session active: reopening resumes at the same card with nothing regenerated. */
@@ -254,6 +285,7 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   const session = getSession<SessionState>(db, sessionId);
   if (!session || session.status !== 'active') return;
   endSession(db, sessionId, 'abandoned');
+  deps.work.forget(sessionId);
   appendSessionEvent(db, sessionId, 'abandon', {});
   logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'abandoned' });
   refreshGoalFields(db);
@@ -261,31 +293,26 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
 }
 
 /**
- * Requests in flight per session. Answers to questions carry a gate: until the tutor's first call
- * answers, Esc stops the request and nothing has been written (every write comes after that call).
+ * Advance the session with the learner's response to the current card (or an acknowledgement). It runs
+ * as the session's work: a second answer is refused while one is judged, and answers to questions carry
+ * a commit gate, so until the tutor's first call answers Esc stops the request and nothing has been
+ * written (every write comes after that call). `draftKey`: the unsent answer, deleted once accepted.
  */
-const inflight = new Map<string, CommitGate | null>();
-
-/** Stop the answer being judged, if it can still stop. True when it will. */
-export function cancelRespond(sessionId: string): boolean {
-  return inflight.get(sessionId)?.cancel() ?? false;
-}
-
-/** Advance the session with the learner's response to the current card (or an acknowledgement). */
-export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse): Promise<SessionSnapshot> {
-  const stored = getSession<SessionState>(deps.db, sessionId);
+export async function respond(deps: SessionDeps, sessionId: string, response: LearnerResponse, options: { draftKey?: string } = {}): Promise<SessionSnapshot> {
+  const { db } = deps;
+  const stored = getSession<SessionState>(db, sessionId);
   if (!stored) throw new Error(`unknown session ${sessionId}`);
   const session = normalized(stored);
-  if (session.status !== 'active') return snapshot(deps.db, session);
-  if (inflight.has(sessionId)) throw new Error('Still working on your last answer.');
+  if (session.status !== 'active') return snapshot(db, session, deps.work);
+  if (deps.work.current()?.status === 'running') throw new Error('Still working on your last answer.');
   const checked = checkExtras(deps, response);
-  const gate = answersQuestion(session.state) ? new CommitGate() : null;
-  inflight.set(sessionId, gate);
-  try {
-    return await respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked);
-  } finally {
-    inflight.delete(sessionId);
-  }
+  const state = session.state;
+  const sent = { card: state.phase === 'teach' ? publicCard(state.card) : null, stage: state.phase === 'teach' ? state.stage : null, response: checked };
+  const job = { kind: 'respond' as const, sessionId, goalId: state.goalId, sent, stoppable: answersQuestion(state) };
+  await deps.work.run(job, (gate) => respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked));
+  // the renderer owns draft keys; only this session's can be dropped from here
+  if (options.draftKey?.startsWith(`session:${sessionId}:`)) deleteDrafts(db, [options.draftKey]);
+  return snapshot(db, normalized(getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>), deps.work);
 }
 
 /**
@@ -317,11 +344,11 @@ function answersQuestion(state: SessionState): boolean {
   return state.phase === 'teach' && state.stage !== null && isGraded(state.stage);
 }
 
-async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<SessionSnapshot> {
+async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<void> {
   const { db } = deps;
   const sessionId = session.id;
   const state = session.state;
-  const goal = tutorGoal(getGoal(db, state.goalId));
+  const goal = tutorGoalFor(db, state);
   const goalText = goal.text;
 
   switch (state.phase) {
@@ -394,16 +421,15 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       saveSessionState(db, sessionId, state);
       endSession(db, sessionId, 'done');
       appendSessionEvent(db, sessionId, 'finish', {});
-      logEvent(db, 'session.ended', { goalId: state.goalId, sessionId }, { status: 'done' });
+      logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'done' });
       refreshGoalFields(db);
       await ingestTranscript(deps, sessionId, state);
-      return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>);
+      return;
     }
     case 'done':
       break;
   }
   saveSessionState(db, sessionId, state);
-  return snapshot(db, { ...session, state });
 }
 
 /**
@@ -412,6 +438,8 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
  */
 async function startSessionPractice(deps: SessionDeps, sessionId: string, state: SessionState): Promise<boolean> {
   if (state.practiceSetId !== undefined && state.practiceSetId !== null) return true;
+  // a session the learner chose is about what they asked; a goal's fading ideas wait for its own sessions
+  if (state.free || !state.goalId) return false;
   try {
     const set = await startPractice(deps, state.goalId, { sessionId, maxProblems: SESSION_PRACTICE_PROBLEMS, exclude: state.plan.steps.map((s) => s.nodeId) });
     state.practiceSetId = set?.id ?? null;
@@ -532,7 +560,8 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
 
   // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
   const missing = stage !== 'predict' && grade.score < PASS_SCORE && grade.missingBackground !== null;
-  if (missing && grade.missingBackground) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
+  // a chosen session's gaps are about what the learner asked, not about the goal's map
+  if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
   const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
   if (box === 'simplify') {
     const reason = missing && grade.missingBackground ? `It needs ${grade.missingBackground.name}, which this goal's time does not also cover` : 'It was taking longer than its half hour allows';
@@ -568,7 +597,8 @@ function minutesOn(db: Database, state: SessionState, sessionId: string, nodeId:
  * through the rest of today's plan: dependents planned deeper are capped to explaining.
  */
 function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth: Depth, reason: string): void {
-  const changed = simplifyIdea(db, state.goalId, step.nodeId, depth, reason);
+  // a chosen session simplifies only itself: the goal's plan is the goal's sessions' business
+  const changed = state.goalId && !state.free ? simplifyIdea(db, state.goalId, step.nodeId, depth, reason) : new Map<string, Depth>([[step.nodeId, depth]]);
   for (const st of state.plan.steps) {
     const cap = changed.get(st.nodeId);
     if (cap === undefined) continue;
@@ -601,6 +631,19 @@ function tutorGoal(goal: Goal | undefined): TutorGoal {
   return { text: goal?.text ?? '', level: goal?.level ?? null, scope: goal?.scope ?? null, assessment: goal?.assessment ?? 'none', focus: goal?.focus ?? [], context: goal?.context ?? null };
 }
 
+/**
+ * The goal frame for a session. A chosen one adds what the learner asked to its goal's frame, at the
+ * session's level; with no goal, what was asked is the goal, studied for its own sake.
+ */
+function tutorGoalFor(db: Database, state: SessionState): TutorGoal {
+  const goal = state.goalId ? getGoal(db, state.goalId) : undefined;
+  const free = state.free;
+  if (!free) return tutorGoal(goal);
+  const asked = free.description ? `The learner asked for this session: "${free.description}"` : `The learner chose to learn ${joinNames(free.picked)} now.`;
+  if (goal) return { ...tutorGoal(goal), text: `${goal.text}\n\n${asked}`, level: free.level };
+  return { text: asked, level: free.level, scope: null, assessment: 'none', focus: [], context: null };
+}
+
 function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade): void {
   const kind = evidenceKindFor(stage);
   if (kind) {
@@ -631,7 +674,7 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
   const view = loadKnowledge(db);
   const node = view.nodes.get(step.nodeId);
   if (!node) throw new Error(`unknown node ${step.nodeId}`);
-  const simplified = new Set(listTargets(db, state.goalId, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId));
+  const simplified = new Set(state.goalId ? listTargets(db, state.goalId, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId) : []);
   const premiseIds = new Set<string>();
   for (const chain of view.index.into.get(node.id) ?? []) for (const p of chain.premises) premiseIds.add(p);
   const premises = [...premiseIds].map((id) => {
@@ -686,7 +729,8 @@ function previouslyTaughtNodes(ended: SessionRecord<SessionState>[]): { id: stri
  * it had carried over itself and not reached yet. Nothing carries once the idea is owned at its target depth.
  */
 export function carriedPlace(session: SessionRecord<SessionState>, reached: (nodeId: string, targetDepth: number) => boolean): { step: LessonStep; resume: ResumePoint } | null {
-  if (session.status !== 'abandoned') return null;
+  // a chosen session's half-done idea is not the goal's plan, so its planned sessions do not carry it
+  if (session.status !== 'abandoned' || session.state.free) return null;
   const s = session.state;
   let resume: ResumePoint | null = null;
   const step = s.plan.steps[s.stepIndex];
@@ -753,15 +797,17 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
   }
 }
 
-function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSnapshot {
+function snapshot(db: Database, session: SessionRecord<SessionState>, work: SessionWork | undefined): SessionSnapshot {
   const s = session.state;
   const step = s.phase === 'teach' ? s.plan.steps[s.stepIndex] : undefined;
   const stages = step ? stepStages(step) : [];
+  const goal = s.goalId ? getGoal(db, s.goalId) : undefined;
   return {
     id: session.id,
     goalId: s.goalId,
-    goalText: getGoal(db, s.goalId)?.text ?? '',
-    goalTitle: getGoal(db, s.goalId)?.title ?? getGoal(db, s.goalId)?.text ?? '',
+    goalText: goal?.text ?? '',
+    goalTitle: goal ? (goal.title ?? goal.text) : 'Free study',
+    free: s.free ? { description: s.free.description, picked: s.free.picked, counted: s.free.counted } : null,
     startedAt: session.startedAt,
     status: session.status,
     phase: s.phase,
@@ -789,6 +835,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>): SessionSn
     frontier: step ? frontierMap(db, s, step.nodeId) : null,
     practice: s.practiceSetId ? practiceView(db, s.practiceSetId) : null,
     practiceRevealed: s.practiceRevealed ?? null,
+    work: work?.forSession(session.id) ?? null,
   };
 }
 
@@ -845,11 +892,12 @@ function frontierMap(db: Database, s: SessionState, centerId: string): FrontierM
     if (view.fringe.has(id) || planned.has(id)) return 'learnable';
     return 'beyond';
   };
-  const { candidates } = candidatesForGoal(db, s.goalId, view);
+  // with no goal, the edge is the whole map's
+  const edgeCount = s.goalId ? candidatesForGoal(db, s.goalId, view).candidates.filter((c) => c.onFringe).length : view.fringe.size;
   return {
     nodes: near.nodeIds.filter((id) => view.nodes.has(id)).map((id) => ({ id, name: view.nodes.get(id)?.name ?? id, state: stateOf(id) })),
     edges: near.edges,
-    edgeCount: candidates.filter((c) => c.onFringe).length,
+    edgeCount,
   };
 }
 

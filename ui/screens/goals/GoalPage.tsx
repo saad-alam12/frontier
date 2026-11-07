@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { call, isCancelled } from '../../api';
 import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
+import { MAX_FREE_IDEAS } from '../../../backend/core/freeSession';
 import { BudgetBar, IdeaField, estimateLine, paceSentence, planSummary, trimSentence } from '../../components/budget';
 import { TimeChoice } from '../../components/TimeChoice';
 import { useSurface } from '../../lib/activity';
@@ -30,6 +31,7 @@ export function GoalPage({
   onEdit,
   onStartSession,
   onGoDeeper,
+  onLearn,
   onChanged,
   onNewGoal,
 }: {
@@ -39,6 +41,8 @@ export function GoalPage({
   onStartSession: () => Promise<void>;
   /** Go deeper on simplified ideas (all, or these): their time joins the goal and a session on them opens. */
   onGoDeeper: (nodeIds?: string[]) => Promise<void>;
+  /** Choose a session on these ideas of the goal ("Learn these now" on a skill). */
+  onLearn: (nodeIds: string[]) => void;
   onChanged: () => void;
   /** Start the new-goal flow with this sentence (an addition that reads like a goal of its own). */
   onNewGoal: (text: string) => void;
@@ -296,7 +300,7 @@ export function GoalPage({
         >
           <ul className="list-card skill-list">
             {skills.map((c) => (
-              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} />
+              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} onLearn={onLearn} />
             ))}
           </ul>
           {leftOut.length > 0 && (
@@ -501,13 +505,17 @@ function SkillRow({
   onToggle,
   deeper,
   onGoDeeper,
+  onLearn,
 }: {
   skill: GoalDetail['capabilities'][number];
   open: boolean;
   onToggle: () => void;
   deeper: Map<string, GoalDetail['simplified']['ideas'][number]>;
   onGoDeeper: (nodeId: string) => void;
+  /** Planned skills only: choose a session on the ideas not yet at their planned depth. */
+  onLearn?: (nodeIds: string[]) => void;
 }) {
+  const toLearn = skill.targets.filter((t) => t.depth > 0 && t.currentDepth < t.depth).map((t) => t.nodeId);
   return (
     <li className="flex flex-col gap-[12px]">
       <button type="button" className="row skill-head" aria-expanded={open} onClick={onToggle}>
@@ -553,6 +561,11 @@ function SkillRow({
             <span>
               <i className="pip is-ideal" /> the goal asks, beyond your time
             </span>
+            {onLearn && toLearn.length > 0 && (
+              <button type="button" className="link-button ml-auto" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS))}>
+                Learn these now
+              </button>
+            )}
           </div>
         </div>
       )}

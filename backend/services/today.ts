@@ -96,7 +96,8 @@ export function todayView(db: Database, now = new Date()): TodayView {
   const session = active
     ? {
         id: active.id,
-        goalTitle: titleOf(active.goalId),
+        // a chosen session not counted toward its goal still names it; with no goal it is free study
+        goalTitle: active.state.goalId ? titleOf(active.state.goalId) : 'Free study',
         planTitle: active.state.plan.title,
         where: describePlace(active.state),
       }

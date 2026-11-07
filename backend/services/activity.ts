@@ -11,7 +11,8 @@ import { activeSession } from '../store/sessions';
 import type { SessionState } from './session';
 
 export interface TickInput {
-  surface: Surface;
+  /** The screen; the backend decides whether session time is free study. */
+  surface: Exclude<Surface, 'free'>;
   seconds: number;
   goalId?: string | null;
   practiceSetId?: string | null;
@@ -28,7 +29,9 @@ export function tick(db: Database, input: TickInput, now = new Date()): void {
     if (!session) return;
     const state = session.state;
     const step = state.phase === 'teach' ? state.plan.steps[state.stepIndex] : undefined;
-    logTime(db, 'session', { goalId: session.goalId, sessionId: session.id, nodeId: step?.nodeId ?? null, practiceSetId: state.practiceSetId ?? null }, seconds, now);
+    // a chosen session not counted toward a goal is free study: no goal's time, also not through its ideas
+    const surface = state.free && session.goalId === null ? 'free' : 'session';
+    logTime(db, surface, { goalId: session.goalId, sessionId: session.id, nodeId: step?.nodeId ?? null, practiceSetId: state.practiceSetId ?? null }, seconds, now);
     return;
   }
   if (input.surface === 'practice' && input.practiceSetId) {

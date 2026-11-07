@@ -13,7 +13,7 @@ import { getSession, listSessionEvents, listSessions } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { loadKnowledge } from './knowledge';
 import { publicCard } from './session';
-import type { PublicCard, SessionState } from './session';
+import type { FreeSession, PublicCard, SessionState } from './session';
 
 export interface TrailSummary {
   id: string;
@@ -26,10 +26,14 @@ export interface TrailSummary {
   /** Ideas finished in this session. */
   ideas: string[];
   answers: number;
+  /** For a session the learner chose: what they asked for (their words, or the ideas they picked). */
+  asked: Asked | null;
 }
 
+export type Asked = Pick<FreeSession, 'description' | 'picked'>;
+
 export type TrailItem =
-  | { id: string; at: string; type: 'plan'; title: string; orientation: string; ideas: string[]; resumed: string | null }
+  | { id: string; at: string; type: 'plan'; title: string; orientation: string; ideas: string[]; resumed: string | null; asked: Asked | null }
   | { id: string; at: string; type: 'recall'; text: string; recalled: { name: string; score: number }[] }
   | { id: string; at: string; type: 'step'; idea: string; stage: Stage; card: PublicCard; response: LearnerResponse | null; grade: Grade | null; carried: boolean }
   | { id: string; at: string; type: 'idea-done'; idea: string; score: number | null }
@@ -56,7 +60,12 @@ function summarize(db: Database, s: SessionRecord<SessionState>): TrailSummary {
     status: s.status,
     ideas: steps.filter((st) => s.state.nodeStatus?.[st.nodeId] === 'done').map((st) => st.name),
     answers: listSessionEvents(db, s.id).filter((e) => e.kind === 'response' || e.kind === 'practice-answer').length,
+    asked: askedIn(s.state),
   };
+}
+
+function askedIn(state: SessionState): Asked | null {
+  return state.free ? { description: state.free.description, picked: state.free.picked } : null;
 }
 
 /** Sessions newest first; with `nodeId`, only sessions that taught or tested that idea. */
@@ -92,7 +101,7 @@ export function trail(db: Database, sessionId: string): Trail {
     const base = { id: e.id, at: e.at };
     switch (e.kind) {
       case 'start':
-        items.push({ ...base, type: 'plan', title: session.state.plan?.title ?? 'Session', orientation: session.state.plan?.orientation ?? '', ideas: (session.state.plan?.steps ?? []).map((st) => st.name), resumed: p.resumes ? name(p.resumes.nodeId) : null });
+        items.push({ ...base, type: 'plan', title: session.state.plan?.title ?? 'Session', orientation: session.state.plan?.orientation ?? '', ideas: (session.state.plan?.steps ?? []).map((st) => st.name), resumed: p.resumes ? name(p.resumes.nodeId) : null, asked: askedIn(session.state) });
         break;
       case 'reconstruct':
         items.push({ ...base, type: 'recall', text: p.text ?? '', recalled: (p.recalled ?? []).map((r) => ({ name: name(r.nodeId), score: r.score })) });

@@ -9,11 +9,23 @@ import { BudgetBar, paceSentence } from '../components/budget';
 import { formatHours } from '../../backend/core/budget';
 import { ASSESSMENT_LABEL } from './goals/labels';
 import type { GoalsView } from './GoalsScreen';
+import { startSessionInBackground } from '../lib/sessionWork';
 
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
 
 /** Today: what to do now, how each goal stands, what is fading, and the days ahead. */
-export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNavigate: (s: ScreenName) => void; onOpenGoals: (view: GoalsView) => void; onOpenPractice: (setId: string) => void }) {
+export function TodayScreen({
+  onNavigate,
+  onOpenGoals,
+  onOpenPractice,
+  onChoose,
+}: {
+  onNavigate: (s: ScreenName) => void;
+  onOpenGoals: (view: GoalsView) => void;
+  onOpenPractice: (setId: string) => void;
+  /** "Choose what to learn", beside the planned start. */
+  onChoose: () => void;
+}) {
   const [showAllFading, setShowAllFading] = useState(false);
   const [today, setToday] = useState<TodayView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -37,11 +49,11 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
       setBusy(null);
     }
   };
-  const startSession = (goalId: string) =>
-    run(`session:${goalId}`, async () => {
-      await call('session.start', { goalId });
-      onNavigate('session');
-    });
+  /** Planning goes on in the background; the Session screen shows it and opens the session when ready. */
+  const startSession = (goalId: string) => {
+    startSessionInBackground(goalId);
+    onNavigate('session');
+  };
   const startPractice = (goalId: string, kind: 'compound' | 'mock') =>
     run(`${kind}:${goalId}`, async () => {
       const set = await call('practice.start', { goalId, kind });
@@ -102,7 +114,7 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
       </div>
       {error && <Notice error>{error}</Notice>}
 
-      <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} />
+      <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} onChoose={onChoose} />
       {today.drafts.map((d) => (
         <div key={d.goalId} className="next-card is-quiet">
           <div className="mode">
@@ -190,6 +202,7 @@ function NextUp({
   onStartSession,
   onPractice,
   onOpenPractice,
+  onChoose,
 }: {
   today: TodayView;
   lead: TodayGoal | undefined;
@@ -198,6 +211,7 @@ function NextUp({
   onStartSession: (goalId: string) => void;
   onPractice: (goalId: string, kind: 'compound' | 'mock') => void;
   onOpenPractice: (setId: string) => void;
+  onChoose: () => void;
 }) {
   if (today.session) {
     return (
@@ -257,14 +271,17 @@ function NextUp({
               {busy === `compound:${lead.goalId}` ? 'Writing problems…' : 'Practise what is fading'}
             </Button>
             <Button onClick={() => onStartSession(lead.goalId)} disabled={busy !== null}>
-              {busy === `session:${lead.goalId}` ? 'Planning…' : 'Start a session instead'}
+              Start a session instead
             </Button>
           </>
         ) : (
           <Button kind="primary" onClick={() => onStartSession(lead.goalId)} disabled={busy !== null}>
-            {busy === `session:${lead.goalId}` ? 'Planning…' : "Start today's session"}
+            Start today&rsquo;s session
           </Button>
         )}
+        <Button kind="quiet" onClick={onChoose}>
+          Choose what to learn
+        </Button>
       </div>
     </div>
   );

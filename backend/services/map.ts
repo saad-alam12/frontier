@@ -123,6 +123,12 @@ export interface NodeCard {
   simplified: { goalId: string; goalTitle: string; reason: string; minutes: number }[];
 }
 
+/** An idea a chosen session brought in is cited to that session (design §4.5). */
+function sessionCitation(db: Database, sessionId: string): string | null {
+  const session = getSession<SessionState>(db, sessionId);
+  return session ? `your session of ${new Date(session.startedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}` : null;
+}
+
 export function nodeCard(db: Database, nodeId: string, now = new Date()): NodeCard {
   const view = loadKnowledge(db, now);
   const node = view.nodes.get(nodeId);
@@ -146,7 +152,7 @@ export function nodeCard(db: Database, nodeId: string, now = new Date()): NodeCa
     builtOn: (view.index.into.get(node.id) ?? []).map((c) => c.premises.map(ref)),
     leadsTo: [...new Set((view.index.outOf.get(node.id) ?? []).map((c) => c.conclusion))].map(ref),
     derivation: derivationPath(node.id, view.index, view.owned).map((s) => ({ ...ref(s.nodeId), owned: s.owned, premises: s.premises.map(ref) })),
-    sources: node.sources.map((s) => ({ sourceId: s.sourceId, title: getSource(db, s.sourceId)?.title ?? 'A source', locator: s.locator ?? null })),
+    sources: node.sources.map((s) => ({ sourceId: s.sourceId, title: getSource(db, s.sourceId)?.title ?? sessionCitation(db, s.sourceId) ?? 'A source', locator: s.locator ?? null })),
     bugs: listBugsForNode(db, node.id).map((b) => b.description),
     firstSession: session ? { id: session.id, date: session.startedAt.slice(0, 10), title: session.state.plan?.title ?? 'Session' } : null,
     simplified: listGoals(db)

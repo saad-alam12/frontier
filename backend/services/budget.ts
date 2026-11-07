@@ -65,6 +65,13 @@ export function attributeTime(db: Database, since?: string): TimeShare[] {
   return shares;
 }
 
+/** Free study (design §4.5): time in chosen sessions booked to no goal, which no goal's budget counts. */
+export function freeStudy(db: Database, since?: string): { minutes: number; span: Activity }[] {
+  return listActivity(db, { kinds: ['time'], since })
+    .filter((span) => span.data.surface === 'free')
+    .map((span) => ({ minutes: span.seconds / 60, span }));
+}
+
 export function spentByGoal(shares: TimeShare[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const s of shares) out.set(s.goalId, (out.get(s.goalId) ?? 0) + s.minutes);

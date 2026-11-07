@@ -15,6 +15,7 @@ import { getState, listEvidenceForSession } from '../backend/store/evidence';
 import { recordEvidence } from '../backend/services/evidence';
 import { refreshGoalFields } from '../backend/services/knowledge';
 import { respond, startSession } from '../backend/services/session';
+import { SessionWork } from '../backend/services/sessionWork';
 
 const maxCards = Number(process.argv[2] ?? 6);
 const dir = mkdtempSync(join(tmpdir(), 'frontier-live-session-'));
@@ -28,7 +29,7 @@ addCapabilities(db, goal.id, [
 refreshGoalFields(db);
 
 const settings = SettingsSchema.parse({ provider: process.env['FRONTIER_PROVIDER'] ?? 'agentSdk', apiKey: process.env['ANTHROPIC_API_KEY'] ?? '' });
-const deps = { db, provider: createProvider(settings, mkdtempSync(join(tmpdir(), 'frontier-agent-'))) };
+const deps = { db, provider: createProvider(settings, mkdtempSync(join(tmpdir(), 'frontier-agent-'))), work: new SessionWork() };
 
 const answers: Record<string, string> = {
   index: 'One strategy chosen for every player, written as a tuple.',

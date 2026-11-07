@@ -11,6 +11,9 @@ import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../servi
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
 import type { LessonPlan } from '../services/planner';
 import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot } from '../services/session';
+import type { SentAnswer, SessionWorkEvent, SessionWorkView } from '../services/sessionWork';
+import type { FreeBackgroundView, FreeChoice, FreeIdeaView, FreePlanView } from '../services/freeSession';
+import type { MakerRequest, MakerView } from '../services/sessionMaker';
 import type { Grade, LearnerResponse } from '../agents/tutor';
 import type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView } from '../services/practice';
 import type { TodayGoal, TodayView } from '../services/today';
@@ -39,6 +42,8 @@ export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind
 export type { SkillStatus } from '../core/goals';
 export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
+export type { SentAnswer, SessionWorkEvent, SessionWorkView };
+export type { FreeBackgroundView, FreeChoice, FreeIdeaView, FreePlanView, MakerRequest, MakerView };
 export type { Stage } from '../core/session';
 export type { Role } from '../llm/provider';
 export type { DeltaClass } from '../core/delta';
@@ -123,9 +128,20 @@ export interface ApiMethods {
   'probe.cancel': { input: { probeId: string }; output: boolean };
   'plan.preview': { input: { goalId: string }; output: LessonPlan };
   'session.current': { input: undefined; output: SessionSnapshot | null };
-  /** Plans and opens a session for the goal, or returns the active one. */
+  /** Planning or judging that is running (or failed) in the background, also while no session is open yet. */
+  'session.work': { input: undefined; output: SessionWorkView | null };
+  /** Plans and opens a session for the goal, or returns the active one. Planning goes on if the screen closes. */
   'session.start': { input: { goalId: string; focus?: string[] }; output: SessionSnapshot };
-  'session.respond': { input: { sessionId: string; response: LearnerResponse }; output: SessionSnapshot };
+  /** `draftKey`: the unsent answer's draft, deleted once the answer is accepted. */
+  'session.respond': { input: { sessionId: string; response: LearnerResponse; draftKey?: string }; output: SessionSnapshot };
+  /** A session the learner chooses, as it would be (ideas, aims, missing background, minutes), changing nothing. */
+  'session.freePreview': { input: FreeChoice; output: FreePlanView };
+  /** Ask the session maker to turn a description into a session; it runs in the background (see `session.maker`). */
+  'session.make': { input: MakerRequest; output: MakerView };
+  /** The description being made into a session, or the proposal it became; null when there is none. */
+  'session.maker': { input: undefined; output: MakerView | null };
+  /** Open a session the learner chose: new ideas join the map, and the session starts at its plan. */
+  'session.startFree': { input: FreeChoice; output: SessionSnapshot };
   /** Stop the answer being judged (Esc); the respond then fails with "cancelled". False when too late. */
   'session.cancel': { input: { sessionId: string }; output: boolean };
   /** Leave the session for now; it stays active and resumes at the same card. */
@@ -175,6 +191,10 @@ export interface ApiEvents {
   'library.progress': IngestProgress;
   'goals.changed': { goalId: string };
   'practice.graded': { setId: string; problemId: string };
+  /** Session work started, finished, failed or was stopped. */
+  'session.work': SessionWorkEvent;
+  /** The session maker started, finished or failed. */
+  'session.maker': { maker: MakerView | null };
 }
 export type EventName = keyof ApiEvents;
 

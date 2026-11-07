@@ -8,11 +8,23 @@ import { GoalFormScreen } from './goals/GoalForm';
 import { GoalPage } from './goals/GoalPage';
 import { GoalWizard } from './goals/GoalWizard';
 import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
+import { startSessionInBackground } from '../lib/sessionWork';
+import type { ChooseInit } from '../components/ChooseSheet';
 
 /** `text` starts a new goal with a sentence (an addition that reads like a goal of its own). */
 export type GoalsView = { name: 'list' } | { name: 'new'; text?: string } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
 
-export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (s: ScreenName) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>; initial?: GoalsView }) {
+export function GoalsScreen({
+  onNavigate,
+  onGoDeeper,
+  onChoose,
+  initial,
+}: {
+  onNavigate: (s: ScreenName) => void;
+  onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
+  onChoose: (init: ChooseInit) => void;
+  initial?: GoalsView;
+}) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
   const [view, setView] = useState<GoalsView>(initial ?? { name: 'list' });
 
@@ -70,11 +82,12 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
           onEdit={() => setView({ name: 'edit', goalId: detail.goal.id })}
           onChanged={() => void refresh()}
           onStartSession={async () => {
-            await call('session.start', { goalId: detail.goal.id });
+            startSessionInBackground(detail.goal.id);
             onNavigate('session');
           }}
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}
           onNewGoal={(text) => setView({ name: 'new', text })}
+          onLearn={(nodeIds) => onChoose({ goalId: detail.goal.id, pick: nodeIds })}
         />
       );
     }

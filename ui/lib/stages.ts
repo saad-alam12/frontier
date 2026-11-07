@@ -7,6 +7,13 @@ export function depthName(depth: number): string {
   return DEPTH_NAME[Math.max(0, Math.min(5, depth))] ?? 'Not yet';
 }
 
+/** What a session does with an idea, by its aim. */
+const AIM_LABEL = ['', 'Overview', 'Explain', 'Explain and derive', 'Explain, derive and apply'] as const;
+
+export function aimLabel(aim: number): string {
+  return AIM_LABEL[Math.max(1, Math.min(4, aim))] ?? 'Explain';
+}
+
 export const STAGE_LABEL: Record<Stage, string> = {
   predict: 'Predict',
   explain: 'Explain',

@@ -9,6 +9,8 @@ import { useTip } from './tooltip';
  */
 export const SERIES = ['#7489e6', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'] as const;
 export const OTHER = '#5a554c';
+/** Free study (sessions the learner chose, booked to no goal): a warm light grey, apart from every goal's colour. */
+export const FREE_STUDY = '#a8a294';
 
 export function seriesColor(index: number): string {
   return index >= 0 && index < SERIES.length ? (SERIES[index] as string) : OTHER;
