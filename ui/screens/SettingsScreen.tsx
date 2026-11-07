@@ -114,7 +114,7 @@ export function SettingsScreen() {
 
       <Section title="Models" gap={14}>
         <p className="m-0 text-[13px] text-muted">Which model does each job, and how hard it thinks. Higher effort is slower and uses more of your plan.</p>
-        <ul className="list-card">
+        <ul className="list-card settings-list">
           {ROLE_LABELS.map(({ role, label, does }) => (
             <RoleRow key={role} role={role} label={label} does={does} settings={settings} options={options} onChange={(patch) => void update(patch)} />
           ))}

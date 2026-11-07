@@ -211,7 +211,8 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   const isBusy = busy !== null || judging !== null;
   const current = snap.current;
   const notice = error ?? (failed ? (snap.owed ? notWritten(failed) : notSent(failed)) : null);
-  const crumbs = [{ label: snap.goalTitle, onClick: snap.goalId ? () => onNavigate('goals') : undefined }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
+  // a session named after its one idea shows the name once
+  const crumbs = [{ label: snap.goalTitle, onClick: snap.goalId ? () => onNavigate('goals') : undefined }, { label: snap.plan.title }, ...(current && current.name !== snap.plan.title ? [{ label: current.name }] : [])];
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
   return (
@@ -250,13 +251,12 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
       {snap.status === 'active' && (
         <div className="session-footer">
-          <Button kind="secondary" onClick={() => void pause()} disabled={isBusy} title="Leave now and continue this same session later">
+          <Button kind="secondary" onClick={() => void pause()} disabled={isBusy} title="Leave now and come back to this same session later. Your answers are saved.">
             Pause
           </Button>
-          <Button kind="quiet" onClick={() => setConfirmEnd(true)} disabled={isBusy}>
+          <Button kind="quiet" onClick={() => setConfirmEnd(true)} disabled={isBusy} title="Close this session. Your answers are saved, and the next session starts where you stopped.">
             End session
           </Button>
-          <span className="t-small text-muted">Pause keeps this session open. Your answers are saved either way.</span>
         </div>
       )}
       <ConfirmDialog

@@ -104,7 +104,7 @@ export function TodayScreen({
           <span className="figure-label">{today.week.minutesTarget > 0 ? 'of the week your goals ask for' : 'studied'}</span>
           {today.week.minutesTarget > 0 && <Meter value={today.week.minutesStudied / today.week.minutesTarget} accent />}
         </div>
-        <MetaLine small items={[`${today.week.sessions} ${today.week.sessions === 1 ? 'session' : 'sessions'}`, `${today.week.practised} ${today.week.practised === 1 ? 'idea' : 'ideas'} practised`]} />
+        <MetaLine small items={[`${today.week.sessions} ${today.week.sessions === 1 ? 'session' : 'sessions'}`, ...(today.week.practised ? [`${today.week.practised} ${today.week.practised === 1 ? 'idea' : 'ideas'} practised`] : [])]} />
       </div>
     </>
   );

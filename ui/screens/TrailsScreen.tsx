@@ -79,8 +79,9 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
               </span>
               {t.asked && <span className="t-small line-clamp-2 text-secondary">{t.asked.description ? `“${t.asked.description}”` : `You picked ${joinNames(t.asked.picked).replace(/\$/g, '')}`}</span>}
               <span className="t-small text-muted">
-                {t.ideas.length ? `${t.ideas.length} ${t.ideas.length === 1 ? 'idea' : 'ideas'}` : 'No idea finished'} · {t.answers} {t.answers === 1 ? 'answer' : 'answers'}
-                {t.status === 'abandoned' ? ' · ended early' : t.status === 'active' ? ' · in progress' : ''}
+                {[t.ideas.length ? `${t.ideas.length} ${t.ideas.length === 1 ? 'idea' : 'ideas'}` : null, `${t.answers} ${t.answers === 1 ? 'answer' : 'answers'}`, t.status === 'abandoned' ? 'ended early' : t.status === 'active' ? 'in progress' : null]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
             </button>
           </li>
@@ -100,7 +101,7 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
               <h1 className="t-display">{trail.summary.title}</h1>
               <MetaLine
                 small
-                items={[formatTime(trail.summary.startedAt), duration(trail.summary.startedAt, trail.summary.endedAt), trail.summary.status === 'abandoned' ? 'Ended early' : trail.summary.status === 'active' ? 'In progress' : 'Finished', trail.summary.ideas.length ? `${trail.summary.ideas.length} ideas` : null]}
+                items={[`Started at ${formatTime(trail.summary.startedAt)}`, duration(trail.summary.startedAt, trail.summary.endedAt), trail.summary.status === 'abandoned' ? 'Ended early' : trail.summary.status === 'active' ? 'In progress' : 'Finished', trail.summary.ideas.length ? `${trail.summary.ideas.length} ideas` : null]}
               />
             </div>
             <div className="replay-bar">

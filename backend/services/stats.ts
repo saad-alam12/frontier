@@ -46,7 +46,8 @@ export interface StatsView {
   hardest: { nodeId: string; name: string; attempts: number; avgScore: number; lastScore: number }[];
   misconceptions: { nodeId: string; idea: string; description: string; firstSeen: string; lastSeen: string; cameBack: boolean; resolved: boolean }[];
   overlap: { savedMinutes: number; ideas: { nodeId: string; name: string; goals: string[]; depth: number }[] };
-  budgets: { goalId: string; title: string; totalMinutes: number | null; spentMinutes: number; plannedMinutes: number; ready: number; planned: number; pace: string }[];
+  /** `noLimit`: a goal with no time limit, whose plan is what is left rather than a budget. */
+  budgets: { goalId: string; title: string; totalMinutes: number | null; spentMinutes: number; plannedMinutes: number; noLimit: boolean; ready: number; planned: number; pace: string }[];
   /** Learner speed against the plan's estimates; 1 means as planned. */
   speed: number;
   /** Minutes of free study in the range: chosen sessions booked to no goal (none under a goal filter). */
@@ -142,6 +143,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
       totalMinutes: p.totalMinutes,
       spentMinutes: p.spentMinutes,
       plannedMinutes: p.plan.plannedMinutes,
+      noLimit: p.noLimit,
       ready: p.plan.ideas.ready,
       planned: p.plan.ideas.total - p.plan.ideas.cut,
       pace: p.pace.kind,

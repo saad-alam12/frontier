@@ -59,6 +59,12 @@ export function GoalPage({
   const [open, setOpen] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState(false);
   const [adding, setAdding] = useState(false);
+  /** The goal an open session belongs to (null for a free session); undefined when none is open. */
+  const [openSession, setOpenSession] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    void call('session.current').then((s) => setOpenSession(s && s.phase !== 'done' ? s.goalId : undefined));
+  }, [goal.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,8 +183,9 @@ export function GoalPage({
         {goal.context && <ContextNote text={goal.context} />}
         <MetaLine
           items={[
-            course ? 'Course' : 'On your own',
-            goal.assessment !== 'none' ? ASSESSMENT_LABEL[goal.assessment] : 'Open-ended',
+            course ? 'Course' : null,
+            goal.assessment !== 'none' ? ASSESSMENT_LABEL[goal.assessment] : null,
+            goal.wantedLevel ? 'No time limit' : null,
             goal.targetGrade ? `Target ${goal.targetGrade}` : null,
             goal.date ? formatDate(goal.date) : null,
           ]}
@@ -240,8 +247,14 @@ export function GoalPage({
                 </div>
               )}
               <div className="button-row">
-                <Button kind="primary" onClick={() => void run('session', onStartSession)} disabled={!compiled || busy !== null}>
-                  {busy === 'session' ? 'Planning…' : "Start today's session"}
+                {/* one primary action: a proposal waiting for an answer comes first */}
+                <Button
+                  kind={goal.addition?.state === 'ready' || goal.remap?.state === 'ready' ? 'secondary' : 'primary'}
+                  onClick={() => void run('session', onStartSession)}
+                  disabled={!compiled || busy !== null}
+                  title={openSession !== undefined && openSession !== goal.id ? 'A session is open. Finish or end it to start one for this goal.' : undefined}
+                >
+                  {busy === 'session' ? 'Planning…' : openSession !== undefined ? 'Continue session' : "Start today's session"}
                 </Button>
                 <Button onClick={() => setEditingTime(true)}>{goal.budget || goal.wantedLevel ? 'Change the time' : 'Set the time'}</Button>
                 {/* one proposal at a time: not while an addition or a new map waits for an answer */}

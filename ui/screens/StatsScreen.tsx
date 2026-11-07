@@ -179,7 +179,8 @@ export function StatsScreen() {
               )}
             </Card>
 
-            <Card title="Shared ideas" note={view.overlap.ideas.length ? `Ideas more than one goal needs, learned once. About ${formatHours(view.overlap.savedMinutes)} saved so far.` : 'Ideas two goals both need show here, learned once and counted once.'}>
+            <Card title="Shared ideas" note={`Ideas more than one goal needs, learned once and counted once.${view.overlap.savedMinutes >= 1 ? ` About ${formatHours(view.overlap.savedMinutes)} saved so far.` : ''}`}>
+              {view.overlap.ideas.length === 0 && <p className="t-small m-0 text-muted">No idea is shared between your goals yet.</p>}
               {view.overlap.ideas.length > 0 && (
                 <ul className="stat-list">
                   {view.overlap.ideas.map((o) => (
@@ -213,7 +214,7 @@ export function StatsScreen() {
             )}
 
             {(view.budgets.length > 0 || view.freeMinutes > 0) && (
-              <Card title="Time against budgets" wide note={`New ideas take you about ${view.speed.toFixed(1)}× the time the plans estimate.`}>
+              <Card title="Time against plans" wide note={`New ideas take you about ${view.speed.toFixed(1)}× the time the plans estimate.`}>
                 <ul className="budget-list">
                   {view.budgets.map((b) => (
                     <li key={b.goalId}>
@@ -223,10 +224,11 @@ export function StatsScreen() {
                           {b.title}
                         </span>
                         <span className="t-small text-secondary">
+                          {b.noLimit ? 'No time limit · ' : ''}
                           {b.ready} of {b.planned} ideas ready
                         </span>
                       </span>
-                      <BudgetBar progress={{ totalMinutes: b.totalMinutes, spentMinutes: b.spentMinutes, plannedMinutes: b.plannedMinutes, expectedByNow: null }} />
+                      <BudgetBar progress={{ totalMinutes: b.totalMinutes, spentMinutes: b.spentMinutes, plannedMinutes: b.plannedMinutes, expectedByNow: null, noLimit: b.noLimit }} />
                     </li>
                   ))}
                   {view.freeMinutes > 0 && (

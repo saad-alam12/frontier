@@ -172,12 +172,13 @@ export function BudgetBar({
   caption?: boolean;
 }) {
   const { totalMinutes, spentMinutes, expectedByNow, plannedMinutes, noLimit } = progress;
-  const ahead = noLimit ? `about ${formatHours(plannedMinutes)} left` : `${formatHours(plannedMinutes)} planned ahead`;
+  // nothing planned is said by the bar itself, not by "0 min planned ahead"
+  const ahead = plannedMinutes < 1 ? null : noLimit ? `about ${formatHours(plannedMinutes)} left` : `${formatHours(plannedMinutes)} planned ahead`;
   const total = Math.max(totalMinutes ?? spentMinutes + plannedMinutes, 1);
   const spentPct = Math.min(100, (spentMinutes / total) * 100);
   const plannedPct = Math.min(100 - spentPct, (plannedMinutes / total) * 100);
   const tick = expectedByNow !== null && totalMinutes ? Math.min(100, (expectedByNow / total) * 100) : null;
-  const label = `${formatHours(spentMinutes)} spent, ${ahead}${totalMinutes ? ` of ${formatHours(totalMinutes)}` : ''}`;
+  const label = `${formatHours(spentMinutes)} spent${ahead ? `, ${ahead}` : ''}${totalMinutes ? ` of ${formatHours(totalMinutes)}` : ''}`;
   return (
     <div className={compact ? 'budget-bar is-compact' : 'budget-bar'}>
       <div className="budget-track" role="img" aria-label={label} title={label}>
@@ -187,7 +188,8 @@ export function BudgetBar({
       </div>
       {compact && caption && (
         <div className="t-caption text-muted">
-          {formatHours(spentMinutes)} spent{totalMinutes !== null ? ` of ${formatHours(totalMinutes)}` : ''} · {ahead}
+          {formatHours(spentMinutes)} spent{totalMinutes !== null ? ` of ${formatHours(totalMinutes)}` : ''}
+          {ahead && ` · ${ahead}`}
         </div>
       )}
       {!compact && (
@@ -195,9 +197,11 @@ export function BudgetBar({
           <span>
             <i className="swatch is-spent" /> {formatHours(spentMinutes)} spent
           </span>
-          <span>
-            <i className="swatch is-planned" /> {ahead}
-          </span>
+          {ahead && (
+            <span>
+              <i className="swatch is-planned" /> {ahead}
+            </span>
+          )}
           {totalMinutes !== null && <span className="text-muted">of {formatHours(totalMinutes)}</span>}
         </div>
       )}

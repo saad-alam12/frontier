@@ -448,9 +448,11 @@ html:not(.is-mac) .window-drag {
 
 /* ---------- Breadcrumb ---------- */
 
+/* one line: long names are cut with an ellipsis instead of wrapping under a trailing "/" */
 .breadcrumb {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
   align-items: baseline;
   gap: 10px;
   font-size: 15px;
@@ -468,8 +470,21 @@ html:not(.is-mac) .window-drag {
 .breadcrumb button:hover {
   color: var(--text);
 }
+.breadcrumb > li > :not(.sep) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb > li > :last-child:not(.sep) {
+  flex-shrink: 1;
+}
 .breadcrumb .sep {
+  flex-shrink: 0;
   color: var(--node-muted);
+}
+nav:has(> .breadcrumb) {
+  min-width: 0;
 }
 .breadcrumb [aria-current='page'] {
   color: var(--text);
@@ -2812,6 +2827,9 @@ button.map-label:hover {
   align-items: center;
   gap: 12px 18px;
 }
+.stats-filters > .select-quiet {
+  margin-left: auto;
+}
 .stats-filters .mini-chip {
   display: inline-flex;
   align-items: center;
@@ -3319,6 +3337,43 @@ button.map-label:hover {
 .settings-control .btn {
   min-height: 36px;
   font-size: 13px;
+}
+/* the erase picker: compact checkable rows, scrolling when the map is large */
+.erase-list {
+  max-height: 336px;
+  overflow-y: auto;
+  border-radius: 14px;
+}
+.erase-list > li {
+  padding: 0;
+}
+.erase-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 18px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.erase-item input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.erase-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* a list of rows inside Settings (the models) reads as one more settings group */
+.settings-list {
+  border-radius: 14px;
+}
+.settings-list > li {
+  padding: 14px 18px;
+}
+.settings-list .input {
+  min-height: 36px;
+  font-size: 14px;
 }
 .settings-path {
   display: flex;

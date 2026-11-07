@@ -1,0 +1,158 @@
+/**
+ * Build a sandbox with realistic data for screenshots and manual checks, through the real services
+ * and the fake model (no network): `npx tsx scripts/sandbox.ts <sandbox folder> [--open-session]`.
+ * The folder gets a settings.json whose data folder is `<sandbox>/data`; start the app on it with
+ * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`.
+ * Never point it at the learner's data: the folder is wiped first.
+ */
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { FakeProvider } from '../backend/llm/FakeProvider';
+import type { CompleteRequest } from '../backend/llm/provider';
+import { openDatabase } from '../backend/store/db';
+import type { Database } from '../backend/store/db';
+import { logTime } from '../backend/store/activity';
+import { addCapabilities, markCompiled } from '../backend/store/goals';
+import { seedExampleGraph } from '../backend/store/seed/exampleGraph';
+import { approveGoalPlan, createGoalFromForm } from '../backend/services/goals';
+import { reviewCard, saveCard } from '../backend/services/cards';
+import { recordEvidence } from '../backend/services/evidence';
+import { refreshGoalFields } from '../backend/services/knowledge';
+import { abandonSession, respond, startSession } from '../backend/services/session';
+import type { SessionSnapshot } from '../backend/services/session';
+import { startFreeSession } from '../backend/services/freeSession';
+import { SessionMaker } from '../backend/services/sessionMaker';
+import { SessionWork } from '../backend/services/sessionWork';
+
+const [folderArg, ...flags] = process.argv.slice(2);
+if (!folderArg) {
+  console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session]');
+  process.exit(2);
+}
+const folder = resolve(folderArg);
+if (folder.includes(`${join('Frontier')}`) && !folder.includes('sandbox')) throw new Error('refusing a folder that looks like real data');
+rmSync(folder, { recursive: true, force: true });
+const dataFolder = join(folder, 'data');
+mkdirSync(dataFolder, { recursive: true });
+writeFileSync(join(folder, 'settings.json'), JSON.stringify({ dataFolder }, null, 2));
+
+/** A tutor that writes a plausible card for every stage and grades from a cycle of scores. */
+function tutor(scores: number[]) {
+  let i = 0;
+  return (req: CompleteRequest<unknown>) => {
+    const text = req.messages[0]?.content ?? '';
+    if (req.submit.name === 'submit_recall') {
+      const ids = [...text.matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1]);
+      const closing = /add the closing summary/.test(text);
+      return { recalled: ids.map((nodeId) => ({ nodeId, score: 0.8, note: 'Named it and said why.' })), canDo: closing ? 'You can find equilibria in small games and say why they hold.' : null, previewQuestion: closing ? 'What changes when one player moves first?' : null };
+    }
+    const next = /roduce the \*\*(\w+)\*\* card/.exec(text)?.[1] ?? null;
+    const grading = /Grade the response/.test(text);
+    const score = scores[i++ % scores.length] ?? 0.8;
+    const grade = grading ? { score, feedback: score >= 0.7 ? 'Right, and you said why: no player gains by moving alone.' : 'Close, but you checked only one player. Each must be best-responding.', misconception: null, confidentlyWrong: false, missingBackground: null } : null;
+    const cards: Record<string, unknown> = {
+      predict: { stage: 'predict', prompt: 'Two firms set prices at the same time. What would make a pair of prices stable, so neither firm wants to change?' },
+      explain: { stage: 'explain', markdown: '## The idea\n\nA profile is stable when **no player gains by changing their own strategy alone**. Formally, for every player $i$:\n\n$$u_i(s_i, s_{-i}) \\ge u_i(s_i\', s_{-i}) \\quad \\text{for all } s_i\'$$\n\nSo each strategy is a best response to the others.' },
+      check: { stage: 'check', question: 'In the game below, is (Up, Left) stable? Say which deviation you checked.', answerKey: 'Yes', rubric: ['says yes', 'checks both players'] },
+      derive: { stage: 'derive', prompt: 'Rebuild the definition from best responses: what must hold for each player?', answerKey: 'mutual best responses', rubric: ['uses best responses'] },
+      connect: { stage: 'connect', prompt: 'State one link between this idea and dominant strategies.' },
+      compress: { stage: 'compress', prompt: 'In your own words, at most two sentences.' },
+      use: { stage: 'use', task: 'Find every pure equilibrium of the pricing game, and say why the high-high pair is not one.', answerKey: '(Low, Low)', rubric: ['finds it', 'explains high-high'] },
+      index: { stage: 'index', gist: 'A strategy profile lists one strategy for each player.', placement: 'Equilibria are profiles with a property, so this comes first.', question: 'What does a profile contain?', answerKey: 'one strategy per player' },
+      support: { stage: 'support', markdown: 'Worked example: check each player in turn, holding the other fixed.' },
+      reteach: { stage: 'reteach', markdown: 'Think of it one player at a time, not as the best outcome for all.' },
+    };
+    return { grade, card: next ? cards[next] : null };
+  };
+}
+
+function planner(req: CompleteRequest<unknown>) {
+  const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+  const ids = [...text.matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1] as string);
+  return { title: 'Profiles, best responses and equilibrium', orientation: 'Today builds Nash equilibrium from the two ideas it is made of, then puts it to work.', steps: ids.slice(0, 3).map((nodeId) => ({ nodeId, why: 'The exam asks you to find equilibria by hand.' })) };
+}
+
+const sessionPlanner = {
+  title: 'How attention works, from scratch',
+  summary: 'How a model weighs earlier words when it reads the next one.',
+  level: 'intuition',
+  ideas: [{ ref: 'n2', aim: 2, why: 'It is what you asked about.' }],
+  newIdeas: [
+    { tempId: 'n1', kind: 'term', name: 'Dot product', statement: 'Multiply two lists of numbers entry by entry and add the results.', premises: [] },
+    { tempId: 'n2', kind: 'claim', name: 'Attention', statement: 'Each word scores every earlier word by a dot product and takes a weighted mix of them.', premises: ['n1'] },
+  ],
+  background: [],
+};
+
+const provider = new FakeProvider({ tutor: tutor([0.85, 0.6, 0.9]), tutorEscalation: tutor([0.8]), planner, sessionPlanner: [sessionPlanner], extractor: () => ({ nodes: [], chains: [], conflicts: [] }), matcher: () => ({ decisions: [] }) });
+const db: Database = openDatabase(join(dataFolder, 'frontier.db'));
+const ids = seedExampleGraph(db);
+const id = (key: string) => ids.get(key) as string;
+const work = new SessionWork();
+const deps = { db, provider, work };
+const now = new Date();
+const daysAgo = (days: number, hour = 19) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, hour, 10);
+
+// what the learner brought: the basics of games
+for (const key of ['strategy', 'payoff', 'player']) if (ids.has(key)) recordEvidence(db, { nodeId: id(key), kind: 'explain', score: 0.95, reasoning: 'probe' });
+
+// a goal with a fixed time, mapped and approved
+const exam = createGoalFromForm(db, { text: 'Pass the game theory exam with a top grade', budget: { mode: 'total', hours: 20 }, wantedLevel: null, context: 'Written exam in December. I learn best from worked examples.', materials: [] }, { draft: true });
+addCapabilities(db, exam.id, [
+  { statement: 'Can find the Nash equilibria of a small game by hand', targets: ['profile', 'bestResponse', 'nash', 'findPureNash'].map((k) => ({ nodeId: id(k), depth: k === 'nash' ? (3 as const) : (2 as const), core: k === 'nash' })) },
+  { statement: 'Can use dominance to simplify a game', targets: ['dominant', 'dominated', 'iesds'].map((k) => ({ nodeId: id(k), depth: 2 as const })) },
+  { statement: 'Can solve a sequential game by backward induction', targets: ['backwardInduction', 'subgame', 'spe'].filter((k) => ids.has(k)).map((k) => ({ nodeId: id(k), depth: 2 as const })) },
+]);
+markCompiled(db, exam.id, 'Game theory exam', [], { level: 'rigorous', scope: 'Solve and explain small simultaneous and sequential games, as the exam asks.' });
+approveGoalPlan(db, exam.id);
+
+// a goal with no time limit, at working depth
+const pricing = createGoalFromForm(db, { text: 'Understand how firms compete on price', budget: null, wantedLevel: 'working', context: 'For reading papers on pricing at work.', materials: [] }, { draft: true });
+addCapabilities(db, pricing.id, [{ statement: 'Can explain why competing firms end up at low prices', targets: ['nash', 'dominant', 'dominantNash'].filter((k) => ids.has(k)).map((k) => ({ nodeId: id(k), depth: 2 as const })) }]);
+markCompiled(db, pricing.id, 'Price competition', [], { level: 'working', scope: 'Explain the main models of price competition in plain words.' });
+approveGoalPlan(db, pricing.id);
+refreshGoalFields(db);
+
+/** Answer cards until the session reaches `phase`, or `cards` answers have gone. */
+async function answer(snap: SessionSnapshot, cards: number): Promise<SessionSnapshot> {
+  let s = await respond(deps, snap.id, { answer: '' });
+  for (let i = 0; i < cards && s.phase === 'teach'; i += 1) s = await respond(deps, s.id, { answer: 'No player can gain by changing their own strategy alone, so each is a best response.', confidence: 0.66 });
+  return s;
+}
+
+// three earlier planned sessions on the exam goal, a free session, and study time over two weeks
+for (const [days, minutes] of [
+  [12, 35],
+  [9, 50],
+  [5, 42],
+] as const) {
+  const snap = await answer(await startSession(deps, exam.id), 8);
+  logTime(db, 'session', { goalId: exam.id, sessionId: snap.id, nodeId: snap.current?.nodeId ?? null }, minutes * 60, daysAgo(days));
+  await abandonSession(deps, snap.id);
+  db.prepare('UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?').run(daysAgo(days, 18).toISOString(), daysAgo(days).toISOString(), snap.id);
+}
+const maker = new SessionMaker();
+const made = await maker.make(deps, { description: 'How attention works in a transformer', goalId: null });
+const free = await answer(await startFreeSession(deps, maker, { goalId: null, counted: false, proposalId: made.id, addFirst: ['n1'] }), 6);
+logTime(db, 'free', { goalId: null, sessionId: free.id, nodeId: free.current?.nodeId ?? null }, 25 * 60, daysAgo(2));
+await abandonSession(deps, free.id);
+db.prepare('UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?').run(daysAgo(2, 18).toISOString(), daysAgo(2).toISOString(), free.id);
+logTime(db, 'practice', { goalId: exam.id }, 15 * 60, daysAgo(1));
+
+// flashcards for hard facts, some reviewed
+const cards = [
+  { front: 'State the condition for a Nash equilibrium', back: '$u_i(s_i, s_{-i}) \\ge u_i(s_i\', s_{-i})$ for every player $i$ and every $s_i\'$.', node: 'nash' },
+  { front: 'What is a strictly dominated strategy?', back: 'One that another strategy beats against every choice of the others.', node: 'dominated' },
+  { front: 'What does IESDS stand for?', back: 'Iterated elimination of strictly dominated strategies.', node: 'iesds' },
+  { front: 'What is a best response?', back: 'A strategy with the highest payoff given what the others play.', node: 'bestResponse' },
+  { front: 'Define a strategy profile', back: 'A list of one strategy for each player.', node: 'profile' },
+];
+for (const [i, c] of cards.entries()) {
+  const card = saveCard(db, { front: c.front, back: c.back, nodeIds: [id(c.node)], goalId: exam.id });
+  if (i < 3) reviewCard(db, card.id, 3, daysAgo(4 - i));
+}
+refreshGoalFields(db);
+
+if (flags.includes('--open-session')) await answer(await startSession(deps, exam.id), 1);
+db.close();
+console.log(`sandbox ready: FRONTIER_USER_DATA=${folder} npx electron-vite dev --remoteDebuggingPort 9333`);

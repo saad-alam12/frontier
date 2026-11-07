@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
@@ -37,6 +37,8 @@ export function App() {
   /** An idea to open on the Map ("Show on map"). */
   const [mapIdea, setMapIdea] = useState<{ id: string; key: number } | null>(null);
   const [cardsDue, setCardsDue] = useState(0);
+  /** Bumped when the sidebar's current place is clicked again: the place opens at its top level. */
+  const [visit, setVisit] = useState(0);
 
   useEffect(() => {
     startActivityTicker();
@@ -54,7 +56,9 @@ export function App() {
   }, [screen]);
 
   const navigate = (s: ScreenName) => {
+    if (s === screen) setVisit((v) => v + 1);
     setPracticeSet(null);
+    setTrailId(null);
     setGoalsView(null);
     setCardsView(null);
     setMapIdea(null);
@@ -86,17 +90,19 @@ export function App() {
     <div className="app">
       <div className="window-drag" aria-hidden="true" />
       <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} counts={{ cards: cardsDue }} />
-      {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
-      {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onChoose={openChoose} onOpenCards={() => openCards({ tab: 'review' })} />}
-      {screen === 'session' && <SessionScreen onNavigate={navigate} onChoose={openChoose} />}
-      {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
-      {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
-      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} />}
-      {screen === 'stats' && <StatsScreen />}
-      {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
-      {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
-      {screen === 'library' && <LibraryScreen />}
-      {screen === 'settings' && <SettingsScreen />}
+      <Fragment key={visit}>
+        {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
+        {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onChoose={openChoose} onOpenCards={() => openCards({ tab: 'review' })} />}
+        {screen === 'session' && <SessionScreen onNavigate={navigate} onChoose={openChoose} />}
+        {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
+        {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
+        {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} />}
+        {screen === 'stats' && <StatsScreen />}
+        {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
+        {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
+        {screen === 'library' && <LibraryScreen />}
+        {screen === 'settings' && <SettingsScreen />}
+      </Fragment>
       {choose && (
         <ChooseSheet
           key={choose.key}

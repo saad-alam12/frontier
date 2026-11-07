@@ -102,7 +102,7 @@ export function GoalsScreen({
       <div className="section-head items-end">
         <div className="flex flex-col gap-[10px]">
           <h1 className="t-display">Goals</h1>
-          <p className="t-lead m-0">What you are learning toward. Each goal gets a plan that fits the time you give it.</p>
+          <p className="t-lead m-0">What you are learning toward. Each goal gets a plan that fits the time you give it, or the depth you want.</p>
         </div>
         <Button kind="primary" onClick={() => setView({ name: 'new' })}>
           New goal
@@ -124,7 +124,7 @@ export function GoalsScreen({
                 <MetaLine
                   small
                   items={[
-                    g.goal.kind === 'course' ? 'Course' : 'On your own',
+                    g.goal.kind === 'course' ? 'Course' : null,
                     g.goal.assessment !== 'none' ? ASSESSMENT_LABEL[g.goal.assessment] : null,
                     g.goal.date ? formatDate(g.goal.date) : null,
                     g.goal.status === 'paused' ? 'Paused' : null,
