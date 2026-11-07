@@ -219,18 +219,18 @@ export function MapScreen({
 
       {card && (
         <aside className="map-overlay map-card" aria-label="Idea">
+          {/* one quiet row: how much of the map to show around the idea, and close */}
           <div className="map-card-bar">
-            <span className="t-small text-muted">Only its neighbourhood</span>
+            <div className="toggle-row" role="radiogroup" aria-label="Show on the map" title="Show the whole map, or only the ideas this many links away">
+              {[0, 1, 2, 3].map((h) => (
+                <button key={h} type="button" role="radio" aria-checked={hops === h} className="mini-chip" onClick={() => setHops(h)}>
+                  {h === 0 ? 'All' : `${h} ${h === 1 ? 'step' : 'steps'}`}
+                </button>
+              ))}
+            </div>
             <button type="button" className="map-button" aria-label="Close" onClick={() => select(null)}>
               ×
             </button>
-          </div>
-          <div className="toggle-row" role="radiogroup" aria-label="Only its neighbourhood">
-            {[0, 1, 2, 3].map((h) => (
-              <button key={h} type="button" role="radio" aria-checked={hops === h} className="mini-chip" onClick={() => setHops(h)}>
-                {h === 0 ? 'Off' : `${h} ${h === 1 ? 'step' : 'steps'}`}
-              </button>
-            ))}
           </div>
           <NodeCardView
             card={card}

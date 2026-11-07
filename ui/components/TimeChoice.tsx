@@ -90,7 +90,6 @@ export function TimeChoice({
         <TimePicker value={budget} onChange={onBudget} resources={resources} allowPerResource={allowPerResource} defaultWeeks={defaultWeeks} />
       ) : (
         <div className="flex flex-col gap-[12px]">
-          <div className="text-[15px] text-text">How deep do you want to go?</div>
           <RadioCards label="How deep" options={WANTED_LEVEL_OPTIONS} value={level} onChange={onLevel} stack />
         </div>
       )}

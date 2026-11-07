@@ -1,3 +1,4 @@
+import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
 import { call, isCancelled } from '../../api';
 import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
@@ -467,7 +468,7 @@ function TimeEditor({ detail, onClose, onSaved }: { detail: GoalDetail; onClose:
   return (
     <div className="flex flex-col gap-[22px]">
       <div className="flex flex-col gap-[4px]">
-        <h2 className="t-heading">How much time do you give it?</h2>
+        <h2 className="t-heading">{limited ? 'How much time do you give it?' : 'How deep do you want to go?'}</h2>
         <p className="t-small m-0 text-secondary">
           {remaps
             ? limited
@@ -763,7 +764,9 @@ function WorkNotice({ detail, onRetry }: { detail: GoalDetail; onRetry: () => vo
   if (work.state === 'failed')
     return (
       <div className="button-row">
-        <Notice error>Mapping the goal failed: {work.message}</Notice>
+        <Notice error detail={work.message}>
+          Mapping the goal failed. {plainError(work.message)}
+        </Notice>
         <Button kind="quiet" onClick={onRetry}>
           Try again
         </Button>

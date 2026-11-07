@@ -133,7 +133,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
           <input id="goal-background" className="input" value={background} onChange={(e) => setBackground(e.target.value)} />
         </Field>
         <ContextField value={context} onChange={setContext} note={contextNote} />
-        <Question label="How much time do you give it?" hint={depthNote ?? undefined}>
+        <Question label={limited ? 'How much time do you give it?' : 'How deep do you want to go?'} hint={depthNote ?? undefined}>
           <TimeChoice
             limited={limited}
             onLimited={setLimited}

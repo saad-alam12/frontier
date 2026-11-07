@@ -71,8 +71,8 @@ export function NodeCardView({
           ))}
         </div>
         <div className="t-small text-secondary">
-          {depthName(card.depth)}
-          {card.targetDepth > card.depth ? `, aiming for ${depthName(card.targetDepth).toLowerCase()}` : ''}
+          {card.depth === 0 ? 'Not learned yet' : depthName(card.depth)}
+          {card.targetDepth > card.depth ? ` · your goals ask you to ${depthName(card.targetDepth).toLowerCase()} it` : ''}
           {card.depth > 0 ? ` · ${Math.round(card.recall * 100)}% recall now` : ''}
         </div>
       </div>

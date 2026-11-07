@@ -143,6 +143,9 @@ export function GoalsScreen({
 function cardStatus(g: GoalDetail): string {
   if (g.goal.status === 'draft') return g.capabilities.length ? 'Plan ready to approve' : 'Setting up';
   if (!g.capabilities.length) return g.work.state === 'idle' ? 'Not mapped yet' : 'Mapping…';
+  // a proposal waiting for an answer is what the goal needs from the learner first
+  if (g.goal.addition?.state === 'ready') return 'An addition to review';
+  if (g.goal.remap?.state === 'ready') return 'A new map to review';
   const p = g.progress?.plan;
   return p ? `${p.ideas.ready} of ${p.ideas.total - p.ideas.cut} ideas ready` : '';
 }

@@ -70,9 +70,10 @@ export function Empty({ children, action }: { children: ReactNode; action?: Reac
   );
 }
 
-export function Notice({ children, error }: { children: ReactNode; error?: boolean }) {
+/** `detail`: the original error text, kept in the hover text for a bug report. */
+export function Notice({ children, error, detail }: { children: ReactNode; error?: boolean; detail?: string }) {
   return (
-    <p className={error ? 'notice is-error m-0' : 'notice m-0'} role={error ? 'alert' : 'status'}>
+    <p className={error ? 'notice is-error m-0' : 'notice m-0'} role={error ? 'alert' : 'status'} title={detail}>
       {children}
     </p>
   );
@@ -120,6 +121,8 @@ export function DefGrid({ rows, wide }: { rows: { label: string; value: ReactNod
 /** `Course · Written exam · 12 February 2027`: muted dots between items. */
 export function MetaLine({ items, small }: { items: ReactNode[]; small?: boolean }) {
   const shown = items.filter((i) => i !== null && i !== undefined && i !== false && i !== '');
+  // nothing to say takes no room (a gap in a flex column would still show)
+  if (shown.length === 0) return null;
   return (
     <div className={small ? 'meta-line is-small' : 'meta-line'}>
       {shown.map((item, i) => (

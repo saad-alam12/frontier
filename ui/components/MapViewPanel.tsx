@@ -37,7 +37,7 @@ export function MapViewPanel({ view, settings, onChange }: { view: MapView; sett
           <label className="panel-field">
             <span>Goal</span>
             <select className="input panel-select" value={settings.goalId ?? ''} onChange={(e) => set({ goalId: e.target.value || null })}>
-              <option value="">Everything</option>
+              <option value="">All goals</option>
               {view.goals.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.title}

@@ -476,8 +476,9 @@ html:not(.is-mac) .window-drag {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.breadcrumb > li > :last-child:not(.sep) {
-  flex-shrink: 1;
+/* the place you are on keeps its name longest; the crumbs before it give way first */
+.breadcrumb > li > [aria-current='page'] {
+  flex-shrink: 0.15;
 }
 .breadcrumb .sep {
   flex-shrink: 0;
@@ -2386,6 +2387,11 @@ button.map-label:hover {
 }
 .wizard-top .step-path {
   flex: 1 1 auto;
+}
+/* the same width for Cancel and Finish later, so the steps do not shift when it changes */
+.wizard-top > .btn {
+  min-width: 96px;
+  justify-content: flex-end;
 }
 .wizard-step {
   display: flex;

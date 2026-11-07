@@ -1,3 +1,4 @@
+import { plainError } from '../../lib/errors';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from '../../api';
 import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind, GoalLevel, PlanPreview } from '../../../backend/api/contract';
@@ -190,7 +191,7 @@ export function GoalWizard({ draft, initialText, onDone, onCancel }: { draft: Go
         {step === 'time' && (
           <section className="wizard-step">
             <div className="flex flex-col gap-[12px]">
-              <h1 className="t-display">How much time do you give it?</h1>
+              <h1 className="t-display">{limited ? 'How much time do you give it?' : 'How deep do you want to go?'}</h1>
               <p className="t-lead m-0">
                 {limited
                   ? 'Your time decides the map. With less, the few ideas that matter most, learned properly; with more, more ideas and deeper. Each idea takes about half an hour.'
@@ -312,7 +313,9 @@ function PlanStep({
         <h1 className="t-display">{work.state === 'failed' ? 'Mapping stopped' : 'Mapping your goal'}</h1>
         {work.state === 'failed' ? (
           <div className="button-row">
-            <Notice error>{work.message}</Notice>
+            <Notice error detail={work.message}>
+              {plainError(work.message)}
+            </Notice>
             <Button onClick={() => void run('compile', async () => void (await call('goals.compile', { goalId })))}>Try again</Button>
           </div>
         ) : (
@@ -354,7 +357,9 @@ function PlanStep({
       </div>
       {work.state === 'failed' ? (
         <div className="button-row">
-          <Notice error>{work.message}</Notice>
+          <Notice error detail={work.message}>
+            {plainError(work.message)}
+          </Notice>
           <Button onClick={() => void run('retry', async () => void (detail.goal.remap?.state === 'requested' ? await call('goals.remapRequest', { goalId }) : await call('goals.compile', { goalId })))}>Try again</Button>
         </div>
       ) : (

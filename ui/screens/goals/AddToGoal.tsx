@@ -1,3 +1,4 @@
+import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
 import { call } from '../../api';
 import type { AdditionView, Goal } from '../../../backend/api/contract';
@@ -180,7 +181,9 @@ export function AdditionPanel({ goal, onChanged, onNewGoal }: { goal: Goal; onCh
     return (
       <section className="addition-panel" aria-label="Adding to this goal">
         {head}
-        <Notice error>Working it out failed: {addition.message}</Notice>
+        <Notice error detail={addition.message}>
+          Working it out failed. {plainError(addition.message)}
+        </Notice>
         <div className="button-row">
           <Button disabled={busy !== null} onClick={() => act('retry', () => call('goals.additionRequest', { goalId: goal.id, request: addition.request }))}>
             Try again

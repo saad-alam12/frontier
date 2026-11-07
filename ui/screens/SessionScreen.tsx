@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { call, isCancelled, onEvent } from '../api';
 import type { GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
@@ -62,7 +63,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   const startFailed = work?.kind === 'start' && work.status === 'failed' ? work.error : null;
   useEffect(() => {
     if (!startFailed) return;
-    setError(`The session could not be planned: ${startFailed}`);
+    setError(`The session could not be planned. ${plainError(startFailed)}`);
     void call('session.dismissStart');
   }, [startFailed]);
   // work that finished, here or while the screen was closed, changed the session
@@ -236,8 +237,6 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
         )}
       </div>
 
-      {notice && <Notice error>{notice}</Notice>}
-
       <QuoteReply containerRef={mainRef} onMakeCard={(selection) => setCardSheet({ mode: 'selection', selection })} />
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
@@ -247,6 +246,12 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
       <div ref={currentRef} className="flex flex-col gap-[36px]">
         {pending && !pending.card && <Thinking label={thinkingLabel} onStop={stoppable ? stop : undefined} />}
         {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onDone={() => void refresh()} />}
+        {/* next to the answer it is about, where the eyes are */}
+        {notice && (
+          <Notice error detail={failed ?? undefined}>
+            {notice}
+          </Notice>
+        )}
       </div>
 
       {snap.status === 'active' && (
@@ -278,14 +283,12 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
 /** Why the last answer did not go through; the answer itself is still in the field. */
 function notSent(reason: string): string {
-  const said = reason.trim().replace(/\.?$/, '.');
-  return `Your answer did not go through. ${said.charAt(0).toUpperCase()}${said.slice(1)} It is still in the field to send again.`;
+  return `Your answer did not go through. ${plainError(reason)} It is still in the field to send again.`;
 }
 
 /** Why the card after a saved answer is missing; Try again writes it. */
 function notWritten(reason: string): string {
-  const said = reason.trim().replace(/\.?$/, '.');
-  return `Your answer was saved, but the next step could not be prepared. ${said.charAt(0).toUpperCase()}${said.slice(1)}`;
+  return `Your answer was saved, but the next step could not be prepared. ${plainError(reason)}`;
 }
 
 /** A session being planned in the background: the screen says so, and opens the session when it is ready. */

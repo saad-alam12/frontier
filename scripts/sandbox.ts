@@ -2,7 +2,8 @@
  * Build a sandbox with realistic data for screenshots and manual checks, through the real services
  * and the fake model (no network): `npx tsx scripts/sandbox.ts <sandbox folder> [--open-session]`.
  * The folder gets a settings.json whose data folder is `<sandbox>/data`; start the app on it with
- * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`.
+ * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`. Model calls
+ * in the app fail at once (API provider, no key), so screens with a model call show their error state.
  * Never point it at the learner's data: the folder is wiped first.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,6 +22,7 @@ import { refreshGoalFields } from '../backend/services/knowledge';
 import { abandonSession, respond, startSession } from '../backend/services/session';
 import type { SessionSnapshot } from '../backend/services/session';
 import { startFreeSession } from '../backend/services/freeSession';
+import { proposeAddition, requestAddition } from '../backend/services/addition';
 import { SessionMaker } from '../backend/services/sessionMaker';
 import { SessionWork } from '../backend/services/sessionWork';
 
@@ -34,7 +36,8 @@ if (folder.includes(`${join('Frontier')}`) && !folder.includes('sandbox')) throw
 rmSync(folder, { recursive: true, force: true });
 const dataFolder = join(folder, 'data');
 mkdirSync(dataFolder, { recursive: true });
-writeFileSync(join(folder, 'settings.json'), JSON.stringify({ dataFolder }, null, 2));
+// the API provider with no key: the app in the sandbox never reaches a real model (calls fail at once)
+writeFileSync(join(folder, 'settings.json'), JSON.stringify({ dataFolder, provider: 'anthropicApi', apiKey: '' }, null, 2));
 
 /** A tutor that writes a plausible card for every stage and grades from a cycle of scores. */
 function tutor(scores: number[]) {
@@ -151,6 +154,26 @@ for (const [i, c] of cards.entries()) {
   const card = saveCard(db, { front: c.front, back: c.back, nodeIds: [id(c.node)], goalId: exam.id });
   if (i < 3) reviewCard(db, card.id, 3, daysAgo(4 - i));
 }
+refreshGoalFields(db);
+
+// a draft whose map is drawn and waits for approval, and an addition waiting on the pricing goal
+const draft = createGoalFromForm(db, { text: 'Understand how sequential games are solved', budget: { mode: 'total', hours: 6 }, wantedLevel: null, context: null, materials: [] }, { draft: true });
+addCapabilities(db, draft.id, [{ statement: 'Can solve a small game tree by backward induction', targets: ['subgame', 'backwardInduction', 'spe'].map((k) => ({ nodeId: id(k), depth: 2 as const, core: k === 'backwardInduction' })) }]);
+markCompiled(db, draft.id, 'Sequential games', [], { level: 'working', scope: 'Solve small game trees and explain why threats must be credible.' });
+requestAddition(db, pricing.id, 'How a firm that moves first can shape the price');
+const adding = new FakeProvider({
+  goalCompiler: () => ({
+    fits: true,
+    reason: null,
+    shape: 'deep',
+    capabilities: [{ statement: 'Can explain how moving first changes a price war', targets: [{ ref: 'm1', depth: 2, core: true }, { ref: 'm2', depth: 2, core: false }] }],
+    newNodes: [
+      { tempId: 'm1', kind: 'claim', name: 'Price leadership', statement: 'A firm that sets its price first shapes the best response of the firm that follows.' },
+      { tempId: 'm2', kind: 'claim', name: 'Commitment changes the game', statement: 'Moving first and committing can change which outcome is stable.' },
+    ],
+  }),
+});
+await proposeAddition({ db, provider: adding }, pricing.id);
 refreshGoalFields(db);
 
 if (flags.includes('--open-session')) await answer(await startSession(deps, exam.id), 1);

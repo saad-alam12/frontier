@@ -294,7 +294,13 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
                     <Markdown text={`${g.neededBy.length ? joinNames(g.neededBy) : 'This session'} ${g.neededBy.length > 1 ? 'build' : 'builds'} on ${joinNames(g.names.map((n) => `**${n}**`))}, which you have not learned yet.`} inline />
                     {g.reason && <span className="choose-row-hint">{g.reason}</span>}
                   </span>
-                  <button type="button" className="link-button shrink-0" onClick={() => setAddFirst([...addFirst, ...g.refs])} disabled={chosen.size + g.refs.length > MAX_FREE_IDEAS}>
+                  <button
+                    type="button"
+                    className="link-button shrink-0"
+                    onClick={() => setAddFirst([...addFirst, ...g.refs])}
+                    disabled={chosen.size + g.refs.length > MAX_FREE_IDEAS}
+                    title={chosen.size + g.refs.length > MAX_FREE_IDEAS ? `A session holds up to ${MAX_FREE_IDEAS} ideas. Leave one out to make room.` : undefined}
+                  >
                     {g.refs.length === 1 ? 'Add it first' : 'Add them first'}
                   </button>
                 </li>
@@ -438,7 +444,8 @@ function groupGaps(background: FreePlanView['background']): { refs: string[]; na
 function estimate(plan: FreePlanView): string {
   const m = plan.minutes;
   const time = m < 60 ? `${m} minutes` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
-  return `About ${time} · ${plan.ideas.length} ${plan.ideas.length === 1 ? 'idea' : 'ideas'}`;
+  // a session is about 45 minutes; more is fine, but the learner should know it will take longer
+  return `About ${time} · ${plan.ideas.length} ${plan.ideas.length === 1 ? 'idea' : 'ideas'}${m > 75 ? ' · more than one sitting, Pause keeps your place' : ''}`;
 }
 
 function plain(name: string): string {
