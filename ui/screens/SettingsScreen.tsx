@@ -16,6 +16,8 @@ const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'problemGenerator', label: 'Problem generator', does: 'Writes practice problems (with practice)' },
   { role: 'grader', label: 'Grader', does: 'Grades practice (with practice)' },
   { role: 'librarian', label: 'Librarian', does: 'Answers lookups (with lookup)' },
+  { role: 'sessionPlanner', label: 'Session maker', does: 'Turns what you describe into a session' },
+  { role: 'cardWriter', label: 'Card writer', does: 'Writes flashcards for the facts to memorize' },
   { role: 'connectionTest', label: 'Connection test', does: 'The test button above' },
 ];
 

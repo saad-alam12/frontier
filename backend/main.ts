@@ -52,6 +52,11 @@ function createWindow(): void {
 // Day-month-year dates in native fields (the owner is in Germany; en-GB keeps the UI in English).
 app.commandLine.appendSwitch('lang', 'en-GB');
 
+// Development and screenshots: a separate settings file (and so a separate data folder) keeps test
+// runs away from the learner's own map. Must be set before `ready`, when the path is first read.
+const sandbox = process.env['FRONTIER_USER_DATA'];
+if (sandbox) app.setPath('userData', sandbox);
+
 void app.whenReady().then(() => {
   const ctx = new AppContext(
     app.getVersion(),

@@ -36,6 +36,9 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   matcher: { model: 'claude-haiku-5-5', effort: 'max' },
   planner: { model: 'claude-haiku-5-5', effort: 'max' },
   librarian: { model: 'claude-haiku-5-5', effort: 'medium' },
+  // The learner waits on both: a session they described, a flashcard drafted from a selection.
+  sessionPlanner: { model: 'claude-opus-5-5', effort: 'medium' },
+  cardWriter: { model: 'claude-sonnet-5-5', effort: 'medium' },
   connectionTest: { model: 'claude-haiku-5-5', effort: 'medium' },
 };
 

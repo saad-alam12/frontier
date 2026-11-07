@@ -92,30 +92,25 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | M6 Map, Lookup, Trails, packaging | Done | Canvas map (16 ms per frame at 636 ideas in the packaged app), lookup, trails with replay; Linux build packaged and launched; 137 tests |
 | R2 Time budgets, Stats, clearer app | Done | Owner's request after M6 (see Owner feedback); 160 tests; reviewed by the owner (R3 request) |
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
-| R4 Plan dots, erase from map, screenshots and quotes, finished look | Done, checkpoint ready | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac |
+| R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
+| R5 Background work, goals by depth, your own sessions, flashcards | In progress | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally on the Mac with helper agents |
 
 ## Next step
 
-**CHECKPOINT R4 READY.** Waiting for the owner's feedback on the plan dots, erasing from the map, screenshots and quotes in sessions, and the new look, under "Owner feedback".
-
-Exact steps for the owner, on the Mac:
-
-1. **Start the app.** `git fetch && git checkout claude/build-progress-m4-oxebft && git pull && npm install && npm run dev`. `npm install` matters: the icons come from a new package (`lucide-react`).
-2. **The look.** Look over every screen in the sidebar. Hover a sidebar item to see what it is for. Make the window narrower than about 1000 px: the sidebar keeps only its icons.
-3. **Plan dots.** Open a goal, press **Change the time**, and hover the dots (or tab to them). Each box names the idea, describes it and says what the plan does with it. Press Cancel.
-4. **A session with a screenshot and a quote.**
-   - Start a session from Today.
-   - On a question, paste a screenshot (⌘V), drop one on the answer box, or use the paperclip. Remove one with its x.
-   - Select a few words in an earlier message: a **Reply** pill appears. Press it; the quote shows above your answer. Send.
-   - The tutor's feedback should refer to the image and the quoted part. Both show in the history and later in Trails.
-   - Press **End session**: a dialog explains End against Pause. Choose Keep going or End.
-5. **Erase from your map** (Settings, at the bottom). Choose Ideas, tick one idea you do not need, press **Erase…** and read the dialog. Cancel, or erase it if you really want it gone (this cannot be undone). Do not try Everything unless you want to start from nothing.
-6. **Write what you think under "Owner feedback", then commit and push.** I'd most like your view on:
-   - whether the new look feels finished, and which screens still feel rough or unclear;
-   - whether the dot boxes now tell you enough;
-   - whether quoting and screenshots work the way you expect from the Claude app.
+**R5 in progress.** Building `docs/feedback-round-5.md` section by section in a local session (commits `R5 §1`–`§7`). It ends with "CHECKPOINT R5 READY" and steps for the owner here.
 
 ## Owner feedback
+
+### 2026-11-07, at the R4 checkpoint (R5 request)
+Full request with acceptance checks: `docs/feedback-round-5.md`. In short:
+- **Leaving a session must not interrupt the model.** Switching places after sending an answer, then coming back, shows the answer still being judged (or the result).
+- **Goals by depth, not only by time.** A goal can have no time limit: what matters is how deep and how well the ideas are known.
+- **Choose what to learn.** Pick ideas or describe in words what to learn in a session; the map fills in from what was learned. Warn about missing prerequisites but let me ignore them. A switch for whether the session counts in a goal's time.
+- **Add to a goal in words.** "How it relates to classical machine learning" gives several broad ideas; "how image generation works" gives fewer, deeper ones; always at the goal's level.
+- **Flashcards, only for hard facts to memorize.** Made automatically per goal (on or off, at most N), tagged to ideas and visible on the map; sessions that need a card's fact and get it right count as practice; cards can also be reviewed on their own. In sessions: make a card from selected text (the app decides whether it is the question or the answer) or from a request, then adjust it.
+- **Goal context.** An optional free text on each goal (reasons, constraints, focus, purpose) that the mapping takes into account, and that re-adjusts a goal already mapped.
+- **Very good UI/UX**, improving existing screens where it makes sense.
+- Chosen in planning: build locally; no time limit means a level chosen by the learner, interpreted by the model with the context; a fixed time is always kept when ideas are added (a goal without a time limit grows instead); a free session may have no goal; flashcards are written after an idea is learned in a session; a changed context on a mapped goal proposes a new map to approve.
 
 ### 2026-11-06, at the R3 checkpoint (R4 request)
 - **Plan dots tell me nothing.** On the goal page the row of dots (with the legend "In depth, Overview, Already yours, Left out" and the line "1 idea is planned shallower…") shows no name when hovered. Hovering a dot must show the idea's title and a short description. Note from the local session: `IdeaField` in `ui/components/budget.tsx` already has a hover tip (name and depth line, no description); find out why it does not appear on the goal page, fix it, and add the description.
@@ -171,6 +166,7 @@ Full list with acceptance checks: `docs/feedback-round-1.md`. In short:
 - `npm run live:ingest -- path/to/lecture.pdf [db path]` ingests one real file with the real model and the local embedding model (downloads bge-small-en-v1.5, about 130 MB, on first use), then prints the delta sentence.
 - `npm run live:compare -- <file> --a <model>:<effort> --b <model>:<effort> [--role extractor|matcher]` ingests one file twice into temporary databases, once per setting for that role (other roles stay at their defaults), and prints nodes, chains, samples, tokens and cost side by side. Never touches `~/Frontier/frontier.db`; reuses `~/Frontier/models-cache` for the embedding model.
 - `npm run live:connection` runs the connection test against the real model (uses the Claude login on this machine; set `FRONTIER_PROVIDER=anthropicApi` and `ANTHROPIC_API_KEY` for the API provider).
+- **Running the app safely** (screenshots, manual checks): never against the owner's data folder. Make a sandbox folder with a `settings.json` whose `dataFolder` is a test folder (`npm run seed -- <test folder>/frontier.db` fills it with the example graph), then `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`. `npx tsx scripts/cdp.ts 9333 shot out.png` saves a screenshot of the window; `npx tsx scripts/cdp.ts 9333 eval "<expression>"` runs JavaScript in it (for example `window.frontier.invoke('app.info')` to confirm the data folder). The sandbox still uses the Claude login for model calls, so keep live calls few. The macOS sidebar's translucency does not show in these screenshots (it comes out flat grey).
 
 ## Owner checkpoints to review
 

@@ -12,6 +12,8 @@ export const ROLES = [
   'problemGenerator',
   'grader',
   'librarian',
+  'sessionPlanner',
+  'cardWriter',
   'connectionTest',
 ] as const;
 export type Role = (typeof ROLES)[number];
