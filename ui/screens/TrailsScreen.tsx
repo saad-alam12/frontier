@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Trail, TrailItem, TrailSummary } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
+import { joinNames } from '../../backend/core/freeSession';
 import { call } from '../api';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, MetaLine } from '../components/controls';
@@ -76,6 +77,7 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
                 <span>{t.title}</span>
                 <span className="t-caption shrink-0 text-muted">{formatDay(t.startedAt)}</span>
               </span>
+              {t.asked && <span className="t-small line-clamp-2 text-secondary">{t.asked.description ? `“${t.asked.description}”` : `You picked ${joinNames(t.asked.picked).replace(/\$/g, '')}`}</span>}
               <span className="t-small text-muted">
                 {t.ideas.length ? `${t.ideas.length} ${t.ideas.length === 1 ? 'idea' : 'ideas'}` : 'No idea finished'} · {t.answers} {t.answers === 1 ? 'answer' : 'answers'}
                 {t.status === 'abandoned' ? ' · ended early' : t.status === 'active' ? ' · in progress' : ''}
@@ -93,7 +95,7 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
       {trail && (
         <>
           <div className="flex flex-col gap-[26px]">
-            <Breadcrumb items={[{ label: 'Trails' }, { label: trail.summary.goalTitle || 'Session' }, { label: formatDay(trail.summary.startedAt) }]} />
+            <Breadcrumb items={[{ label: 'Trails' }, { label: trail.summary.goalTitle || (trail.summary.asked ? 'Free study' : 'Session') }, { label: formatDay(trail.summary.startedAt) }]} />
             <div className="flex flex-col gap-[14px]">
               <h1 className="t-display">{trail.summary.title}</h1>
               <MetaLine
@@ -156,6 +158,13 @@ function TrailEntry({ item, fresh }: { item: TrailItem; fresh: boolean }) {
       return (
         <article className={cls}>
           <div className="t-caption text-muted">Plan · {formatTime(item.at)}</div>
+          {item.asked?.description && (
+            <div className="flex flex-col gap-[8px]">
+              <div className="t-caption text-muted">You asked</div>
+              <Answer text={item.asked.description} />
+            </div>
+          )}
+          {item.asked && !item.asked.description && <p className="t-small m-0 text-secondary">You picked these ideas to learn.</p>}
           {item.resumed && <p className="t-small m-0 text-secondary">Picked up {item.resumed} where you stopped last time.</p>}
           <p className="m-0 text-soft">{item.orientation}</p>
           <MetaLine small items={item.ideas.map((n, i) => <Markdown key={i} text={n} inline />)} />

@@ -14,13 +14,12 @@ import { PracticeFlow } from '../components/PracticeFlow';
 import { StepPath, VerticalPath } from '../components/paths';
 import { useDrafts } from '../hooks/useDrafts';
 import { useEscape } from '../hooks/useEscape';
-import { STAGE_LABEL } from '../lib/stages';
+import { STAGE_LABEL, aimLabel } from '../lib/stages';
 import { startSessionInBackground, useSessionScreenOpen, useSessionWork } from '../lib/sessionWork';
+import type { ChooseInit } from '../components/ChooseSheet';
 
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
-/** What a step does with its idea, by its aim. */
-const AIM_LABEL = ['', 'Overview', 'Explain', 'Explain and derive', 'Explain, derive and apply'];
 
 type CardDraft = { answer: string; confidence: number | null; handle: string };
 const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' };
@@ -28,7 +27,7 @@ const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' }
 /** The answer just sent, shown in the conversation while the tutor works. */
 type Pending = { card: PublicCard | null; stage: Stage | null; response: LearnerResponse } | null;
 
-export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => void }) {
+export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: ScreenName) => void; onChoose: (init?: ChooseInit) => void }) {
   const [snap, setSnap] = useState<SessionSnapshot | null | undefined>(undefined);
   const [goals, setGoals] = useState<GoalDetail[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,11 +144,22 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
       <Screen>
         <div className="flex flex-col gap-[14px]">
           <h1 className="t-display">Session</h1>
-          <p className="t-lead m-0">One goal per session. What to learn is already chosen; you press start.</p>
+          <p className="t-lead m-0">Start the session planned for a goal, or choose what to learn yourself.</p>
         </div>
         {(error ?? startFailed) && <Notice error>{error ?? `The session could not be planned: ${startFailed}`}</Notice>}
         {ready.length === 0 ? (
-          <Empty action={<Button onClick={() => onNavigate('goals')}>Go to goals</Button>}>Add a goal first. Its first session is planned from your material.</Empty>
+          <Empty
+            action={
+              <div className="button-row">
+                <Button kind="primary" onClick={() => onChoose()}>
+                  Choose what to learn
+                </Button>
+                <Button onClick={() => onNavigate('goals')}>Set a goal</Button>
+              </div>
+            }
+          >
+            No goal has a session ready yet. Choose what to learn now, or set a goal and Frontier plans its sessions.
+          </Empty>
         ) : (
           <ul className="list-card">
             {ready.map((g) => (
@@ -165,6 +175,12 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
             ))}
           </ul>
         )}
+        {ready.length > 0 && (
+          <div className="button-row">
+            <Button onClick={() => onChoose()}>Choose what to learn</Button>
+            <span className="t-small text-muted">Pick ideas from your map, or describe what you want.</span>
+          </div>
+        )}
       </Screen>
     );
   }
@@ -172,7 +188,7 @@ export function SessionScreen({ onNavigate }: { onNavigate: (s: ScreenName) => v
   const isBusy = busy !== null || judging !== null;
   const current = snap.current;
   const notice = error ?? (failed ? notSent(failed) : null);
-  const crumbs = [{ label: snap.goalTitle, onClick: () => onNavigate('goals') }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
+  const crumbs = [{ label: snap.goalTitle, onClick: snap.goalId ? () => onNavigate('goals') : undefined }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
   return (
@@ -418,6 +434,7 @@ function PhaseView({ snap, busy, refocus, onSend, onDone }: { snap: SessionSnaps
       return (
         <section className="flex flex-col gap-[28px]">
           <div className="flex flex-col gap-[14px]">
+            {snap.free && <div className="t-caption text-muted">{snap.free.counted ? `You chose this · it counts toward ${snap.goalTitle}` : 'You chose this · free study'}</div>}
             <h1 className="t-display">{snap.plan.title}</h1>
             <p className="t-lead m-0">{snap.plan.orientation}</p>
           </div>
@@ -617,7 +634,7 @@ function PlanPanel({ snap }: { snap: SessionSnapshot }) {
             <div className="flex flex-col gap-[2px]">
               <Markdown text={s.name} inline className={s.status === 'pending' ? 'text-secondary' : ''} />
               <span className="t-small text-muted">
-                {AIM_LABEL[Math.min(4, s.aim)]} · about {s.minutes} min{s.simplified ? ' · simplified' : ''}
+                {aimLabel(s.aim)} · about {s.minutes} min{s.simplified ? ' · simplified' : ''}
               </span>
             </div>
           ),

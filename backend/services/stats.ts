@@ -16,7 +16,7 @@ import { listEvidenceSince, listStates } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listSessions } from '../store/sessions';
 import { listChains, listNodes } from '../store/world';
-import { attributeTime, goalProgress } from './budget';
+import { attributeTime, freeStudy, goalProgress } from './budget';
 
 const DAY_MS = 86_400_000;
 export const STATS_RANGES = ['7d', '30d', '90d', 'all'] as const;
@@ -34,7 +34,7 @@ export interface StatsView {
   goals: { id: string; title: string; status: string }[];
   topics: { id: string; name: string; size: number }[];
   headline: { minutes: number; sessions: number; ideasLearned: number; ideasOwned: number; streakDays: number; answers: number; avgScore: number | null };
-  /** Minutes per week by goal (key 'other' for time no goal holds), oldest first, with the weekly rhythm the budgets ask for. */
+  /** Minutes per week by goal (key 'free' for free study), oldest first, with the weekly rhythm the budgets ask for. */
   weeks: { start: string; minutes: Record<string, number>; target: number | null }[];
   /** The last twelve weeks, a day each, for the calendar. */
   days: { date: string; minutes: number }[];
@@ -49,6 +49,8 @@ export interface StatsView {
   budgets: { goalId: string; title: string; totalMinutes: number | null; spentMinutes: number; plannedMinutes: number; ready: number; planned: number; pace: string }[];
   /** Learner speed against the plan's estimates; 1 means as planned. */
   speed: number;
+  /** Minutes of free study in the range: chosen sessions booked to no goal (none under a goal filter). */
+  freeMinutes: number;
   facts: string[];
 }
 
@@ -89,8 +91,10 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
     return true;
   };
 
-  // time
-  const shares = attributeTime(db).filter((s) => (!filter.goalId || s.goalId === filter.goalId) && (!topicNodes || (s.span.nodeId !== null && topicNodes.has(s.span.nodeId))));
+  // time: each goal's, and free study as a line of its own (it belongs to no goal)
+  const inTopic = (s: { span: { nodeId: string | null } }) => !topicNodes || (s.span.nodeId !== null && topicNodes.has(s.span.nodeId));
+  const free = filter.goalId ? [] : freeStudy(db).filter(inTopic).map((s) => ({ ...s, goalId: 'free' }));
+  const shares = [...attributeTime(db).filter((s) => (!filter.goalId || s.goalId === filter.goalId) && inTopic(s)), ...free];
   const inRange = shares.filter((s) => !since || s.span.endedAt >= since);
   const minutes = inRange.reduce((sum, s) => sum + s.minutes, 0);
 
@@ -163,6 +167,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
     overlap: { savedMinutes: Math.round(savedMinutes), ideas: overlapIdeas.slice(0, 12) },
     budgets,
     speed,
+    freeMinutes: Math.round(inRange.filter((s) => s.goalId === 'free').reduce((sum, s) => sum + s.minutes, 0)),
     facts: [],
   };
   view.facts = facts(view);

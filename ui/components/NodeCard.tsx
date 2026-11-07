@@ -16,6 +16,7 @@ export function NodeCardView({
   onSelect,
   onTrail,
   onGoDeeper,
+  onLearn,
   compact,
 }: {
   card: NodeCard;
@@ -23,6 +24,8 @@ export function NodeCardView({
   onTrail?: (sessionId: string) => void;
   /** Go deeper on this idea for a goal that simplified it. */
   onGoDeeper?: (goalId: string, nodeIds: string[]) => Promise<void>;
+  /** "Learn this now": choose a session on this idea. */
+  onLearn?: (nodeId: string) => void;
   compact?: boolean;
 }) {
   const link = (r: IdeaRef, sep?: string) => (
@@ -42,6 +45,11 @@ export function NodeCardView({
         </div>
         <Markdown text={card.name} className={compact ? 't-heading' : 't-title'} />
         <Markdown text={card.statement} className="text-[15px] text-soft" />
+        {onLearn && (
+          <button type="button" className="link-button self-start" onClick={() => onLearn(card.id)}>
+            Learn this now
+          </button>
+        )}
       </div>
 
       {card.ownStatement && (

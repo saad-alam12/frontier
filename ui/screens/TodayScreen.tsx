@@ -14,7 +14,18 @@ import { startSessionInBackground } from '../lib/sessionWork';
 const MODE_LABEL = { build: 'Build', deepen: 'Deepen', consolidate: 'Consolidate' } as const;
 
 /** Today: what to do now, how each goal stands, what is fading, and the days ahead. */
-export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNavigate: (s: ScreenName) => void; onOpenGoals: (view: GoalsView) => void; onOpenPractice: (setId: string) => void }) {
+export function TodayScreen({
+  onNavigate,
+  onOpenGoals,
+  onOpenPractice,
+  onChoose,
+}: {
+  onNavigate: (s: ScreenName) => void;
+  onOpenGoals: (view: GoalsView) => void;
+  onOpenPractice: (setId: string) => void;
+  /** "Choose what to learn", beside the planned start. */
+  onChoose: () => void;
+}) {
   const [showAllFading, setShowAllFading] = useState(false);
   const [today, setToday] = useState<TodayView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -103,7 +114,7 @@ export function TodayScreen({ onNavigate, onOpenGoals, onOpenPractice }: { onNav
       </div>
       {error && <Notice error>{error}</Notice>}
 
-      <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} />
+      <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} onChoose={onChoose} />
       {today.drafts.map((d) => (
         <div key={d.goalId} className="next-card is-quiet">
           <div className="mode">
@@ -191,6 +202,7 @@ function NextUp({
   onStartSession,
   onPractice,
   onOpenPractice,
+  onChoose,
 }: {
   today: TodayView;
   lead: TodayGoal | undefined;
@@ -199,6 +211,7 @@ function NextUp({
   onStartSession: (goalId: string) => void;
   onPractice: (goalId: string, kind: 'compound' | 'mock') => void;
   onOpenPractice: (setId: string) => void;
+  onChoose: () => void;
 }) {
   if (today.session) {
     return (
@@ -266,6 +279,9 @@ function NextUp({
             Start today&rsquo;s session
           </Button>
         )}
+        <Button kind="quiet" onClick={onChoose}>
+          Choose what to learn
+        </Button>
       </div>
     </div>
   );

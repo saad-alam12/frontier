@@ -3,6 +3,7 @@ import { call } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
 import { startSessionInBackground, startSessionWork, useSessionWork } from './lib/sessionWork';
+import { ChooseSheet, type ChooseInit } from './components/ChooseSheet';
 import { TodayScreen } from './screens/TodayScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { PracticeScreen } from './screens/PracticeScreen';
@@ -27,6 +28,9 @@ export function App() {
   const [goalsView, setGoalsView] = useState<{ view: GoalsView; key: number } | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const { last: lastWork } = useSessionWork();
+  /** "Choose what to learn", open over any screen. */
+  const [choose, setChoose] = useState<(ChooseInit & { key: number }) | null>(null);
+  const openChoose = (init: ChooseInit = {}) => setChoose({ ...init, key: Date.now() });
 
   useEffect(() => {
     startActivityTicker();
@@ -62,15 +66,30 @@ export function App() {
       <div className="window-drag" aria-hidden="true" />
       <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} />
       {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
-      {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} />}
-      {screen === 'session' && <SessionScreen onNavigate={navigate} />}
-      {screen === 'map' && <MapScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
-      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} />}
+      {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onChoose={openChoose} />}
+      {screen === 'session' && <SessionScreen onNavigate={navigate} onChoose={openChoose} />}
+      {screen === 'map' && <MapScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
+      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} />}
       {screen === 'stats' && <StatsScreen />}
       {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
       {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
       {screen === 'library' && <LibraryScreen />}
       {screen === 'settings' && <SettingsScreen />}
+      {choose && (
+        <ChooseSheet
+          key={choose.key}
+          init={choose}
+          onClose={() => setChoose(null)}
+          onStarted={() => {
+            setChoose(null);
+            navigate('session');
+          }}
+          onOpenSession={() => {
+            setChoose(null);
+            navigate('session');
+          }}
+        />
+      )}
     </div>
   );
 }

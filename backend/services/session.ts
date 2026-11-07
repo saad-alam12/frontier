@@ -4,11 +4,12 @@
  */
 import { runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
+import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
 import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
 import { PASS_SCORE } from '../core/types';
-import type { Depth, Goal } from '../core/types';
+import type { Depth, Goal, GoalLevel } from '../core/types';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
@@ -46,7 +47,8 @@ export interface NodeHistoryEntry {
 }
 
 export interface SessionState {
-  goalId: string;
+  /** The goal whose frame the tutor uses; null for a free session with no goal. */
+  goalId: string | null;
   plan: LessonPlan;
   phase: Phase;
   stepIndex: number;
@@ -69,6 +71,19 @@ export interface SessionState {
   practiceRevealed?: string | null;
   /** Minutes an idea carried over from an ended session already had there; they count toward its half hour. */
   priorMinutes?: Record<string, number>;
+  /** A session the learner chose (design §4.5); absent for planned sessions. */
+  free?: FreeSession | null;
+}
+
+/** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
+export interface FreeSession {
+  /** What they asked for in their words, or null when they picked ideas. */
+  description: string | null;
+  /** The ideas they picked, by name (empty for a description). */
+  picked: string[];
+  /** The session's time counts toward its goal; otherwise it is free study. */
+  counted: boolean;
+  level: GoalLevel;
 }
 
 /** Where the learner stopped inside an idea: the open card and the loop state around it. */
@@ -86,10 +101,12 @@ export interface ResumePoint {
 /** What the renderer sees. Answer keys and rubrics never leave the backend. */
 export interface SessionSnapshot {
   id: string;
-  goalId: string;
+  goalId: string | null;
   goalText: string;
-  /** The goal's short name for the breadcrumb (its sentence until compiled). */
+  /** The goal's short name for the breadcrumb (its sentence until compiled); "Free study" with no goal. */
   goalTitle: string;
+  /** What the learner asked for, in a session they chose. */
+  free: Pick<FreeSession, 'description' | 'picked' | 'counted'> | null;
   startedAt: string;
   status: SessionRecord['status'];
   phase: Phase;
@@ -331,7 +348,7 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
   const { db } = deps;
   const sessionId = session.id;
   const state = session.state;
-  const goal = tutorGoal(getGoal(db, state.goalId));
+  const goal = tutorGoalFor(db, state);
   const goalText = goal.text;
 
   switch (state.phase) {
@@ -404,7 +421,7 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       saveSessionState(db, sessionId, state);
       endSession(db, sessionId, 'done');
       appendSessionEvent(db, sessionId, 'finish', {});
-      logEvent(db, 'session.ended', { goalId: state.goalId, sessionId }, { status: 'done' });
+      logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'done' });
       refreshGoalFields(db);
       await ingestTranscript(deps, sessionId, state);
       return;
@@ -421,6 +438,8 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
  */
 async function startSessionPractice(deps: SessionDeps, sessionId: string, state: SessionState): Promise<boolean> {
   if (state.practiceSetId !== undefined && state.practiceSetId !== null) return true;
+  // a session the learner chose is about what they asked; a goal's fading ideas wait for its own sessions
+  if (state.free || !state.goalId) return false;
   try {
     const set = await startPractice(deps, state.goalId, { sessionId, maxProblems: SESSION_PRACTICE_PROBLEMS, exclude: state.plan.steps.map((s) => s.nodeId) });
     state.practiceSetId = set?.id ?? null;
@@ -541,7 +560,8 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
 
   // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
   const missing = stage !== 'predict' && grade.score < PASS_SCORE && grade.missingBackground !== null;
-  if (missing && grade.missingBackground) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
+  // a chosen session's gaps are about what the learner asked, not about the goal's map
+  if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
   const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
   if (box === 'simplify') {
     const reason = missing && grade.missingBackground ? `It needs ${grade.missingBackground.name}, which this goal's time does not also cover` : 'It was taking longer than its half hour allows';
@@ -577,7 +597,8 @@ function minutesOn(db: Database, state: SessionState, sessionId: string, nodeId:
  * through the rest of today's plan: dependents planned deeper are capped to explaining.
  */
 function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth: Depth, reason: string): void {
-  const changed = simplifyIdea(db, state.goalId, step.nodeId, depth, reason);
+  // a chosen session simplifies only itself: the goal's plan is the goal's sessions' business
+  const changed = state.goalId && !state.free ? simplifyIdea(db, state.goalId, step.nodeId, depth, reason) : new Map<string, Depth>([[step.nodeId, depth]]);
   for (const st of state.plan.steps) {
     const cap = changed.get(st.nodeId);
     if (cap === undefined) continue;
@@ -610,6 +631,19 @@ function tutorGoal(goal: Goal | undefined): TutorGoal {
   return { text: goal?.text ?? '', level: goal?.level ?? null, scope: goal?.scope ?? null, assessment: goal?.assessment ?? 'none', focus: goal?.focus ?? [] };
 }
 
+/**
+ * The goal frame for a session. A chosen one adds what the learner asked to its goal's frame, at the
+ * session's level; with no goal, what was asked is the goal, studied for its own sake.
+ */
+function tutorGoalFor(db: Database, state: SessionState): TutorGoal {
+  const goal = state.goalId ? getGoal(db, state.goalId) : undefined;
+  const free = state.free;
+  if (!free) return tutorGoal(goal);
+  const asked = free.description ? `The learner asked for this session: "${free.description}"` : `The learner chose to learn ${joinNames(free.picked)} now.`;
+  if (goal) return { ...tutorGoal(goal), text: `${goal.text}\n\n${asked}`, level: free.level };
+  return { text: asked, level: free.level, scope: null, assessment: 'none', focus: [] };
+}
+
 function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade): void {
   const kind = evidenceKindFor(stage);
   if (kind) {
@@ -640,7 +674,7 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
   const view = loadKnowledge(db);
   const node = view.nodes.get(step.nodeId);
   if (!node) throw new Error(`unknown node ${step.nodeId}`);
-  const simplified = new Set(listTargets(db, state.goalId, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId));
+  const simplified = new Set(state.goalId ? listTargets(db, state.goalId, { all: true }).filter((t) => t.simplified).map((t) => t.nodeId) : []);
   const premiseIds = new Set<string>();
   for (const chain of view.index.into.get(node.id) ?? []) for (const p of chain.premises) premiseIds.add(p);
   const premises = [...premiseIds].map((id) => {
@@ -695,7 +729,8 @@ function previouslyTaughtNodes(ended: SessionRecord<SessionState>[]): { id: stri
  * it had carried over itself and not reached yet. Nothing carries once the idea is owned at its target depth.
  */
 export function carriedPlace(session: SessionRecord<SessionState>, reached: (nodeId: string, targetDepth: number) => boolean): { step: LessonStep; resume: ResumePoint } | null {
-  if (session.status !== 'abandoned') return null;
+  // a chosen session's half-done idea is not the goal's plan, so its planned sessions do not carry it
+  if (session.status !== 'abandoned' || session.state.free) return null;
   const s = session.state;
   let resume: ResumePoint | null = null;
   const step = s.plan.steps[s.stepIndex];
@@ -766,11 +801,13 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
   const s = session.state;
   const step = s.phase === 'teach' ? s.plan.steps[s.stepIndex] : undefined;
   const stages = step ? stepStages(step) : [];
+  const goal = s.goalId ? getGoal(db, s.goalId) : undefined;
   return {
     id: session.id,
     goalId: s.goalId,
-    goalText: getGoal(db, s.goalId)?.text ?? '',
-    goalTitle: getGoal(db, s.goalId)?.title ?? getGoal(db, s.goalId)?.text ?? '',
+    goalText: goal?.text ?? '',
+    goalTitle: goal ? (goal.title ?? goal.text) : 'Free study',
+    free: s.free ? { description: s.free.description, picked: s.free.picked, counted: s.free.counted } : null,
     startedAt: session.startedAt,
     status: session.status,
     phase: s.phase,
@@ -855,11 +892,12 @@ function frontierMap(db: Database, s: SessionState, centerId: string): FrontierM
     if (view.fringe.has(id) || planned.has(id)) return 'learnable';
     return 'beyond';
   };
-  const { candidates } = candidatesForGoal(db, s.goalId, view);
+  // with no goal, the edge is the whole map's
+  const edgeCount = s.goalId ? candidatesForGoal(db, s.goalId, view).candidates.filter((c) => c.onFringe).length : view.fringe.size;
   return {
     nodes: near.nodeIds.filter((id) => view.nodes.has(id)).map((id) => ({ id, name: view.nodes.get(id)?.name ?? id, state: stateOf(id) })),
     edges: near.edges,
-    edgeCount: candidates.filter((c) => c.onFringe).length,
+    edgeCount,
   };
 }
 

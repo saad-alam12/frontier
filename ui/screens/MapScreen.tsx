@@ -7,6 +7,7 @@ import { Markdown } from '../components/Markdown';
 import { MapCanvas } from '../components/MapCanvas';
 import { MapViewPanel } from '../components/MapViewPanel';
 import { NodeCardView } from '../components/NodeCard';
+import type { ChooseInit } from '../components/ChooseSheet';
 import { seriesColor } from '../components/charts';
 import { DEFAULT_SETTINGS, buildGraph, growthOrder, mergeSettings, plain, visibleIdeas } from '../lib/mapGraph';
 import type { MapSettings } from '../lib/mapGraph';
@@ -27,7 +28,16 @@ function loadSettings(): MapSettings {
  * and colour it from the view panel, hover to see what an idea connects to, open its card, show only
  * its neighbourhood, replay how the map grew, or go full screen.
  */
-export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void> }) {
+export function MapScreen({
+  onOpenTrail,
+  onGoDeeper,
+  onChoose,
+}: {
+  onOpenTrail: (sessionId: string) => void;
+  onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
+  /** "Learn this now" on an idea's card: the sheet opens with it picked (and its goal, when it has one). */
+  onChoose: (init: ChooseInit) => void;
+}) {
   const [map, setMap] = useState<MapView | null>(null);
   const [settings, setSettings] = useState<MapSettings>(loadSettings);
   const [selected, setSelected] = useState<string | null>(null);
@@ -216,7 +226,17 @@ export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId
               </button>
             ))}
           </div>
-          <NodeCardView card={card} onSelect={(id) => select(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} compact />
+          <NodeCardView
+            card={card}
+            onSelect={(id) => select(id)}
+            onTrail={onOpenTrail}
+            onGoDeeper={onGoDeeper}
+            onLearn={(id) => {
+              const goals = map?.nodes.find((n) => n.id === id)?.goals ?? [];
+              onChoose({ pick: [id], goalId: goals.length === 1 ? goals[0] : null });
+            }}
+            compact
+          />
         </aside>
       )}
 

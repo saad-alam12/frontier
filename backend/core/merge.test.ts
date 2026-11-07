@@ -77,6 +77,26 @@ describe('planMerge', () => {
     expect(plan.examples).toMatchObject([{ nodeId: 'node_guess', sourceId: 'srcB', title: 'One Adam step' }]);
   });
 
+  it('writes ideas taught from the model’s knowledge as unverified, and never grounds an unverified idea with them', () => {
+    const guess: KnowledgeNode = { ...existingNode, id: 'node_guess', name: 'Softmax', aliases: [], sources: [], status: 'unverified' };
+    const plan = planMerge({
+      ...base(),
+      sourceId: 'sess_1',
+      newStatus: 'unverified',
+      existingNodes: new Map([[guess.id, guess], [existingBr.id, existingBr]]),
+      extractedNodes: [
+        { tempId: 'n1', kind: 'claim', name: 'Attention', statement: 'Weights values by query-key similarity.', aliases: [] },
+        { tempId: 'n2', kind: 'term', name: 'Softmax', statement: 'restated', aliases: [] },
+      ],
+      extractedChains: [{ premises: ['n2', 'node_br'], conclusion: 'n1' }],
+      identities: new Map([['n2', 'node_guess']]),
+    });
+    expect(plan.newNodes).toMatchObject([{ id: 'node_1', name: 'Attention', status: 'unverified', sources: [{ sourceId: 'sess_1' }] }]);
+    expect(plan.nodeUpdates).toEqual([{ nodeId: 'node_guess', aliases: [], sources: [{ sourceId: 'sess_1', locator: undefined }] }]);
+    expect(plan.newChains[0]).toMatchObject({ premises: ['node_guess', 'node_br'], conclusion: 'node_1' });
+    expect(plan.resolved).toEqual(new Map([['n1', 'node_1'], ['n2', 'node_guess']]));
+  });
+
   it('re-ingesting the same content is a no-op apart from nothing', () => {
     const plan = planMerge({
       ...base(),

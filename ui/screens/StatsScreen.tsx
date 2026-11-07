@@ -6,7 +6,7 @@ import { Screen } from '../components/Shell';
 import { Meter } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar } from '../components/budget';
-import { Calendar, Calibration, HourBars, Lines, WeeklyBars, seriesColor, shortDate } from '../components/charts';
+import { Calendar, Calibration, FREE_STUDY, HourBars, Lines, WeeklyBars, seriesColor, shortDate } from '../components/charts';
 
 const RANGES: { value: StatsRange; label: string }[] = [
   { value: '7d', label: '7 days' },
@@ -37,6 +37,9 @@ export function StatsScreen() {
   // a goal keeps its colour whatever the filter: colours follow the order of all goals
   const colorOf = new Map(view.goals.map((g, i) => [g.id, seriesColor(i)]));
   const series = view.goals.filter((g) => view.weeks.some((w) => w.minutes[g.id])).map((g) => ({ id: g.id, label: g.title, color: colorOf.get(g.id) ?? seriesColor(-1) }));
+  // free study is a line of its own: time in sessions the learner chose that no goal counts
+  const anyFree = view.weeks.some((w) => w.minutes['free']);
+  if (anyFree) series.push({ id: 'free', label: 'Free study', color: FREE_STUDY });
   const empty = view.headline.minutes === 0 && view.headline.answers === 0 && view.headline.ideasOwned === 0;
   const h = view.headline;
 
@@ -100,14 +103,14 @@ export function StatsScreen() {
           )}
 
           <div className="tiles">
-            <Tile label="Studied" value={formatHours(h.minutes)} sub={`${h.sessions} ${h.sessions === 1 ? 'session' : 'sessions'}`} />
+            <Tile label="Studied" value={formatHours(h.minutes)} sub={`${h.sessions} ${h.sessions === 1 ? 'session' : 'sessions'}${view.freeMinutes ? ` · ${formatHours(view.freeMinutes)} free study` : ''}`} />
             <Tile label="Ideas learned" value={String(h.ideasLearned)} sub={`${h.ideasOwned} yours in all`} />
             <Tile label="Days in a row" value={String(h.streakDays)} sub={h.streakDays ? 'keep it going' : 'start one today'} />
             <Tile label="Average score" value={h.avgScore === null ? '—' : pct(h.avgScore)} sub={`${h.answers} answers`} />
           </div>
 
           <div className="stats-grid">
-            <Card title="Time per week" wide note="Stacked by goal. Time on an idea two goals share is split between them.">
+            <Card title="Time per week" wide note={`Stacked by goal. Time on an idea two goals share is split between them.${anyFree ? ' Free study is time in sessions you chose that count toward no goal.' : ''}`}>
               <WeeklyBars weeks={view.weeks} series={series} format={formatHours} />
             </Card>
 
@@ -194,7 +197,7 @@ export function StatsScreen() {
               </Card>
             )}
 
-            {view.budgets.length > 0 && (
+            {(view.budgets.length > 0 || view.freeMinutes > 0) && (
               <Card title="Time against budgets" wide note={`New ideas take you about ${view.speed.toFixed(1)}× the time the plans estimate.`}>
                 <ul className="budget-list">
                   {view.budgets.map((b) => (
@@ -211,6 +214,17 @@ export function StatsScreen() {
                       <BudgetBar progress={{ totalMinutes: b.totalMinutes, spentMinutes: b.spentMinutes, plannedMinutes: b.plannedMinutes, expectedByNow: null }} />
                     </li>
                   ))}
+                  {view.freeMinutes > 0 && (
+                    <li>
+                      <span className="flex items-baseline justify-between gap-[12px]">
+                        <span className="flex items-center gap-[8px]">
+                          <i className="legend-swatch" style={{ background: FREE_STUDY }} />
+                          Free study
+                        </span>
+                        <span className="t-small text-secondary">{formatHours(view.freeMinutes)} in sessions you chose, outside every budget</span>
+                      </span>
+                    </li>
+                  )}
                 </ul>
               </Card>
             )}

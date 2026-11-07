@@ -21,8 +21,8 @@ export type ActivityKind =
   | 'depth.changed'
   | 'pace';
 
-/** Where time was spent. */
-export type Surface = 'session' | 'practice' | 'probe' | 'lookup' | 'map' | 'reading';
+/** Where time was spent. `free`: a session the learner chose, booked to no goal (free study). */
+export type Surface = 'session' | 'practice' | 'probe' | 'lookup' | 'map' | 'reading' | 'free';
 
 export interface ActivityContext {
   goalId?: string | null;

@@ -7,6 +7,7 @@ import type { LlmProvider } from './llm/provider';
 import { IngestionService } from './services/ingestion';
 import { GoalWorker, nextGoalStep } from './services/goalWorker';
 import { SessionWork } from './services/sessionWork';
+import { SessionMaker } from './services/sessionMaker';
 import { listGoals } from './store/goals';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';
@@ -17,6 +18,8 @@ export class AppContext {
   readonly settings: SettingsStore;
   /** Planning and judging in flight; it outlives the Session screen and survives a settings change. */
   readonly sessionWork = new SessionWork();
+  /** "Describe it": the session maker's call and the proposal it leaves. */
+  readonly sessionMaker = new SessionMaker();
   emit: EventSink = () => {};
   private cachedProvider: LlmProvider | null = null;
   private cachedDb: Database | null = null;
@@ -32,6 +35,7 @@ export class AppContext {
     this.settings = new SettingsStore(settingsFile, defaultDataFolder);
     this.ensureFolders();
     this.sessionWork.subscribe((event) => this.emit('session.work', event));
+    this.sessionMaker.subscribe((maker) => this.emit('session.maker', { maker }));
   }
 
   paths() {

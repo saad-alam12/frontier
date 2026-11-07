@@ -41,6 +41,8 @@ export interface MergeInput {
   existingNodes: Map<string, KnowledgeNode>;
   existingChains: Chain[];
   newId: (prefix: 'node' | 'chain' | 'example') => string;
+  /** What new ideas are: a source grounds them (`verified`, the default); taught from the model's knowledge they are `unverified`. */
+  newStatus?: KnowledgeNode['status'];
 }
 
 export interface MergePlan {
@@ -60,7 +62,12 @@ export interface MergePlan {
   examples: WorkedExample[];
 }
 
-export function planMerge(input: MergeInput): MergePlan {
+export interface PlannedMerge extends MergePlan {
+  /** Each extracted temp id → the node it became (new, or the existing one it matched). */
+  resolved: Map<string, string>;
+}
+
+export function planMerge(input: MergeInput): PlannedMerge {
   const resolve = new Map<string, string>();
   const newNodes: KnowledgeNode[] = [];
   const nodeUpdates: MergePlan['nodeUpdates'] = [];
@@ -81,14 +88,15 @@ export function planMerge(input: MergeInput): MergePlan {
         return true;
       });
       const hasRef = existing.sources.some((s) => s.sourceId === ref.sourceId && (s.locator ?? '') === (ref.locator ?? ''));
-      const verify = existing.status === 'unverified';
+      // only a source grounds an unverified idea; the model's own knowledge does not
+      const verify = existing.status === 'unverified' && (input.newStatus ?? 'verified') === 'verified';
       if (aliases.length || !hasRef || verify) nodeUpdates.push({ nodeId: existingId, aliases, sources: hasRef ? [] : [ref], ...(verify ? { verify } : {}) });
       continue;
     }
     const id = input.newId('node');
     resolve.set(n.tempId, id);
     covered.add(id);
-    newNodes.push({ id, kind: n.kind, name: n.name, statement: n.statement, aliases: [...n.aliases], sources: [ref], status: 'verified' });
+    newNodes.push({ id, kind: n.kind, name: n.name, statement: n.statement, aliases: [...n.aliases], sources: [ref], status: input.newStatus ?? 'verified' });
   }
 
   const resolveId = (id: string): string | null => resolve.get(id) ?? (input.existingNodes.has(id) ? id : null);
@@ -144,5 +152,6 @@ export function planMerge(input: MergeInput): MergePlan {
     coveredNodeIds: [...covered],
     skippedChains,
     examples,
+    resolved: resolve,
   };
 }

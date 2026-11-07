@@ -48,7 +48,8 @@ export function stepMinutes(kind: NodeKind, fromDepth: number, aim: number, spee
 }
 
 export interface LessonPlan {
-  goalId: string;
+  /** Null for a free session with no goal. */
+  goalId: string | null;
   title: string;
   orientation: string;
   steps: LessonStep[];
