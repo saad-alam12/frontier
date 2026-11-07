@@ -1,0 +1,86 @@
+/* ---------- Command palette (⌘K) ---------- */
+
+.palette {
+  width: 600px;
+  margin-top: 14vh;
+  overflow: hidden;
+}
+.palette-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 20px 22px;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 17px;
+}
+.palette-input:focus {
+  outline: none;
+}
+.palette-input::placeholder {
+  color: var(--text-muted);
+}
+.palette-list {
+  max-height: 360px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.palette-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.palette-item[aria-selected='true'] {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.palette-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-group {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.palette-empty {
+  margin: 0;
+  padding: 22px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.palette-foot {
+  display: flex;
+  gap: 18px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.palette-foot kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-family: inherit;
+  font-size: 11px;
+}

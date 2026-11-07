@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ChartNoAxesColumn, GalleryVerticalEnd, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
+import { ChartNoAxesColumn, Command, GalleryVerticalEnd, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { useSessionWork } from '../lib/sessionWork';
 
@@ -52,9 +52,12 @@ export function NavRail({
   onSelect,
   sessionActive,
   counts = {},
+  onSearch,
 }: {
   current: ScreenName;
   onSelect: (s: ScreenName) => void;
+  /** Open the command palette. */
+  onSearch: () => void;
   sessionActive: boolean;
   /** A quiet number beside a place: the flashcards to review now. */
   counts?: Partial<Record<ScreenName, number>>;
@@ -93,6 +96,15 @@ export function NavRail({
           </span>
         </button>
       )}
+      <div className="nav-group">
+        <button type="button" className="nav-item" onClick={onSearch} title="Go to any place, goal or idea, or do something, by typing">
+          <Command size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span>Search</span>
+          <span className="nav-count" aria-label="Command K">
+            ⌘K
+          </span>
+        </button>
+      </div>
       <div className="nav-group">{PRIMARY.map(item)}</div>
       <div className="nav-group">
         <div className="nav-heading">Look back</div>

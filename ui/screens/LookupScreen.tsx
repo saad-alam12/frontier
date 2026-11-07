@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LookupAnswer, NodeCard } from '../../backend/api/contract';
 import { call } from '../api';
 import { Screen } from '../components/Shell';
@@ -9,15 +9,16 @@ import { NodeCardView } from '../components/NodeCard';
 const STATE_WORD = { owned: 'Yours', fringe: 'Learnable now', beyond: 'Beyond your edge' } as const;
 
 /** Look things up in your own map: by meaning or name, answered from your own cards. */
-export function LookupScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void> }) {
-  const [query, setQuery] = useState('');
+/** `initialQuery`: a question asked from the command palette, looked up at once. */
+export function LookupScreen({ onOpenTrail, onGoDeeper, initialQuery }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>; initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [result, setResult] = useState<(LookupAnswer & { query: string }) | null>(null);
   const [card, setCard] = useState<NodeCard | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const search = async () => {
-    const q = query.trim();
+  const search = async (asked = query) => {
+    const q = asked.trim();
     if (!q || busy) return;
     setBusy(true);
     setError(null);
@@ -32,6 +33,10 @@ export function LookupScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessio
     }
   };
   const open = async (nodeId: string) => setCard(await call('lookup.open', { nodeId }));
+  useEffect(() => {
+    if (initialQuery) void search(initialQuery);
+    // once, for the question the screen was opened with
+  }, []);
 
   const aside = card ? (
     <NodeCardView card={card} onSelect={(id) => void open(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} />

@@ -15,6 +15,22 @@ import { TrailsScreen } from './screens/TrailsScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CardsScreen, type CardsView } from './screens/CardsScreen';
+import { CommandPalette } from './components/CommandPalette';
+import type { PaletteItem } from './lib/palette';
+import type { GoalDetail } from '../backend/api/contract';
+
+/** Places in the palette: the sidebar's, with the other words they answer to. */
+const PLACES: { name: ScreenName; label: string; hint: string; keywords?: string[] }[] = [
+  { name: 'today', label: 'Today', hint: 'What to do now', keywords: ['home', 'start'] },
+  { name: 'goals', label: 'Goals', hint: 'What you are learning toward', keywords: ['plans', 'courses'] },
+  { name: 'map', label: 'Map', hint: 'Every idea and how they connect', keywords: ['graph', 'ideas'] },
+  { name: 'cards', label: 'Cards', hint: 'Flashcards to review', keywords: ['flashcards', 'review', 'memorize'] },
+  { name: 'stats', label: 'Stats', hint: 'Your time and progress', keywords: ['progress', 'time'] },
+  { name: 'lookup', label: 'Lookup', hint: 'Ask about what you have learned', keywords: ['ask', 'question', 'search'] },
+  { name: 'trails', label: 'Trails', hint: 'Your past sessions', keywords: ['history', 'sessions'] },
+  { name: 'library', label: 'Library', hint: 'The material your maps come from', keywords: ['sources', 'files', 'pdf'] },
+  { name: 'settings', label: 'Settings', hint: 'Models, data and your map', keywords: ['preferences', 'model'] },
+];
 
 /** What each screen's time counts as; screens with none are not study. */
 const SURFACE: Partial<Record<ScreenName, 'session' | 'map' | 'lookup' | 'reading'>> = { session: 'session', map: 'map', lookup: 'lookup', trails: 'reading', library: 'reading' };
@@ -39,6 +55,24 @@ export function App() {
   const [cardsDue, setCardsDue] = useState(0);
   /** Bumped when the sidebar's current place is clicked again: the place opens at its top level. */
   const [visit, setVisit] = useState(0);
+  /** The command palette (⌘K) and the goals it offers, read when it opens. */
+  const [palette, setPalette] = useState(false);
+  const [paletteGoals, setPaletteGoals] = useState<GoalDetail[]>([]);
+  /** A question asked from the palette, for Lookup to answer. */
+  const [lookupQuery, setLookupQuery] = useState<{ query: string; key: number } | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPalette((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
+    if (palette) void call('goals.list').then(setPaletteGoals);
+  }, [palette]);
 
   useEffect(() => {
     startActivityTicker();
@@ -62,6 +96,7 @@ export function App() {
     setGoalsView(null);
     setCardsView(null);
     setMapIdea(null);
+    setLookupQuery(null);
     setScreen(s);
   };
   const openCards = (view: Partial<CardsView>) => {
@@ -86,10 +121,35 @@ export function App() {
     if (deeper.nodeIds.length) startSessionInBackground(goalId, deeper.nodeIds);
     navigate('session');
   };
+  const paletteItems: PaletteItem[] = [
+    { id: 'do:choose', group: 'Actions', label: 'Choose what to learn', hint: 'Pick ideas or describe a session', keywords: ['learn', 'study', 'free session'] },
+    { id: 'do:new-goal', group: 'Actions', label: 'New goal', hint: 'Say what you want to learn', keywords: ['add goal', 'create'] },
+    { id: 'do:review', group: 'Actions', label: 'Review flashcards', hint: 'The cards due now', keywords: ['cards'] },
+    ...(sessionActive ? [{ id: 'place:session', group: 'Places' as const, label: 'Session', hint: 'Your open session', keywords: ['continue'] }] : []),
+    ...PLACES.map((p) => ({ id: `place:${p.name}`, group: 'Places' as const, label: p.label, hint: p.hint, keywords: p.keywords })),
+    ...paletteGoals.map((g) => ({ id: `goal:${g.goal.id}`, group: 'Goals' as const, label: g.goal.title ?? g.goal.text, hint: g.goal.status === 'draft' ? 'Plan waiting for you' : g.goal.text, keywords: [g.goal.text] })),
+  ];
+  const runPalette = (item: PaletteItem) => {
+    const [kind, ...rest] = item.id.split(':');
+    const id = rest.join(':');
+    if (kind === 'place') navigate(id as ScreenName);
+    else if (kind === 'goal') {
+      const draft = paletteGoals.find((g) => g.goal.id === id)?.goal.status === 'draft';
+      openGoals(draft ? { name: 'draft', goalId: id } : { name: 'goal', goalId: id });
+    } else if (kind === 'idea') showOnMap(id);
+    else if (kind === 'ask') {
+      setLookupQuery({ query: id, key: Date.now() });
+      setScreen('lookup');
+    }
+    else if (id === 'choose') openChoose();
+    else if (id === 'new-goal') openGoals({ name: 'new' });
+    else if (id === 'review') openCards({ tab: 'review' });
+  };
   return (
     <div className="app">
       <div className="window-drag" aria-hidden="true" />
-      <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} counts={{ cards: cardsDue }} />
+      <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} counts={{ cards: cardsDue }} onSearch={() => setPalette(true)} />
+      {palette && <CommandPalette items={paletteItems} onRun={runPalette} onClose={() => setPalette(false)} />}
       <Fragment key={visit}>
         {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
         {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onChoose={openChoose} onOpenCards={() => openCards({ tab: 'review' })} />}
@@ -98,7 +158,7 @@ export function App() {
         {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
         {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} />}
         {screen === 'stats' && <StatsScreen />}
-        {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
+        {screen === 'lookup' && <LookupScreen key={lookupQuery?.key ?? 'lookup'} initialQuery={lookupQuery?.query} onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
         {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
         {screen === 'library' && <LibraryScreen />}
         {screen === 'settings' && <SettingsScreen />}
