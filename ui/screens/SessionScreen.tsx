@@ -58,6 +58,13 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
     void refresh();
     return onEvent('practice.graded', () => void refresh());
   }, [refresh]);
+  // a failed start is shown here once, then forgotten, so the sidebar stops offering a session that never opened
+  const startFailed = work?.kind === 'start' && work.status === 'failed' ? work.error : null;
+  useEffect(() => {
+    if (!startFailed) return;
+    setError(`The session could not be planned: ${startFailed}`);
+    void call('session.dismissStart');
+  }, [startFailed]);
   // work that finished, here or while the screen was closed, changed the session
   useEffect(() => {
     if (last && last.outcome !== 'running') void refresh();
@@ -88,9 +95,15 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
       try {
         setSnap(await call('session.respond', { sessionId: snap.id, response, draftKey }));
       } catch (e) {
-        if (!isCancelled(e)) throw new Error(notSent(e instanceof Error ? e.message : String(e)));
-        setStopped(true);
-        return;
+        if (isCancelled(e)) {
+          setStopped(true);
+          return;
+        }
+        // the answer may have been judged and saved before a later step failed: the notice says so
+        const fresh = await call('session.current');
+        setSnap(fresh);
+        if (fresh?.owed) return;
+        throw new Error(notSent(e instanceof Error ? e.message : String(e)));
       }
       clearAnswerExtras();
     });
@@ -146,7 +159,6 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   if (!snap) {
     const ready = goals.filter((g) => g.goal.status === 'active' && g.capabilities.length > 0);
     const planning = work?.kind === 'start' && work.status === 'running' ? work : null;
-    const startFailed = work?.kind === 'start' && work.status === 'failed' ? work.error : null;
     if (planning) {
       const goal = goals.find((g) => g.goal.id === planning.goalId)?.goal;
       return <Planning goalTitle={goal ? (goal.title ?? goal.text) : null} />;
@@ -157,7 +169,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
           <h1 className="t-display">Session</h1>
           <p className="t-lead m-0">Start the session planned for a goal, or choose what to learn yourself.</p>
         </div>
-        {(error ?? startFailed) && <Notice error>{error ?? `The session could not be planned: ${startFailed}`}</Notice>}
+        {error && <Notice error>{error}</Notice>}
         {ready.length === 0 ? (
           <Empty
             action={
@@ -198,7 +210,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
   const isBusy = busy !== null || judging !== null;
   const current = snap.current;
-  const notice = error ?? (failed ? notSent(failed) : null);
+  const notice = error ?? (failed ? (snap.owed ? notWritten(failed) : notSent(failed)) : null);
   const crumbs = [{ label: snap.goalTitle, onClick: snap.goalId ? () => onNavigate('goals') : undefined }, { label: snap.plan.title }, ...(current ? [{ label: current.name }] : [])];
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
@@ -268,6 +280,12 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 function notSent(reason: string): string {
   const said = reason.trim().replace(/\.?$/, '.');
   return `Your answer did not go through. ${said.charAt(0).toUpperCase()}${said.slice(1)} It is still in the field to send again.`;
+}
+
+/** Why the card after a saved answer is missing; Try again writes it. */
+function notWritten(reason: string): string {
+  const said = reason.trim().replace(/\.?$/, '.');
+  return `Your answer was saved, but the next step could not be prepared. ${said.charAt(0).toUpperCase()}${said.slice(1)}`;
 }
 
 /** A session being planned in the background: the screen says so, and opens the session when it is ready. */
@@ -552,6 +570,14 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
     setLastKey(draftKey);
     setEffort(null);
   }
+  if (snap.owed)
+    return (
+      <div className="button-row">
+        <Button kind="primary" onClick={() => onSend({ answer: '' })} disabled={busy}>
+          {busy ? 'Preparing the next step…' : 'Try again'}
+        </Button>
+      </div>
+    );
   if (!card || !current) return <p className="t-small m-0 text-muted">Preparing the next step…</p>;
 
   const set = (patch: Partial<CardDraft>) => drafts.set(draftKey, { ...draft, ...patch });

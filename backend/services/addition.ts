@@ -39,8 +39,10 @@ export function requestAddition(db: Database, goalId: string, request: string): 
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error('unknown goal');
   if (goal.status === 'draft' || goal.compiledAt === null) throw new Error('You can add to a goal once its plan is ready.');
-  // one proposal at a time: the addition would be drawn on a map the learner may be about to replace
+  // one proposal at a time: the addition would be drawn on a map the learner may be about to
+  // replace, and approving that map after the addition would wipe the added ideas
   if (goal.remap?.state === 'ready') throw new Error('Choose between your map and the new one first.');
+  if (goal.remap?.state === 'requested') throw new Error('Wait until the new map is drawn, then choose between it and yours.');
   saveAddition(db, goalId, { state: 'requested', request: text, at: nowIso() });
 }
 

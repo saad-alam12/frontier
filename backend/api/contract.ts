@@ -149,6 +149,8 @@ export interface ApiMethods {
   'session.startFree': { input: FreeChoice; output: SessionSnapshot };
   /** Stop the answer being judged (Esc); the respond then fails with "cancelled". False when too late. */
   'session.cancel': { input: { sessionId: string }; output: boolean };
+  /** Forget a session start that failed, once its error has been shown. */
+  'session.dismissStart': { input: undefined; output: undefined };
   /** Leave the session for now; it stays active and resumes at the same card. */
   'session.pause': { input: { sessionId: string }; output: undefined };
   /** End the session for good. */

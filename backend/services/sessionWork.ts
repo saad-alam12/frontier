@@ -116,6 +116,17 @@ export class SessionWork {
     }
   }
 
+  /**
+   * A failed start belongs to no session, so no session's end clears it: it is dropped once the
+   * Session screen has shown it, and the sidebar stops offering a session that never opened.
+   */
+  dismissStart(): void {
+    if (this.entry?.status === 'failed' && this.entry.kind === 'start') {
+      this.entry = null;
+      this.notify('cleared', 'start', null);
+    }
+  }
+
   subscribe(listener: (event: SessionWorkEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

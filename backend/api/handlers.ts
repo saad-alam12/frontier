@@ -202,6 +202,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return snap;
     },
     'session.cancel': ({ sessionId }) => ctx.sessionWork.cancel(sessionId),
+    'session.dismissStart': () => {
+      ctx.sessionWork.dismissStart();
+      return undefined;
+    },
     'session.freePreview': (choice) => previewFree(ctx.db(), ctx.sessionMaker, choice),
     'session.make': (request) => {
       // the call goes on in the background; its result arrives as an event and waits as a proposal

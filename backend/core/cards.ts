@@ -199,3 +199,15 @@ export function cardKey(front: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/**
+ * The part of a message around a selection, at most `max` characters: a selection can span several
+ * messages, so the message sent with it is cut to a window around the selection instead of refused.
+ */
+export function aroundSelection(message: string, selection: string, max: number): string {
+  if (message.length <= max) return message;
+  const at = message.indexOf(selection);
+  if (at < 0) return message.slice(0, max);
+  const start = Math.max(0, Math.min(at - Math.floor((max - selection.length) / 2), message.length - max));
+  return message.slice(start, start + max);
+}

@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { CardTextSchema, draftCard, writeIdeaCards } from '../agents/cardWriter';
 import type { CardGoal, CardText } from '../agents/cardWriter';
-import { CARD_ORIGINS, cardKey, cardsToAsk, creditable, introducedSince, nextDueByRating, reviewQueue, scheduleOf } from '../core/cards';
+import { CARD_ORIGINS, aroundSelection, cardKey, cardsToAsk, creditable, introducedSince, nextDueByRating, reviewQueue, scheduleOf } from '../core/cards';
 import type { CardOrigin, CardPhase, CardRating, CardReview, IdeaFinished, ReviewSource } from '../core/cards';
 import type { Goal } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
@@ -134,8 +134,12 @@ function lookups(db: Database, cards: CardRecord[]) {
   return { names: new Map([...nodes].map(([id, n]) => [id, n.name])), goals: new Map(listGoals(db).map((g) => [g.id, g])) };
 }
 
+/**
+ * When each card was introduced on the Cards screen: its very first review, if that was a screen
+ * review. A card a session credited first was no longer new, so it never uses up the day's new cards.
+ */
 function firstReviewsOnScreen(all: Scheduled[]): (string | null)[] {
-  return all.map((s) => s.reviews.find((r) => r.source === 'review')?.at ?? null);
+  return all.map((s) => (s.reviews[0]?.source === 'review' ? s.reviews[0].at : null));
 }
 
 /** The review queue for all goals or one: the card to show now and what is left. */
@@ -331,10 +335,20 @@ export function findIdeas(db: Database, query: string, limit = 8): IdeaRef[] {
     .map(({ id, name }) => ({ id, name }));
 }
 
+const SELECTION_MAX = 4000;
+const MESSAGE_MAX = 16000;
+
 export const DraftRequestSchema = z.object({
   ideaIds: z.array(z.string().min(1)).max(8),
   goalId: z.string().min(1).nullable().optional(),
-  selection: z.object({ text: z.string().trim().min(1).max(4000), message: z.string().max(16000) }).optional(),
+  // a selection across several messages can be long: it is cut, never refused with a raw error
+  selection: z
+    .object({ text: z.string().trim().min(1), message: z.string() })
+    .transform(({ text, message }) => {
+      const kept = text.slice(0, SELECTION_MAX);
+      return { text: kept, message: aroundSelection(message, kept, MESSAGE_MAX) };
+    })
+    .optional(),
   request: z.string().max(1000).optional(),
   partial: z.object({ front: z.string().max(2000), back: z.string().max(4000) }).optional(),
 });
@@ -381,9 +395,12 @@ export async function writeCardsForIdea(deps: CardWriterDeps, event: IdeaFinishe
   const { db } = deps;
   const goal = event.goalId ? getGoal(db, event.goalId) : undefined;
   if (event.goalId && !goal) return [];
-  const settings = goal ? getGoalCardSettings(db, goal.id) : null;
-  if (settings ? !settings.enabled : !cardsWithoutGoal(db)) return [];
-  const room = () => cardsToAsk(settings?.max ?? null, goal ? countAutoCards(db, goal.id) : 0);
+  // read again when the cards land: the learner may have lowered the maximum or turned cards off meanwhile
+  const room = () => {
+    const settings = goal ? getGoalCardSettings(db, goal.id) : null;
+    if (settings ? !settings.enabled : !cardsWithoutGoal(db)) return 0;
+    return cardsToAsk(settings?.max ?? null, goal ? countAutoCards(db, goal.id) : 0);
+  };
   const node = getNode(db, event.nodeId);
   const ask = room();
   if (!node || ask === 0) return [];

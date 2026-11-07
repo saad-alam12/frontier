@@ -245,7 +245,7 @@ export function GoalPage({
                 </Button>
                 <Button onClick={() => setEditingTime(true)}>{goal.budget || goal.wantedLevel ? 'Change the time' : 'Set the time'}</Button>
                 {/* one proposal at a time: not while an addition or a new map waits for an answer */}
-                {goal.addition === null && goal.remap?.state !== 'ready' && <Button onClick={() => setAdding(true)}>Add to this goal</Button>}
+                {goal.addition === null && goal.remap?.state !== 'ready' && goal.remap?.state !== 'requested' && <Button onClick={() => setAdding(true)}>Add to this goal</Button>}
               </div>
             </>
           )}

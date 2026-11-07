@@ -11,6 +11,7 @@ import type { EdgeState, Stage } from '../core/session';
 import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal, GoalLevel } from '../core/types';
+import { isCancelled } from '../llm/provider';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
@@ -75,6 +76,11 @@ export interface SessionState {
   priorMinutes?: Record<string, number>;
   /** A session the learner chose (design §4.5); absent for planned sessions. */
   free?: FreeSession | null;
+  /**
+   * The answer before was judged and saved, but writing the card for `stage` failed: the next
+   * response only writes that card, so nothing is graded or recorded twice.
+   */
+  owed?: boolean;
 }
 
 /** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
@@ -109,6 +115,8 @@ export interface SessionSnapshot {
   goalTitle: string;
   /** What the learner asked for, in a session they chose. */
   free: Pick<FreeSession, 'description' | 'picked' | 'counted'> | null;
+  /** The last answer was saved but the next card could not be written; "Try again" writes it. */
+  owed: boolean;
   startedAt: string;
   status: SessionRecord['status'];
   phase: Phase;
@@ -239,7 +247,9 @@ async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[
   const { db } = deps;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
-  const ended = listEndedSessions<SessionState>(db, goalId).map(normalized);
+  // only the goal's own planned sessions carry a half-done idea or are recalled: a chosen session
+  // counted toward the goal is stored under it too, and must not hide the planned one before it
+  const ended = listEndedSessions<SessionState>(db, goalId).map(normalized).filter((s) => !s.state.free);
   const view = loadKnowledge(db);
   // an idea erased from the map since has nothing left to carry, so it counts as reached
   const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => !view.nodes.has(id) || ((view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id)))) : null;
@@ -313,9 +323,18 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
   const state = session.state;
   const sent = { card: state.phase === 'teach' ? publicCard(state.card) : null, stage: state.phase === 'teach' ? state.stage : null, response: checked };
   const job = { kind: 'respond' as const, sessionId, goalId: state.goalId, sent, stoppable: answersQuestion(state) };
-  await deps.work.run(job, (gate) => respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked));
   // the renderer owns draft keys; only this session's can be dropped from here
-  if (options.draftKey?.startsWith(`session:${sessionId}:`)) deleteDrafts(db, [options.draftKey]);
+  const dropDraft = () => {
+    if (options.draftKey?.startsWith(`session:${sessionId}:`)) deleteDrafts(db, [options.draftKey]);
+  };
+  try {
+    await deps.work.run(job, (gate) => respondTo(gate ? { ...deps, provider: gate.wrap(deps.provider) } : deps, session, checked));
+  } catch (error) {
+    // the answer was judged and saved before a later call failed: it must not be sent again
+    if (getSession<SessionState>(db, sessionId)?.state.owed) dropDraft();
+    throw error;
+  }
+  dropDraft();
   return snapshot(db, normalized(getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>), deps.work);
 }
 
@@ -348,7 +367,34 @@ function answersQuestion(state: SessionState): boolean {
   return state.phase === 'teach' && state.stage !== null && isGraded(state.stage);
 }
 
+/**
+ * Run one response. A model call can fail after the answer was judged and its evidence written (the
+ * card after it, or the next idea's first card): then the state is saved up to that point with the
+ * card owed, so the answer is never graded twice. Ideas finished are announced only once saved.
+ */
 async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<void> {
+  const { db } = deps;
+  const sessionId = session.id;
+  const state = session.state;
+  const finished: IdeaFinished[] = [];
+  const announce = () => {
+    for (const event of finished) deps.onIdeaFinished?.(event);
+  };
+  const eventsBefore = listSessionEvents(db, sessionId).length;
+  try {
+    await respondToPhase({ ...deps, onIdeaFinished: (event) => finished.push(event) }, session, response);
+  } catch (error) {
+    const written = listSessionEvents(db, sessionId).length > eventsBefore;
+    if (!written || isCancelled(error) || state.phase !== 'teach' || state.card !== null) throw error;
+    state.owed = true;
+    saveSessionState(db, sessionId, state);
+    announce();
+    throw error;
+  }
+  announce();
+}
+
+async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionState>, response: LearnerResponse): Promise<void> {
   const { db } = deps;
   const sessionId = session.id;
   const state = session.state;
@@ -375,6 +421,12 @@ async function respondTo(deps: SessionDeps, session: SessionRecord<SessionState>
       break;
     }
     case 'teach': {
+      const step = state.plan.steps[state.stepIndex];
+      if (state.owed && step && state.stage) {
+        await produceCard(deps, sessionId, state, step, state.stage, null, goal);
+        state.owed = false;
+        break;
+      }
       await handleTeachResponse(deps, sessionId, state, response, goal);
       break;
     }
@@ -500,8 +552,14 @@ async function produceCard(
   previous: TutorStepInput['previous'],
   goal: TutorGoal,
 ): Promise<Grade | null> {
-  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined });
-  if (!result.card) throw new Error('the tutor returned no card');
+  // on failure, where the session stands if what came before this call is kept (see respondTo)
+  const owe = (error: unknown): never => {
+    state.stage = stage;
+    state.card = null;
+    throw error;
+  };
+  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined }).catch(owe);
+  if (!result.card) return owe(new Error('the tutor returned no card'));
   state.stage = stage;
   state.card = result.card;
   pushHistory(state, step.nodeId, { stage, card: result.card, response: null, grade: null });
@@ -826,6 +884,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
     goalText: goal?.text ?? '',
     goalTitle: goal ? (goal.title ?? goal.text) : 'Free study',
     free: s.free ? { description: s.free.description, picked: s.free.picked, counted: s.free.counted } : null,
+    owed: s.owed === true,
     startedAt: session.startedAt,
     status: session.status,
     phase: s.phase,

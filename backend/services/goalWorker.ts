@@ -28,10 +28,13 @@ export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' |
   if (readable.some((s) => !goal.compiledSources.includes(s))) return 'compile';
   // a draft changed after it was mapped: nothing is approved yet, so it is mapped again
   if (goal.status === 'draft' && goal.remap?.state === 'requested') return 'redraw';
-  if (goal.addition?.state === 'requested' && goal.status !== 'draft') return 'add';
+  // never while a new map is drawn or waits: approving it after the addition would wipe what was added
+  const remapOpen = goal.remap?.state === 'requested' || goal.remap?.state === 'ready';
+  if (goal.addition?.state === 'requested' && goal.status !== 'draft' && !remapOpen) return 'add';
   // a re-map the learner asked for, or one their missing background calls for (proposed, never
-  // applied); not while an addition waits, so the learner weighs one proposal at a time
-  const adding = goal.addition !== null && goal.addition.state !== 'failed';
+  // applied); not while an addition waits for an answer, so the learner weighs one proposal at a
+  // time. An addition still to be worked out waits for the map instead (it is drawn on the new one).
+  const adding = goal.addition?.state === 'ready';
   if (goal.status === 'active' && !adding && (goal.remap?.state === 'requested' || (goal.remap === null && pendingRemapNeed(db, goal) !== 'none'))) return 'remap';
   return null;
 }

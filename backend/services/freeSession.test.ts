@@ -6,8 +6,9 @@ import { addCapabilities, createGoal } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../store/evidence';
 import { getSession, listSessionEvents } from '../store/sessions';
+import { logTime } from '../store/activity';
 import { getNode, listChains } from '../store/world';
-import { attributeTime, freeStudy, spentByGoal } from './budget';
+import { attributeTime, freeStudy, learnerSpeedNow, spentByGoal } from './budget';
 import { tick } from './activity';
 import { recordEvidence } from './evidence';
 import { previewFree, startFreeSession } from './freeSession';
@@ -158,6 +159,31 @@ describe('choosing what to learn', () => {
     expect(taught).toContain('intuition');
   });
 
+  it('treats a new idea named like one on the map as that idea: planned from what is known, taught once', async () => {
+    const { db, id, maker, deps } = setup();
+    const known = (k: string) => id(k);
+    const proposal = {
+      title: 'Equilibria',
+      summary: 'What makes a profile stable.',
+      level: 'working',
+      ideas: [
+        { ref: known('nash'), aim: 2, why: 'On the map already.' },
+        { ref: 'n1', aim: 2, why: 'Written as new by mistake.' },
+      ],
+      newIdeas: [{ tempId: 'n1', kind: 'term', name: 'nash  Equilibrium', statement: 'A stable profile.', premises: [] }],
+      background: [],
+    };
+    deps.provider = new FakeProvider({ tutor, planner, sessionPlanner: [proposal] });
+    recordEvidence(db, { nodeId: known('nash'), kind: 'explain', score: 0.9, reasoning: 't' });
+    const made = await maker.make(deps, { description: 'Nash equilibrium', goalId: null });
+    const plan = previewFree(db, maker, { goalId: null, counted: false, proposalId: made.id });
+    expect(plan.ideas).toHaveLength(1);
+    expect(plan.ideas[0]).toMatchObject({ ref: known('nash'), state: expect.not.stringMatching('new') });
+    expect(plan.ideas[0]?.fromDepth).toBeGreaterThan(0);
+    const snap = await startFreeSession(deps, maker, { goalId: null, counted: false, proposalId: made.id });
+    expect(snap.plan.steps.map((s) => s.nodeId)).toEqual([known('nash')]);
+  });
+
   it('books the time to the goal when counted, and to free study when not or with no goal', async () => {
     const { db, id, maker, deps } = setup();
     const goal = gameTheoryGoal(db, id);
@@ -185,6 +211,16 @@ describe('choosing what to learn', () => {
     expect(statsView(db, { goalId: goal.id, topicId: null, range: 'all' }, now).freeMinutes).toBe(0);
   });
 
+  it('counts free study on a goal\u2019s ideas as time studied, so learning there does not look faster', () => {
+    const { db, id } = setup();
+    gameTheoryGoal(db, id);
+    expect(learnerSpeedNow(db)).toBe(1);
+    // depth gained on the goal's ideas, in free sessions only, over two slow hours
+    for (const key of ['nash', 'bestResponse']) recordEvidence(db, { nodeId: id(key), kind: 'explain', score: 0.95, reasoning: 't' });
+    for (const key of ['nash', 'bestResponse']) logTime(db, 'free', { goalId: null, sessionId: 'session_free', nodeId: id(key) }, 3600);
+    expect(learnerSpeedNow(db)).toBeGreaterThan(1);
+  });
+
   it('does not carry a half-done idea of a chosen session into the goal’s planned sessions', async () => {
     const { db, id, maker, deps } = setup();
     const goal = gameTheoryGoal(db, id);
@@ -198,6 +234,24 @@ describe('choosing what to learn', () => {
     expect(state?.resume).toBeNull();
     expect(planned.plan.title).toBe('The goal’s own session');
     expect(listSessionEvents(db, planned.id).some((e) => e.payload['carriedFrom'])).toBe(false);
+  });
+
+  it('keeps the half-done idea of a planned session when a counted chosen session comes between', async () => {
+    const { db, id, maker, deps } = setup();
+    const goal = gameTheoryGoal(db, id);
+    let first = await respond(deps, (await startSession(deps, goal.id)).id, { answer: '' });
+    expect(first.phase).toBe('teach');
+    first = await respond(deps, first.id, { answer: 'my answer', confidence: 0.9 });
+    const halfDone = first.current?.nodeId;
+    await abandonSession(deps, first.id);
+
+    const chosen = await respond(deps, (await startFreeSession(deps, maker, { goalId: goal.id, counted: true, pick: [id('dominant')] })).id, { answer: '' });
+    await abandonSession(deps, chosen.id);
+
+    const planned = await startSession(deps, goal.id);
+    const state = getSession<SessionState>(db, planned.id)?.state;
+    expect(state?.resume?.nodeId).toBe(halfDone);
+    expect(state?.resume?.fromSessionId).toBe(first.id);
   });
 
   it('refuses to open a chosen session while one is open, and shows what was asked in Trails', async () => {

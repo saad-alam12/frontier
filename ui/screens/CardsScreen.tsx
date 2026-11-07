@@ -75,7 +75,8 @@ export function CardsScreen({ initial, onShowOnMap }: { initial?: Partial<CardsV
         {tab === 'review' ? (
           <Review key={`${goalId}:${version}`} goalId={goalId} onWrite={write} onBrowse={() => setTab('all')} onEdit={edit} />
         ) : (
-          <AllCards key={`${goalId}:${version}`} goalId={goalId} onEdit={edit} onShowOnMap={onShowOnMap} />
+          // no version in the key: it reloads on cards.changed and keeps its search, filter and open row
+          <AllCards key={goalId ?? 'all'} goalId={goalId} onEdit={edit} onShowOnMap={onShowOnMap} />
         )}
       </div>
       {sheet && <CardSheet {...sheet} onClose={() => setSheet(null)} onSaved={() => setVersion((v) => v + 1)} />}
@@ -87,7 +88,8 @@ export function CardsScreen({ initial, onShowOnMap }: { initial?: Partial<CardsV
 function ignoreKey(e: KeyboardEvent): boolean {
   const t = e.target;
   if (!(t instanceof Element)) return false;
-  return e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, select, dialog') !== null;
+  // with a sheet open, focus can sit on the body behind it: its keys still belong to the sheet
+  return e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, select, dialog') !== null || document.querySelector('dialog[open]') !== null;
 }
 
 /** One card at a time: the front, then the answer, then how well it was known. */

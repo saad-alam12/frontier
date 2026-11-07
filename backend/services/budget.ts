@@ -143,7 +143,10 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
   const shares = attributeTime(db);
   const spent = spentByGoal(shares);
   const learned = goals.reduce((sum, g) => sum + learnedMinutes(g, targets, nodes, states), 0);
-  const studied = shares.reduce((sum, s) => sum + s.minutes, 0);
+  // depth gained on a goal's ideas in free study counts as learned, so the time it took counts as
+  // studied too (it is still no goal's time); otherwise free study would make the learner look faster
+  const freeOnGoalIdeas = freeStudy(db).filter((f) => f.span.nodeId !== null && targeted.has(f.span.nodeId));
+  const studied = shares.reduce((sum, s) => sum + s.minutes, 0) + freeOnGoalIdeas.reduce((sum, f) => sum + f.minutes, 0);
   return { goals, nodes, states, targets, planNodes, spent, speed: learnerSpeed(learned, studied) };
 }
 

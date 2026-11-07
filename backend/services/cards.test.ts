@@ -66,6 +66,15 @@ describe('flashcards', () => {
     expect(cardQueue(db, null, noon(3)).left.new).toBe(19);
   });
 
+  it('a card a session credited first is not new, so reviewing it on screen later leaves the day\u2019s new cards alone', () => {
+    const { db, id } = setup();
+    const credited = Array.from({ length: 20 }, (_, i) => saveCard(db, { front: `Credited fact ${i}`, back: String(i), nodeIds: [id('nash')], goalId: null }));
+    creditRecalledCards(db, credited.map((c) => c.id), { source: 'session', sessionId: null }, noon(2));
+    for (let i = 0; i < 5; i += 1) saveCard(db, { front: `Fresh fact ${i}`, back: String(i), nodeIds: [id('nash')], goalId: null });
+    for (const c of credited) reviewCard(db, c.id, 3, noon(5));
+    expect(cardQueue(db, null, noon(5, 1)).left.new).toBe(5);
+  });
+
   it('a missed card comes back in the same sitting; suspended cards never come', () => {
     const { db, id } = setup();
     const a = saveCard(db, { front: 'What does BR stand for?', back: 'Best response', nodeIds: [id('bestResponse')] });
@@ -140,6 +149,19 @@ describe('automatic cards', () => {
     const after = new FakeProvider();
     expect(await writeCardsForIdea({ db, provider: after }, finished(goal.id, id('mixed')))).toEqual([]);
     expect(after.calls).toHaveLength(0);
+  });
+
+  it('reads the goal\u2019s card settings again when the cards land', async () => {
+    const { db, id, goal, finished } = setup();
+    saveGoalCardSettings(db, goal.id, { enabled: true, max: 40 });
+    const provider = new FakeProvider({
+      cardWriter: async () => {
+        saveGoalCardSettings(db, goal.id, { enabled: false, max: 40 }); // turned off during the call
+        return { cards: [{ front: 'Define a Nash equilibrium', back: 'No profitable deviation.' }] };
+      },
+    });
+    expect(await writeCardsForIdea({ db, provider }, finished(goal.id, id('nash')))).toEqual([]);
+    expect(countAutoCards(db, goal.id)).toBe(0);
   });
 
   it('drops a card that asks what an existing card already asks', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREDIT_GAP_MS, LEARN_AHEAD_MS, NEW_PER_DAY, cardKey, cardsToAsk, creditable, formatInterval, introducedSince, nextDueByRating, reviewQueue, scheduleOf } from './cards';
+import { CREDIT_GAP_MS, LEARN_AHEAD_MS, NEW_PER_DAY, aroundSelection, cardKey, cardsToAsk, creditable, formatInterval, introducedSince, nextDueByRating, reviewQueue, scheduleOf } from './cards';
 import type { CardRating, CardReview, CardSchedule, QueueEntry } from './cards';
 
 const t0 = new Date('2026-03-02T09:00:00Z');
@@ -133,5 +133,17 @@ describe('room and credit', () => {
   it('treats a card asked again in other spacing or emphasis as a duplicate', () => {
     expect(cardKey('State the **attention**  formula')).toBe(cardKey('state the attention formula'));
     expect(cardKey('State the attention formula')).not.toBe(cardKey('Define attention'));
+  });
+});
+
+describe('the message sent with a selection', () => {
+  it('is cut to a window around the selection when too long, never refused', () => {
+    const message = `${'a'.repeat(30000)}THE FORMULA${'b'.repeat(30000)}`;
+    const cut = aroundSelection(message, 'THE FORMULA', 1000);
+    expect(cut).toHaveLength(1000);
+    expect(cut).toContain('THE FORMULA');
+    expect(aroundSelection('short', 'x', 1000)).toBe('short');
+    expect(aroundSelection('x'.repeat(50), 'missing', 10)).toBe('x'.repeat(10));
+    expect(aroundSelection(`START${'z'.repeat(100)}`, 'START', 20).startsWith('START')).toBe(true);
   });
 });

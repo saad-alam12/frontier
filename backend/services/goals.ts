@@ -388,14 +388,25 @@ export function applyCompile(db: Database, goal: Goal, result: CompileOutput, so
   });
   if (created.length) createUnverifiedNodes(db, created);
   const resolve = (targets: { ref: string; depth: number; core: boolean }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })));
-  if (options.replace) deleteCapabilities(db, listCapabilities(db, goalId).map((c) => c.id));
+  // a new map keeps what the learner asked to add: a capability on an idea they asked for carries
+  // their words (and so the weight) over from the capability it replaces
+  const askedFor = new Map<string, string>();
+  if (options.replace) {
+    const old = listCapabilities(db, goalId);
+    const requests = new Map(old.flatMap((c) => (c.request ? [[c.id, c.request] as const] : [])));
+    for (const t of listTargets(db, goalId, { all: true })) {
+      const request = requests.get(t.capabilityId);
+      if (request && !askedFor.has(t.nodeId)) askedFor.set(t.nodeId, request);
+    }
+    deleteCapabilities(db, old.map((c) => c.id));
+  }
   deleteCapabilities(db, result.retire);
   for (const e of result.extend) if (!result.retire.includes(e.capabilityId)) addTargets(db, e.capabilityId, resolve(e.targets));
-  addCapabilities(
-    db,
-    goalId,
-    result.capabilities.map((c) => ({ statement: c.statement, targets: resolve(c.targets) })),
-  );
+  for (const c of result.capabilities) {
+    const targets = resolve(c.targets);
+    const request = targets.map((t) => askedFor.get(t.nodeId)).find((r) => r !== undefined) ?? null;
+    addCapabilities(db, goalId, [{ statement: c.statement, targets }], request);
+  }
   markCompiled(
     db,
     goalId,

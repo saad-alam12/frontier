@@ -100,12 +100,17 @@ function resolveChoice(db: Database, maker: SessionMaker, choice: z.output<typeo
   if (choice.goalId && !goal) throw new Error('That goal no longer exists.');
   const proposal = choice.proposalId ? maker.proposal(choice.proposalId) : null;
   if (choice.proposalId && !proposal) throw new Error('That plan is no longer here. Plan it again.');
-  const fresh = new Map((proposal?.result.newIdeas ?? []).map((n) => [n.tempId, n]));
-  const asked = new Map((proposal?.result.ideas ?? []).map((s) => [s.ref, s]));
-  const picked = choice.pick ?? [...asked.keys()];
-  for (const ref of [...picked, ...choice.addFirst]) if (!view.nodes.has(ref) && !fresh.has(ref)) throw new Error('An idea you chose is no longer on the map.');
+  // a new idea with the same name as one on the map is that idea (as the merger will decide), so it
+  // is planned from what the learner already has and never appears twice in the session
+  const known = nameIdentities(listNodes(db), proposal?.result.newIdeas ?? []);
+  const canon = (ref: string) => known.get(ref) ?? ref;
+  const fresh = new Map((proposal?.result.newIdeas ?? []).filter((n) => !known.has(n.tempId)).map((n) => [n.tempId, { ...n, premises: [...new Set(n.premises.map(canon))] }]));
+  const asked = new Map((proposal?.result.ideas ?? []).map((s) => [canon(s.ref), { ...s, ref: canon(s.ref) }]));
+  const picked = [...new Set((choice.pick ?? [...asked.keys()]).map(canon))];
+  const addFirst = choice.addFirst.map(canon);
+  for (const ref of [...picked, ...addFirst]) if (!view.nodes.has(ref) && !fresh.has(ref)) throw new Error('An idea you chose is no longer on the map.');
 
-  const session = [...new Set([...choice.addFirst, ...picked])];
+  const session = [...new Set([...addFirst, ...picked])];
   const premiseSets: PremiseSets = (ref) => {
     const n = fresh.get(ref);
     if (n) return n.premises.length ? [n.premises] : [];
@@ -143,7 +148,7 @@ function resolveChoice(db: Database, maker: SessionMaker, choice: z.output<typeo
     };
   });
 
-  const reasons = new Map((proposal?.result.background ?? []).map((b) => [b.ref, b.reason]));
+  const reasons = new Map((proposal?.result.background ?? []).map((b) => [canon(b.ref), b.reason]));
   // an overview passes through an idea without rebuilding it, so only ideas taught to be explained need their premises
   const overview = new Set(ideas.filter((i) => i.aim < 2).map((i) => i.ref));
   const background: FreeBackgroundView[] = missingPremises(order, view.owned, premiseSets)
@@ -237,13 +242,9 @@ function openFreeSession(db: Database, maker: SessionMaker, choice: z.output<typ
  * A new idea with the same name as one on the map is that idea. Returns temp id → node id.
  */
 function mergeProposal(db: Database, sessionId: string, proposal: Proposal): Map<string, string> {
-  const existingNodes = new Map(listNodes(db).map((n) => [n.id, n]));
-  const byName = new Map([...existingNodes.values()].flatMap((n) => [n.name, ...n.aliases].map((name) => [nameKey(name), n.id] as const)));
-  const identities = new Map<string, string>();
-  for (const n of proposal.result.newIdeas) {
-    const same = byName.get(nameKey(n.name));
-    if (same) identities.set(n.tempId, same);
-  }
+  const nodes = listNodes(db);
+  const existingNodes = new Map(nodes.map((n) => [n.id, n]));
+  const identities = nameIdentities(nodes, proposal.result.newIdeas);
   const plan = planMerge({
     sourceId: sessionId,
     extractedNodes: proposal.result.newIdeas.map((n) => ({ tempId: n.tempId, kind: n.kind, name: n.name, statement: n.statement, aliases: [] })),
@@ -256,6 +257,17 @@ function mergeProposal(db: Database, sessionId: string, proposal: Proposal): Map
   });
   applyMergePlan(db, plan);
   return plan.resolved;
+}
+
+/** New ideas whose name (or an alias) matches an idea on the map: temp id → node id. */
+function nameIdentities(nodes: { id: string; name: string; aliases: string[] }[], newIdeas: { tempId: string; name: string }[]): Map<string, string> {
+  const byName = new Map(nodes.flatMap((n) => [n.name, ...n.aliases].map((name) => [nameKey(name), n.id] as const)));
+  const identities = new Map<string, string>();
+  for (const n of newIdeas) {
+    const same = byName.get(nameKey(n.name));
+    if (same) identities.set(n.tempId, same);
+  }
+  return identities;
 }
 
 function nameKey(name: string): string {

@@ -5,11 +5,11 @@ import { FakeEmbedder } from '../ingest/embedder';
 import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { openDatabase } from '../store/db';
-import { addCapabilities, getGoal, listCapabilities, listTargets, markCapabilityMastered, markCompiled } from '../store/goals';
+import { addCapabilities, getGoal, listCapabilities, listTargets, markCapabilityMastered, markCompiled, requestRemap, saveAddition, saveRemap } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { listNodes } from '../store/world';
 import { additionView, applyAddition, dismissAddition, proposeAddition, requestAddition } from './addition';
-import { approveGoalPlan, createGoalFromForm, goalDetail } from './goals';
+import { applyCompile, approveGoalPlan, createGoalFromForm, goalDetail } from './goals';
 import { nextGoalStep } from './goalWorker';
 import { candidatesForGoal } from './planner';
 import { noteBackgroundGaps } from './remap';
@@ -142,6 +142,36 @@ describe('adding to a goal', () => {
     expect(goalDetail(db, goal.id)?.capabilities[2]?.request).toBe('How backward induction works');
   });
 
+  it('a new map drawn after an addition keeps the learner\u2019s words on the ideas they asked for', async () => {
+    const { db, id } = setup();
+    const goal = mappedGoal(db, id, { hours: 6 });
+    requestAddition(db, goal.id, 'How backward induction works');
+    await proposeAddition({ db, provider: new FakeProvider({ goalCompiler: sequentialAddition(id) }) }, goal.id);
+    applyAddition(db, goal.id);
+    const now = getGoal(db, goal.id) ?? goal;
+    applyCompile(
+      db,
+      now,
+      {
+        title: 'Strategic games',
+        level: 'working',
+        scope: 'Equilibria, simultaneous and sequential.',
+        coverage: undefined,
+        capabilities: [
+          { statement: 'Can find Nash equilibria', targets: [{ ref: id('nash'), depth: 3, core: true }] },
+          { statement: 'Can reason backwards through a game tree', targets: [{ ref: id('backwardInduction'), depth: 3, core: false }] },
+        ],
+        extend: [],
+        retire: [],
+        newNodes: [],
+      },
+      now.compiledSources,
+      { replace: true },
+    );
+    const caps = listCapabilities(db, goal.id);
+    expect(caps.map((c) => c.request)).toEqual([null, 'How backward induction works']);
+  });
+
   it('keeps a fixed time: the plan makes room elsewhere, and the request is not what gets left out', async () => {
     const { db, id } = setup();
     const goal = mappedGoal(db, id, { hours: 4.5 });
@@ -205,6 +235,18 @@ describe('adding to a goal', () => {
     expect(nextGoalStep(db, goal.id)).toBe('add');
     dismissAddition(db, goal.id);
     expect(nextGoalStep(db, goal.id)).toBe('remap');
+  });
+
+  it('never works out an addition while a new map is drawn or waits, so approving the map cannot wipe it', () => {
+    const { db, id } = setup();
+    const goal = mappedGoal(db, id, { hours: 6 });
+    requestRemap(db, goal.id, ['level']);
+    expect(() => requestAddition(db, goal.id, 'How backward induction works')).toThrow(/Wait until the new map is drawn/);
+    // an addition already asked for waits until the map is settled
+    saveAddition(db, goal.id, { state: 'requested', request: 'How backward induction works', at: new Date().toISOString() });
+    expect(nextGoalStep(db, goal.id)).toBe('remap');
+    saveRemap(db, goal.id, null);
+    expect(nextGoalStep(db, goal.id)).toBe('add');
   });
 
   it('gives what the learner asked for more weight in a tight plan', () => {

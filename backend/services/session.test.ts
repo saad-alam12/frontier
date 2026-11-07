@@ -205,6 +205,42 @@ describe('work that keeps going when the Session screen closes', () => {
     expect(getDrafts(db, [`session:${snap.id}:card`])).toEqual({}); // accepted, so the draft is gone
   });
 
+  it('keeps an answer that was judged when the next card fails: never graded twice, the card is written on Try again', async () => {
+    const { db, ids, goal, deps, provider } = await setup([0.8, 0.8, 0.8]);
+    const base = fakeTutor([0.8, 0.8, 0.8]);
+    let failNextCard = false;
+    provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      const grading = /Grade the response/.test(req.messages[0]?.content ?? '');
+      if (failNextCard && !grading) throw new Error('the model is overloaded');
+      return base(req);
+    });
+    const finished: IdeaFinished[] = [];
+    const withCards = { ...deps, onIdeaFinished: (e: IdeaFinished) => finished.push(e) };
+    let snap = await startSession(withCards, goal.id);
+    snap = await respond(withCards, snap.id, answer(''));
+    const profile = ids.get('profile') as string;
+    expect(snap.current).toMatchObject({ nodeId: profile, stage: 'index' });
+    const key = `session:${snap.id}:card`;
+    setDraft(db, key, '{"answer":"one strategy per player"}');
+
+    // the index answer is graded and finishes the idea; the next idea's first card fails
+    failNextCard = true;
+    await expect(respond(withCards, snap.id, answer('one strategy per player'), { draftKey: key })).rejects.toThrow('overloaded');
+    const kept = currentSession(db, deps.work);
+    expect(kept).toMatchObject({ owed: true, card: null, current: { nodeId: ids.get('bestResponse') } });
+    expect(kept?.plan.steps.find((st) => st.nodeId === profile)?.status).toBe('done');
+    expect(listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === profile)).toHaveLength(1);
+    expect(finished.map((e) => e.nodeId)).toEqual([profile]); // announced once it was saved
+    expect(getDrafts(db, [key])).toEqual({}); // the answer went through, so it is not offered again
+
+    failNextCard = false;
+    snap = await respond(withCards, snap.id, answer(''));
+    expect(snap).toMatchObject({ owed: false, current: { nodeId: ids.get('bestResponse') } });
+    expect(snap.card).not.toBeNull();
+    expect(listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === profile)).toHaveLength(1);
+    expect(finished).toHaveLength(1);
+  });
+
   it('refuses a second answer while one is judged, without losing the first', async () => {
     const { db, goal, deps } = await setup([0.8, 0.8]);
     let snap = await startSession(deps, goal.id);
@@ -235,6 +271,23 @@ describe('work that keeps going when the Session screen closes', () => {
     const snap = await starting;
     expect(opened).toEqual([snap.id]);
     expect(deps.work.current()).toBeNull();
+  });
+});
+
+describe('a session start that fails', () => {
+  it('is kept until the Session screen has shown it, then forgotten', async () => {
+    const { db, goal, deps: base } = await setup();
+    const deps = { ...base, provider: new FakeProvider({ planner: () => Promise.reject(new Error('the model is overloaded')), tutor: fakeTutor([]) }) };
+    const events: string[] = [];
+    deps.work.subscribe((e) => events.push(`${e.kind}:${e.outcome}`));
+    await expect(startSession(deps, goal.id)).rejects.toThrow('overloaded');
+    expect(deps.work.current()).toMatchObject({ kind: 'start', status: 'failed', sessionId: null });
+    deps.work.forget('any session'); // a session ending does not clear it: it has no session
+    expect(deps.work.current()).not.toBeNull();
+    deps.work.dismissStart();
+    expect(deps.work.current()).toBeNull();
+    expect(events.at(-1)).toBe('start:cleared');
+    expect(currentSession(db, deps.work)).toBeNull();
   });
 });
 
