@@ -1,5 +1,29 @@
 # Progress
 
+## Overnight summary (2026-11-07, cloud session)
+
+Two branches. Review R5 first, then the extras.
+
+**1. R5 is finished** (branch `claude/build-progress-m4-oxebft`).
+- I fixed the bugs that two code reviews found: 7 in goals and sessions, 6 in flashcards. Each fix has a test.
+- The most important fix: if the model fails after it judged your answer, your answer is kept and is not graded twice. You see "Try again".
+- I checked every screen in screenshots, also in a narrow window, and fixed what looked rough: alignment, wording, empty lines, a breadcrumb that wrapped, map labels when zoomed out.
+- Errors from the model are now plain sentences. The session error is now under your answer.
+- Status: 298 tests pass. Typecheck and lint are clean. Checkpoint steps are under "Next step".
+
+**2. Overnight extras** (branch `claude/r6-overnight`, cut from R5; one commit each).
+- **Search everything with ⌘K.** One box finds places, goals, ideas and actions. "Ask" sends a question to Lookup. There is also "Search" at the top of the sidebar.
+- **Shortcuts.** ⌘1 to ⌘8 open the sidebar places. ⌘, opens Settings.
+- **Paste text into the Library.** Notes, an article or a transcript become a source, like a file.
+- **Export a goal as notes.** A Markdown file with the ideas, your own words and your flashcards. It opens in Obsidian.
+- **Fewer clicks.** A new goal of your own starts as "Not assessed"; a course starts as "Written exam".
+- **Plain errors everywhere,** also for refused input.
+- Status: 309 tests pass. Typecheck and lint are clean. Each screen was checked in screenshots.
+
+**Not tested here.** All model work ran on the fake model. Three real model calls happened by mistake in the screenshot sandbox (one goal map, two tutor answers) before I switched it off. Your own data was never touched.
+
+**What you do next.** On the Mac: `git fetch`, `git checkout claude/build-progress-m4-oxebft`, `npm install`, `npm run dev`, and follow the R5 steps under "Next step". Then `git checkout claude/r6-overnight` and try the extras.
+
 ## Summary of R5: background work, goals by depth, your own sessions, flashcards (2026-11-07, local then cloud session)
 
 **What works.** All seven sections of `docs/feedback-round-5.md` are built.
@@ -114,9 +138,12 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | R2 Time budgets, Stats, clearer app | Done | Owner's request after M6 (see Owner feedback); 160 tests; reviewed by the owner (R3 request) |
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
 | R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
+| R6 Overnight extras (separate branch) | Done, to review | Command palette, place shortcuts, paste text into the Library, notes export, fewer clicks, plain errors; branch `claude/r6-overnight` |
 | R5 Background work, goals by depth, your own sessions, flashcards | Done, checkpoint ready | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally with helper agents, finished in a cloud session (review fixes, §7); 298 tests |
 
 ## Next step
+
+**On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
 **CHECKPOINT R5 READY** (branch `claude/build-progress-m4-oxebft-hro0rq`, also pushed as `claude/build-progress-m4-oxebft`).
 
@@ -244,6 +271,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-07 (R6, branch `claude/r6-overnight`): Overnight extras, chosen to cut friction without new dependencies or model calls. A command palette (⌘K) rather than a global search screen, because it reaches every place and action from the keyboard; ideas are matched by name in the backend (`cards.findIdeas`), meaning-based questions go to Lookup through "Ask". Place shortcuts follow the rail's order (⌘1 to ⌘8, ⌘, for Settings) and are ignored while a sheet is open. Pasted text becomes a Markdown source through the existing `addText` (80 to 400,000 characters; title from the first line). A new goal's assessment defaults from its kind (course: written exam, own: not assessed). Notes export is Markdown with KaTeX left as is, so it opens in Obsidian; it goes through a save dialog, Documents by default. Validation errors show their first issue's message.
 
 - 2026-11-07: The R5 UI pass (§7). Model errors are shown through one helper (`ui/lib/errors.ts`) as plain sentences, with the original as the notice's hover text. The session's error notice sits under the answer. A repeat click on the current place remounts it at its top level. The breadcrumb never wraps. Up to 14 of the most connected ideas keep their labels at any zoom on the Map, on a plate. A goal with no time limit says "No time limit" instead of "On your own · Open-ended". The sandbox for screenshots uses the API provider with no key, after it used the Claude login by mistake for a few calls.
 

@@ -168,6 +168,9 @@ Past steps render above the current one in the same column: the card text in bod
 - **Switch** (on/off settings): a 38 × 22 track, `ring` when off and accent when on (the accent marks state), with an 18 px ivory knob that slides over 180 ms. Used for "Make flashcards for me" and in Settings.
 - **Map**: the idea card lists its flashcards in a small list card (front, when it is due; a click shows the answer) under "Flashcards" with Add a card; the tooltip counts them; the view panel has "Only ideas with flashcards".
 
+### Command palette (R6)
+A sheet 600 px wide, 14% from the top: a borderless 17 px input, then up to 12 rows (label, a muted hint, the kind on the right in 12 px), the selected row on `surface` with a 1 px ring, and a footer of key hints in small `kbd` chips. Opened with ⌘K or Search at the top of the rail, which shows "⌘K" where other places show a count.
+
 ### Empty states
 One plain sentence in `text-secondary` and, where useful, one action. No dashed boxes.
 
