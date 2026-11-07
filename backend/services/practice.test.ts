@@ -12,6 +12,8 @@ import { recordEvidence } from './evidence';
 import { refreshGoalFields } from './knowledge';
 import { currentPractice, goalSchedule, settleGrading, startPractice, submitPracticeAnswer } from './practice';
 import { todayView } from './today';
+import { reviewsByCard } from '../store/cards';
+import { saveCard } from './cards';
 
 const DAY = 86_400_000;
 
@@ -166,6 +168,22 @@ describe('practice', () => {
     expect(mock?.kind).toBe('mock');
     expect(mock?.problems.length).toBeGreaterThan(0);
     expect(mock?.problems.every((p) => p.rung >= 3)).toBe(true);
+  });
+
+  it('a card whose fact the answer recalled gets a Good review from practice; a missed one gets nothing', async () => {
+    const { db, id, goal, provider, deps } = setup(8);
+    const set = await startPractice(deps, goal.id);
+    const problem = set?.problems[0];
+    if (!set || !problem) throw new Error('no problem');
+    const ideas = listProblems(db, set.id)[0]?.nodeIds ?? [];
+    const recalled = saveCard(db, { front: 'Define the idea', back: 'Its definition', nodeIds: [ideas[0] ?? id('nash')], goalId: goal.id });
+    const missed = saveCard(db, { front: 'Name the idea', back: 'Its name', nodeIds: [ideas[0] ?? id('nash')], goalId: goal.id });
+    const grade = fakeGrader(8);
+    provider.script('grader', (req: CompleteRequest<unknown>) => ({ ...(grade(req) as object), recalledCards: (req.messages[0]?.content ?? '').includes(recalled.id) ? [recalled.id] : [] }));
+    submitPracticeAnswer(deps, problem.id, 'Both undercut, so they end at (1,1).', 0.66);
+    await settleGrading();
+    expect(reviewsByCard(db).get(recalled.id)).toMatchObject([{ rating: 3, source: 'practice' }]);
+    expect(reviewsByCard(db).get(missed.id)).toBeUndefined();
   });
 
   it('returns null when nothing is fading', async () => {

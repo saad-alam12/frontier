@@ -60,10 +60,10 @@ describe('erase service', () => {
     const before = { nodes: countNodes(db), chains: listChains(db).length, evidence: countEvidence(db) };
     const preview = previewErase(db, request);
     const touching = new Set([...chainsAround(db, id('nash')), ...chainsAround(db, id('strategy'))].map((c) => c.id));
-    expect(preview).toEqual({ ideas: 2, links: touching.size, learned: 1, sources: 0 });
+    expect(preview).toEqual({ ideas: 2, links: touching.size, learned: 1, sources: 0, cards: 0 });
     expect({ nodes: countNodes(db), chains: listChains(db).length, evidence: countEvidence(db) }).toEqual(before);
     const result = erase(request);
-    expect({ ideas: result.ideas, links: result.links, learned: result.learned, sources: result.sources }).toEqual(preview);
+    expect({ ideas: result.ideas, links: result.links, learned: result.learned, sources: result.sources, cards: result.cards }).toEqual(preview);
     expect(countNodes(db)).toBe(before.nodes - 2);
     expect(listChains(db).length).toBe(before.chains - touching.size);
   });

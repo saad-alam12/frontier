@@ -492,6 +492,7 @@ export function MapCanvas({
           <div className="tip-line">{tipLine(tipNode)}</div>
           {tipNode.goals.length > 0 && <div className="tip-meta">For {tipNode.goals.map((g) => view.goals.find((x) => x.id === g)?.title ?? g).join(', ')}</div>}
           {tipNode.simplified && <div className="tip-meta">Simplified for a goal</div>}
+          {tipNode.cards > 0 && <div className="tip-meta">{tipNode.cards === 1 ? '1 flashcard' : `${tipNode.cards} flashcards`}</div>}
         </div>
       )}
       <div className="map-zoom" role="group" aria-label="Zoom">

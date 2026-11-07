@@ -21,7 +21,7 @@ import { attributeTime, goalProgress } from './budget';
 const DAY_MS = 86_400_000;
 export const STATS_RANGES = ['7d', '30d', '90d', 'all'] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
-const RANGE_DAYS: Record<StatsRange, number | null> = { '7d': 7, '30d': 30, '90d': 90, all: null };
+export const RANGE_DAYS: Record<StatsRange, number | null> = { '7d': 7, '30d': 30, '90d': 90, all: null };
 
 export interface StatsFilter {
   goalId: string | null;

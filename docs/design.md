@@ -6,7 +6,7 @@ Frontier is a desktop learning app. An AI does all the logistics of learning (wh
 
 1. **A two-layer knowledge map.** A world layer of true claims connected by reasoning chains, and a "you" layer on top that records what this learner owns, how deeply, and how fresh.
 2. **Goals pull the learning.** The learner states goals; the system compiles them into the claims, depth and practice tasks needed, and always works at the edge of what the learner can learn next.
-3. **Encode well once, maintain through use.** Teaching front-loads the effort that makes first-pass memory work; retention is mostly maintained by goal-shaped practice that reuses many fading ideas at once, not by flashcards.
+3. **Encode well once, maintain through use.** Teaching front-loads the effort that makes first-pass memory work; understanding is maintained by goal-shaped practice that reuses many fading ideas at once, and flashcards are kept only for the hard facts that must be known by heart.
 
 ---
 
@@ -78,6 +78,17 @@ Goals set `targetDepth` per node. Most nodes need 1–2; core nodes need 4–5.
 
 When a node gets `use` or `practice` evidence, its premises get partial review credit along chains, decaying by a factor per hop (default 0.5, max 2 hops). This lets advanced practice pay off reviews of the basics it contains (the idea behind Math Academy's "fractional implicit repetition").
 
+### 2.6 Flashcards (you layer)
+
+Flashcards hold the hard facts that must be known by heart because they cannot be worked out on the spot: formulas, exact definitions, notation, constants, names, dates, numbers. Understanding, reasoning and "why" never become cards; sessions and practice build those.
+
+- **Card**: `{ id, front, back, ideas[], goalId?, origin, sessionId?, suspended }`. The front is the question and the back the answer, both Markdown with KaTeX. `ideas[]` (one or more) are the ideas the card is about. `goalId` is the goal it was made in: the session's goal, none for a session without a goal, and for a card written by hand the one active goal that holds its first idea (when exactly one does). `origin`: `auto` (written after a session finished an idea), `selection` (from selected text), `request` (from "What should the card ask?") or `hand`.
+- **Review** (append-only): `{ cardId, at, rating, source }`, rating Again, Hard, Good or Easy; `source`: `review` (the Cards screen), `session` or `practice`. A card's FSRS schedule is derived by replaying its reviews (`ts-fsrs` with its short learning steps, so a card missed in review comes back within minutes in the same sitting). Editing a card keeps its schedule.
+- **Automatic cards.** When a session finishes an idea (it reached its aim or wrapped up), the card writer reads the idea, what the session taught about it, the learner's answers, the goal's level and the idea's existing cards, and writes 0–3 cards in the background; zero is a normal answer. Each goal says whether it makes cards and at most how many (on and 40 by default; only automatic cards count). Code asks only for what is left, counts again when the cards arrive, and drops a card that asks what an existing card of the idea already asks. A session without a goal makes cards when Settings allow it (on by default), with no total limit.
+- **Use counts as review.** When the tutor or the practice grader judges an answer, it sees the cards of the idea (and of the ideas it builds on) and names those whose fact the answer stated correctly and unaided (the question did not give it). Code records a Good review for each, at most once per card in twelve hours, so one session asking for a fact on several steps counts once. A wrong answer never counts against a card.
+- **Review queue.** Due cards still in their learning steps first, then due reviews (most overdue first), then new cards (oldest first). At most 20 new cards a day enter the queue; a card first recalled in a session does not use up a place. When nothing else is due, a card in its learning steps due within 20 minutes comes early, so a sitting can finish.
+- Erasing an idea removes it from its cards, and a card with no idea left is deleted. Reading a source again keeps the ideas that have cards. A suspended card stays but is never reviewed or judged.
+
 ---
 
 ## 3. Goals
@@ -124,7 +135,7 @@ Only `teaching` and `reference` material is read into ideas; the rest is kept as
 
 Goals have priority weights and can change anytime; recompiling reuses everything already learned.
 
-A new goal is set up in four steps, one decision each: the goal (sentence, kind, assessment, date and grade, focus), its material (optional), its time, and the plan that time buys. After the time step the goal exists as a draft and is compiled in the background; the plan step shows how many sessions and ideas the plan comes to, the ideas as a field of dots (in depth, overview, already yours, left out, shared with another goal; hovering or focusing a dot names the idea, its skill and what the plan does with it), and the time control, which re-plans live. The learner approves the plan, or maps more ideas when the time holds more than the map.
+A new goal is set up in four steps, one decision each: the goal (sentence, kind, assessment, date and grade, focus), its material (optional), its time, and the plan that time buys (with whether it makes flashcards and at most how many, section 2.6; Edit goal has the same). After the time step the goal exists as a draft and is compiled in the background; the plan step shows how many sessions and ideas the plan comes to, the ideas as a field of dots (in depth, overview, already yours, left out, shared with another goal; hovering or focusing a dot names the idea, its skill and what the plan does with it), and the time control, which re-plans live. The learner approves the plan, or maps more ideas when the time holds more than the map.
 
 ### 3.3 How the assessment changes behaviour
 
@@ -163,7 +174,7 @@ A rate (or a total with a date) also gives a weekly rhythm, which sets the sched
 
 **Progress and pace.** Each goal shows ideas ready against its plan, time spent against its total, this week against its rhythm, time per lecture against a per-lecture budget, and sessions left (planned minutes ÷ 45). Time on an idea held by several goals is split between them. The pace verdict says something only when it is clear: behind on hours (two weeks in, under half of what the rhythm asked), slow (after an hour and a fifth of the budget, learning takes more than twice the estimate), fast (under half), otherwise on track or nothing. When the plan is trimmed, the goal says how much more time would cover it fully.
 
-**Activity log.** Time is logged as the learner works: the renderer ticks every 15 seconds while the window has focus and there was input in the last three minutes (60 seconds at most per tick), and each tick is booked to what they are doing (the session's goal and current idea, the practice set, the probe's goal, or a screen that is not study). Continuous ticks become one span. Events go into the same log: goals created and approved, budget changes, material added, sessions started and ended, practice sets done, lookups, and every change of an idea's depth. Stats (section 10) is built from this log and the evidence.
+**Activity log.** Time is logged as the learner works: the renderer ticks every 15 seconds while the window has focus and there was input in the last three minutes (60 seconds at most per tick), and each tick is booked to what they are doing (the session's goal and current idea, the practice set, the probe's goal, the goal of the flashcard being reviewed, or a screen that is not study). Continuous ticks become one span. Events go into the same log: goals created and approved, budget changes, material added, sessions started and ended, practice sets done, lookups, and every change of an idea's depth. Stats (section 10) is built from this log and the evidence.
 
 ---
 
@@ -211,7 +222,7 @@ Every answer (probe, session card, practice) goes into **one field**. The learne
 
 Answers are often dictated by a speech-to-text tool that types into the focused field. The field is a plain text input so this works; every model that reads answers is told to read spoken math ("d a i by d x j"), fix obvious transcription slips from context ("Jack's" = JAX) and never penalize notation or spelling. A bare answer means the reasoning is unknown, not absent.
 
-In a session (teaching steps and the start and end recall) an answer may also carry **images** (pasted, dropped or picked: png, jpeg, gif or webp, at most 4 of 5 MB each) and **one quote**: the learner selects text in any earlier message and presses Reply, and the quote shows above the field. The tutor sees the images of the answer it judges and is told which part the learner replies to. An answer that is only images is an answer, not "no idea". Images are stored once each in the data folder's `attachments/` folder, named by their content hash; the session keeps only their names. Practice answers do not take images or quotes yet.
+In a session (teaching steps and the start and end recall) an answer may also carry **images** (pasted, dropped or picked: png, jpeg, gif or webp, at most 4 of 5 MB each) and **one quote**: the learner selects text in any earlier message and presses Reply, and the quote shows above the field. The same selection always offers **Make a flashcard**: the card writer drafts a card from the selection and its message, deciding whether the selection is the question or the answer (a selected formula becomes the answer to "State the ... formula and define its terms"), and the learner edits it before saving (section 2.6). A Make a flashcard button in the session asks "What should the card ask?" first. The tutor sees the images of the answer it judges and is told which part the learner replies to. An answer that is only images is an answer, not "no idea". Images are stored once each in the data folder's `attachments/` folder, named by their content hash; the session keeps only their names. Practice answers do not take images or quotes yet.
 
 ---
 
@@ -233,7 +244,7 @@ Rules:
 - **One attempt.** The learner submits once, in the one answer field. Then the solution is revealed immediately; grading follows.
 - **Grading.** Score 0–10 plus one or two sentences naming which rubric points were met or missed and which idea failed to come to mind. The grade becomes `practice` evidence on each node the problem targets (normalized), with implicit credit to premises.
 
-### 5.2 Retention without flashcards
+### 5.2 Retention: practice first, flashcards for hard facts
 
 Target: under 10% of learning time feels like review.
 
@@ -242,7 +253,7 @@ Target: under 10% of learning time feels like review.
 3. **Goal tasks double as review.** As a capability matures, its problems move toward rung 3–4, cue 2, Application: the learner's actual goal tasks.
 4. **Reconstruction warm-ups** (session start).
 5. **Bugs** get targeted contrast problems until they stop reappearing.
-6. **Micro-cards** only for `term` nodes with nothing to hang on (vocabulary, constants): short, mnemonic-encoded, FSRS-scheduled.
+6. **Flashcards for hard facts** (section 2.6): formulas, definitions, notation, constants, names and dates, written after an idea is learned, reviewed on their own (FSRS, a few minutes a day) and counted as reviewed when a session or practice answer recalls them. Never understanding.
 7. **Let go deliberately.** Nodes that no active goal needs are allowed to decay to the index tier instead of being maintained.
 
 ---
@@ -292,9 +303,9 @@ So a paper costs one extractor call and at most one matcher call. Parts of one s
 - **Lookup.** A question ("difference between SPE and Nash?") returns node cards: (1) the learner's own statement and handle, (2) neighbourhood via chains, (3) the derivation path from solidly owned nodes down to this one, (4) the trail of the session where it was learned. Archive details hang under their parent node. Search is semantic (local embeddings) plus fuzzy name match. A lookup records `lookup` evidence (a weak retrieval signal).
 - **Trails.** Every session is stored as a timeline: predictions, answers, think-aloud text, errors, explanations that landed, nodes created. Browsable by date, goal or node; the system can narrate a trail ("how did I get from linear algebra to attention?").
 - **Map.** The world layer as a living graph that fills the window, in the manner of Obsidian's graph view. A force layout pulls ideas together along their chains and pushes them apart, so related ideas settle into clusters; foundations (ideas many others are built on) draw larger, and chains with several premises meet at a small implication marker before their conclusion. By default ideas are coloured by the learner's edge (yours in ivory, faded by FSRS freshness; learnable now ringed; beyond your edge muted), with simplified ideas underlined.
-  - **Reading it.** Hovering an idea lights it, its neighbours and their links and fades the rest, with a tooltip (name, where it stands, its goals, simplified). Labels fade in as you zoom and never overlap; the hovered, selected, neighbouring and searched ideas are always labelled. Ideas can be dragged.
-  - **Finding and focusing.** Search by name (Enter goes to the first match). Clicking an idea opens its card (statement, depth, built on, leads to, the path from what you own, Go deeper) beside the graph, and "Only its neighbourhood" shows just the ideas 1–3 chain steps away (the local graph).
-  - **View panel.** Filters: yours, learnable now, beyond your edge; one goal (its targets and everything they are built on); only simplified ideas; hide ideas with no links. Colour by your edge, goal, topic (clusters from the chains) or depth. Display: when labels appear, idea size, link thickness, arrows. Forces: centre, repel, link strength, link distance, and "Prerequisites left to right", which pulls each idea to a column by how far it sits from a root. The settings are remembered on this device.
+  - **Reading it.** Hovering an idea lights it, its neighbours and their links and fades the rest, with a tooltip (name, where it stands, its goals, simplified, how many flashcards). Labels fade in as you zoom and never overlap; the hovered, selected, neighbouring and searched ideas are always labelled. Ideas can be dragged.
+  - **Finding and focusing.** Search by name (Enter goes to the first match). Clicking an idea opens its card (statement, depth, built on, leads to, the path from what you own, its flashcards with Add a card, Go deeper) beside the graph, and "Only its neighbourhood" shows just the ideas 1–3 chain steps away (the local graph).
+  - **View panel.** Filters: yours, learnable now, beyond your edge; one goal (its targets and everything they are built on); only simplified ideas; only ideas with flashcards; hide ideas with no links. Colour by your edge, goal, topic (clusters from the chains) or depth. Display: when labels appear, idea size, link thickness, arrows. Forces: centre, repel, link strength, link distance, and "Prerequisites left to right", which pulls each idea to a column by how far it sits from a root. The settings are remembered on this device.
   - **Full screen** (button or F) covers the screen; Esc leaves it. **Replay how it grew** shows ideas appearing in the order they were first learned.
   - The camera stays where the learner left it when the data refreshes; it fits the map when a filter or the flow changes and follows it while it settles. With reduced motion the layout settles at once and nothing glides.
 - **Bridges** (post-MVP). A background agent proposes structural analogies between distant areas; accepted bridges become explicit `analogous` notes the tutor uses for anchoring.
@@ -309,19 +320,20 @@ Measured: depth gained per session (verified by later unaided performance), minu
 
 ## 10. The app
 
-A desktop app (macOS first, then Windows/Linux). The rail has the four places you work in (Today, Goals, Map, Stats), then the three you look things up in (Lookup, Trails, Library), and Settings; Session appears at the top while a session is open. An empty app opens on a welcome that explains the three steps (say what you want, give it time, learn at your edge) and offers one action: set your first goal.
+A desktop app (macOS first, then Windows/Linux). The rail has the five places you work in (Today, Goals, Map, Cards, Stats), then the three you look things up in (Lookup, Trails, Library), and Settings; Session appears at the top while a session is open. An empty app opens on a welcome that explains the three steps (say what you want, give it time, learn at your edge) and offers one action: set your first goal.
 
 | Screen | Purpose |
 | --- | --- |
-| Today | One next action (session, practice, or a draft plan to approve), goals with their time bars and pace, what's fading (three shown, the rest on request), the preview question, the two-week forecast and the last seven days against the goals' rhythm |
-| Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel |
-| Map | The knowledge graph as a living, full-window graph: hover to see what an idea connects to, search, a card per idea with its local neighbourhood, a view panel (filters, colour, display, forces), full screen and a replay of how it grew (section 8) |
-| Goals | New goal as a four-step flow (goal, material, time, plan to approve; section 3.2); a goal page that leads with where it stands (ideas ready, time against budget, this week, sessions left, a time bar with a marker where the rhythm puts you, pace) and one action, then the probe, the lecture timeline with time per lecture, the skills (each opening to its ideas with depth pips: known, planned, asked beyond the time), skills left out for this time and expected ideas behind disclosures; the time can be changed in place with the plan re-computed live; Edit goal has every field on one page |
+| Today | One next action (session, practice, or a draft plan to approve), "N cards to review" when there are some (the main action only when nothing else is due), goals with their time bars and pace, what's fading (three shown, the rest on request), the preview question, the two-week forecast and the last seven days against the goals' rhythm |
+| Session | The teaching UI: the session as a scrollable conversation of structured cards (predict, explanation with Markdown + KaTeX + diagrams, check, connect, compress, use), each answered in the one answer field, and the frontier map side panel; selected text offers Reply and Make a flashcard, and a Make a flashcard button opens the flashcard sheet |
+| Map | The knowledge graph as a living, full-window graph: hover to see what an idea connects to, search, a card per idea with its local neighbourhood and its flashcards, a view panel (filters, colour, display, forces), full screen and a replay of how it grew (section 8) |
+| Cards | Flashcards for hard facts (section 2.6). Review: the due cards of all goals or one; the front, then Show answer (Space), then Again, Hard, Good or Easy (keys 1–4), each saying when the card comes back; a plain line when nothing is left. All cards: search, filter by goal and idea, edit, suspend, delete, show on map, and write a card by hand or have it drafted |
+| Goals | New goal as a four-step flow (goal, material, time, plan to approve; section 3.2); a goal page that leads with where it stands (ideas ready, time against budget, this week, sessions left, a time bar with a marker where the rhythm puts you, pace) and one action, then the probe, the lecture timeline with time per lecture, the skills (each opening to its ideas with depth pips: known, planned, asked beyond the time), skills left out for this time and expected ideas behind disclosures; a quiet line with its flashcards and how many are to review; the time can be changed in place with the plan re-computed live; Edit goal has every field on one page |
 | Stats | How you learn, filtered by time range, goal and topic (ideas clustered by chains): a few plain sentences on what stands out, then time per week by goal against the budgets' rhythm, every day for twelve weeks, what you know over time, what you keep (projected recall), how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions, replay |
 | Library | Add sources, see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
-| Settings | Model provider and models, data folder, preferences |
+| Settings | Model provider and models, flashcards in sessions without a goal, data folder, preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.
 
@@ -372,9 +384,9 @@ prompts/     all prompts, written from scratch for this project
 Rules:
 - **LLMs judge, code mechanizes.** Fringe, scheduling, FSRS, merging, dedupe, tiering and scoring arithmetic are deterministic code. LLMs extract, match, teach, generate and grade.
 - **One writer per store.** Only the merger writes the world layer. Only the evidence service writes evidence. NodeState is derived from evidence.
-- **Append-only evidence.** Never edit evidence; correct by appending. The one exception: when the learner erases ideas from their map (Settings, "Erase from your map"), the evidence on those ideas is deleted with them.
+- **Append-only evidence.** Never edit evidence; correct by appending. The one exception: when the learner erases ideas from their map (Settings, "Erase from your map"), the evidence on those ideas is deleted with them. Flashcard reviews are append-only too, and a card's schedule is derived from them; only the cards service writes cards and reviews.
 - **Structured outputs via submit tools.** Each agent ends by calling a `submit_*` tool whose input is validated with zod; validation errors go back to the model for a retry (max 3).
-- **Provider interface.** Every model call goes through `llm/` with a role name; settings map each role to a model and an effort level (`low` … `max`, passed as the Agent SDK `effort` option or the API's `output_config.effort`). Defaults: goal compiler and the escalation tutor Opus 5.5 at extra high; tutor and prober Opus 5.5 at medium; problem generator and grader Sonnet 5.5 at high; extractor, matcher and planner Haiku 5.5 at max; librarian and connection test Haiku 5.5 at medium.
+- **Provider interface.** Every model call goes through `llm/` with a role name; settings map each role to a model and an effort level (`low` … `max`, passed as the Agent SDK `effort` option or the API's `output_config.effort`). Defaults: goal compiler and the escalation tutor Opus 5.5 at extra high; tutor and prober Opus 5.5 at medium; problem generator and grader Sonnet 5.5 at high; card writer Sonnet 5.5 at medium; extractor, matcher and planner Haiku 5.5 at max; librarian and connection test Haiku 5.5 at medium.
 
 ### 11.3 Agent roles
 
@@ -385,13 +397,14 @@ Rules:
 | Course profiler | assessment and scope material | exam profile, upcoming lectures |
 | Prober | target subgraph, you-layer state | probe questions; then assessment updates |
 | Planner | owned nodes, targets, fringe | lesson map (DAG of nodes for this session) |
-| Tutor | lesson map, node, learner's neighbourhood, bugs, sources | the next step card (predict / explain / check / connect / compress / use) |
+| Tutor | lesson map, node, learner's neighbourhood, bugs, sources, the flashcards of the node and its premises | the next step card (predict / explain / check / connect / compress / use), and with a grade the flashcards the answer recalled |
 | Tutor escalation | the whole history of one idea after a worked example did not help | a re-diagnosis and a fresh explanation (once per idea) |
 | Extractor | chunk + graph-so-far digest | nodes and chains with citations |
 | Matcher | extracted node + candidates | identity links |
 | Problem Generator | target nodes and chains, rung, cue, presentation, recent problems | statement, solution, rubric |
-| Grader | problem, solution, rubric, learner answer | score 0–10 + reasoning |
+| Grader | problem, solution, rubric, learner answer, the flashcards of its ideas | score 0–10 + reasoning, and the flashcards the answer recalled |
 | Librarian | query, matched node cards | short synthesized answer citing node ids |
+| Card writer | a finished idea (what the session taught, the learner's answers, the goal's level, existing cards); or a selection with its message; or a request | 0–3 flashcards (front, back), or one draft |
 
 ### 11.4 Data folder
 

@@ -22,7 +22,7 @@ export type ActivityKind =
   | 'pace';
 
 /** Where time was spent. */
-export type Surface = 'session' | 'practice' | 'probe' | 'lookup' | 'map' | 'reading';
+export type Surface = 'session' | 'practice' | 'probe' | 'cards' | 'lookup' | 'map' | 'reading';
 
 export interface ActivityContext {
   goalId?: string | null;

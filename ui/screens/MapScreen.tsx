@@ -74,7 +74,7 @@ export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId
   const graphRef = useRef<{ key: string; graph: ReturnType<typeof buildGraph> } | null>(null);
   if (map && graphRef.current?.key !== structure) graphRef.current = { key: structure, graph: buildGraph(map, visible) };
   const graph = map ? (graphRef.current?.graph ?? null) : null;
-  const filterKey = `${JSON.stringify(settings.show)}|${goalId}|${settings.simplifiedOnly}|${settings.hideLoose}|${localId}|${hops}`;
+  const filterKey = `${JSON.stringify(settings.show)}|${goalId}|${settings.simplifiedOnly}|${settings.cardsOnly}|${settings.hideLoose}|${localId}|${hops}`;
   const [fitKey, setFitKey] = useState(0);
   useEffect(() => setFitKey((k) => k + 1), [filterKey]);
 

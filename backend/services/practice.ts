@@ -22,6 +22,7 @@ import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProb
 import type { AnswerRecord, PracticeKind } from '../store/practice';
 import { getSource, listChunks } from '../store/sources';
 import { goalBudgetMinutes } from './budget';
+import { cardsToJudge, creditRecalledCards } from './cards';
 import { normalizeGrade, recordEvidence } from './evidence';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
@@ -308,8 +309,10 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     ideas: problem.nodeIds.filter((id) => view.nodes.has(id)).map((id) => ({ id, name: view.nodes.get(id)?.name ?? id })),
     answer: answer.answer,
     confidence: answer.confidence,
+    cards: cardsToJudge(db, withPremises(problem.nodeIds, view)),
   });
   transaction(db, () => {
+    creditRecalledCards(db, grade.recalledCards, { source: 'practice', sessionId: set?.sessionId ?? null });
     saveGrade(db, answer.id, normalizeGrade(grade.score), grade.feedback);
     for (const idea of grade.ideas) {
       if (!view.nodes.has(idea.nodeId)) continue;
@@ -336,6 +339,12 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     }
   });
   deps.onGraded?.({ setId: problem.setId, problemId: problem.id });
+}
+
+/** The problem's ideas, then the ideas they are built on directly: whose flashcards a grade may find recalled. */
+function withPremises(nodeIds: string[], view: KnowledgeView): string[] {
+  const premises = nodeIds.flatMap((id) => (view.index.into.get(id) ?? []).flatMap((c) => c.premises));
+  return [...new Set([...nodeIds, ...premises])].filter((id) => view.nodes.has(id));
 }
 
 /** Grade answers left ungraded when the app last quit. */

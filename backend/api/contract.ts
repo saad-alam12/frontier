@@ -25,6 +25,11 @@ import type { EraseRequest, ErasePreview, EraseResult, EraseScope } from '../ser
 export type { EraseRequest, ErasePreview, EraseResult, EraseScope };
 import type { GoalBudget } from '../core/types';
 import type { ImageUpload } from '../core/attachments';
+import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
+import type { CardText } from '../agents/cardWriter';
+import type { CardOrigin, CardPhase, CardRating } from '../core/cards';
+
+export type { CardInput, CardListFilter, CardListView, CardOrigin, CardPhase, CardPreferences, CardQueueView, CardRating, CardStats, CardSummary, CardText, CardView, DraftRequest, GoalCardSettings, ReviewCardView };
 
 export type { GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
@@ -154,6 +159,30 @@ export interface ApiMethods {
   'attachments.save': { input: ImageUpload; output: { name: string } };
   /** A stored answer image as a data URL, for thumbnails in history and Trails. */
   'attachments.read': { input: { name: string }; output: string };
+  /** The flashcard review queue for every goal (null) or one: the card to show now and what is left. */
+  'cards.queue': { input: { goalId: string | null }; output: CardQueueView };
+  /** Rate a card on the Cards screen; returns the queue after it. */
+  'cards.review': { input: { cardId: string; rating: CardRating; goalId: string | null }; output: CardQueueView };
+  /** Every card, newest first, filtered by goal, idea and words (All cards, an idea's card on the map). */
+  'cards.list': { input: CardListFilter; output: CardListView };
+  /** Create a card the learner wrote or adjusted, or save an edit. */
+  'cards.save': { input: CardInput; output: CardView };
+  'cards.delete': { input: { cardId: string }; output: undefined };
+  /** A suspended card stays but is never shown for review. */
+  'cards.suspend': { input: { cardId: string; suspended: boolean }; output: CardView };
+  /** A draft from the card writer, from a selection or a request; nothing is saved. */
+  'cards.draft': { input: DraftRequest; output: CardText };
+  /** Ideas to tag a card with, by name. */
+  'cards.findIdeas': { input: { query: string }; output: IdeaRef[] };
+  /** How many cards every goal (null) or one has, and how many Review would show now. */
+  'cards.summary': { input: { goalId: string | null }; output: CardSummary };
+  /** A goal's automatic cards: on or off, the maximum, and how many it has. */
+  'cards.goalSettings': { input: { goalId: string }; output: GoalCardSettings & { auto: number } };
+  'cards.saveGoalSettings': { input: { goalId: string; settings: GoalCardSettings }; output: GoalCardSettings & { auto: number } };
+  /** Whether sessions without a goal make cards (Settings). */
+  'cards.preferences': { input: undefined; output: CardPreferences };
+  'cards.savePreferences': { input: CardPreferences; output: CardPreferences };
+  'cards.stats': { input: Pick<StatsFilter, 'goalId' | 'range'>; output: CardStats };
 }
 
 export type ApiName = keyof ApiMethods;
@@ -166,6 +195,8 @@ export interface ApiEvents {
   'library.progress': IngestProgress;
   'goals.changed': { goalId: string };
   'practice.graded': { setId: string; problemId: string };
+  /** Cards were added, changed or reviewed (automatic cards land in the background). */
+  'cards.changed': { goalId: string | null };
 }
 export type EventName = keyof ApiEvents;
 

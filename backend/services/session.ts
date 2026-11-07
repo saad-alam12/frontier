@@ -2,11 +2,12 @@
  * The teaching session (design §4): reconstruct → orient → teach each node with the step loop →
  * close → preview. State is persisted after every transition so the app can resume at the same card.
  */
-import { runRecall, runTutorStep } from '../agents/tutor';
+import { cardText, runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
 import { dependents, neighbourhood } from '../core/graph';
 import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
+import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal } from '../core/types';
 import { CommitGate } from '../llm/cancel';
@@ -23,6 +24,7 @@ import { activeSession, appendSessionEvent, createSession, endSession, getSessio
 import type { SessionRecord } from '../store/sessions';
 import { chunksCoveringNode, getSource } from '../store/sources';
 import { listExamplesForNode } from '../store/world';
+import { cardsToJudge, creditRecalledCards } from './cards';
 import { recordEvidence, setOwnStatement } from './evidence';
 import { simplifyIdea } from './goals';
 import { noteBackgroundGaps } from './remap';
@@ -176,6 +178,8 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
   ingestion?: IngestionService;
   /** Where answer images are stored; needed only when a response attaches any. */
   attachmentsDir?: string;
+  /** Told when an idea is finished, so its flashcards can be written in the background. */
+  onIdeaFinished?: (event: IdeaFinished) => void;
 }
 
 export function currentSession(db: Database): SessionSnapshot | null {
@@ -588,10 +592,22 @@ async function advance(deps: SessionDeps, sessionId: string, state: SessionState
     if (step.aim >= 2 && reached < step.aim) simplifyStep(deps.db, state, step, Math.max(1, reached) as Depth, `Learned to ${DEPTH_WORD[reached] ?? 'a first look'} within its half hour; the plan asked ${DEPTH_WORD[step.aim] ?? 'more'}`);
     state.nodeStatus[step.nodeId] = 'done';
     appendSessionEvent(deps.db, sessionId, 'node-done', { nodeId: step.nodeId });
+    deps.onIdeaFinished?.(ideaFinished(sessionId, state, step));
     await beginStep(deps, sessionId, state, state.stepIndex + 1, goal);
     return;
   }
   await produceCard(deps, sessionId, state, step, next, previous, goal);
+}
+
+/** What the card writer reads about an idea the session just finished: what was taught and how the learner answered. */
+function ideaFinished(sessionId: string, state: SessionState, step: LessonStep): IdeaFinished {
+  return {
+    sessionId,
+    goalId: state.goalId,
+    nodeId: step.nodeId,
+    taught: state.transcript.filter((t) => t.nodeId === step.nodeId).map((t) => t.text),
+    answers: (state.history[step.nodeId] ?? []).flatMap((h) => (h.response && isGraded(h.stage) ? [{ question: cardText(h.card), answer: h.response.answer, score: h.grade?.score ?? null }] : [])),
+  };
 }
 
 const DEPTH_WORD = ['a first look', 'recognizing it', 'explaining it', 'deriving it', 'applying it', 'transferring it'];
@@ -625,6 +641,7 @@ function writeOutcome(db: Database, sessionId: string, state: SessionState, step
     if (open) touchBug(db, open.id);
     else recordBug(db, step.nodeId, grade.misconception);
   }
+  creditRecalledCards(db, grade.recalledCards, { source: 'session', sessionId });
 }
 
 function buildTutorInput(db: Database, state: SessionState, step: LessonStep, previous: TutorStepInput['previous'], nextStage: Stage | null, goal: TutorGoal): TutorStepInput {
@@ -653,6 +670,7 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
     excerpts: chunksCoveringNode(db, node.id).map((c) => ({ locator: `${c.sourceTitle}, ${c.locator}`, text: c.text.slice(0, 1800) })),
     history: (state.history[node.id] ?? []).filter((h) => h.response !== null || h.grade !== null),
     previous,
+    cards: previous && isGraded(previous.stage) ? cardsToJudge(db, [node.id, ...premiseIds]) : [],
     nextStage,
   };
 }

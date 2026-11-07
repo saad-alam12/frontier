@@ -4,7 +4,10 @@ import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
 import { createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
+import type { IdeaFinished } from './core/cards';
 import { IngestionService } from './services/ingestion';
+import { queueIdeaCards } from './services/cards';
+import type { CardWriterDeps } from './services/cards';
 import { GoalWorker, nextGoalStep } from './services/goalWorker';
 import { listGoals } from './store/goals';
 import { SettingsStore, dataPaths } from './settings/store';
@@ -81,6 +84,17 @@ export class AppContext {
       attachmentsDir: this.paths().attachments,
       onGraded: (event: { setId: string; problemId: string }) => this.emit('practice.graded', event),
       onError: (message: string) => this.emit('app.toast', { kind: 'error', message }),
+      onIdeaFinished: (event: IdeaFinished) => queueIdeaCards(this.cardDeps(), event),
+    };
+  }
+
+  /** What the card writer needs for automatic cards; new cards are announced to the renderer. */
+  cardDeps(): CardWriterDeps {
+    return {
+      db: this.db(),
+      provider: this.provider(),
+      onChange: (event) => this.emit('cards.changed', event),
+      onError: (message) => this.emit('app.toast', { kind: 'error', message }),
     };
   }
 

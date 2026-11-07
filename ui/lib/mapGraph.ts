@@ -15,6 +15,8 @@ export interface MapSettings {
   /** Only this goal: its targets and everything they are built on. */
   goalId: string | null;
   simplifiedOnly: boolean;
+  /** Only ideas that have flashcards. */
+  cardsOnly: boolean;
   /** Hide ideas no chain connects. */
   hideLoose: boolean;
   colorBy: ColorBy;
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: MapSettings = {
   show: { owned: true, fringe: true, beyond: true },
   goalId: null,
   simplifiedOnly: false,
+  cardsOnly: false,
   hideLoose: false,
   colorBy: 'state',
   labelZoom: 0.9,
@@ -58,6 +61,7 @@ export function mergeSettings(saved: unknown): MapSettings {
     show: { ...DEFAULT_SETTINGS.show, ...(s.show ?? {}) },
     goalId: typeof s.goalId === 'string' ? s.goalId : null,
     simplifiedOnly: s.simplifiedOnly === true,
+    cardsOnly: s.cardsOnly === true,
     hideLoose: s.hideLoose === true,
     colorBy: s.colorBy && ['state', 'goal', 'topic', 'depth'].includes(s.colorBy) ? s.colorBy : DEFAULT_SETTINGS.colorBy,
     labelZoom: num(s.labelZoom, DEFAULT_SETTINGS.labelZoom),
@@ -106,7 +110,7 @@ export function neighbourhood(id: string, neighbours: Map<string, Set<string>>, 
 
 /**
  * The ideas shown: by state; for one goal, its targets and everything they are built on; only
- * simplified ones; without the loose ones; or only the neighbourhood of one idea.
+ * simplified ones; only those with flashcards; without the loose ones; or only the neighbourhood of one idea.
  */
 export function visibleIdeas(view: Pick<MapView, 'nodes' | 'chains'>, s: MapSettings, local: { id: string; hops: number } | null): Set<string> {
   const neighbours = adjacency(view.chains);
@@ -130,6 +134,7 @@ export function visibleIdeas(view: Pick<MapView, 'nodes' | 'chains'>, s: MapSett
     if (!near && !s.show[n.state]) continue;
     if (scope && !scope.has(n.id)) continue;
     if (s.simplifiedOnly && !n.simplified) continue;
+    if (s.cardsOnly && n.cards === 0) continue;
     if (s.hideLoose && !neighbours.has(n.id)) continue;
     out.add(n.id);
   }

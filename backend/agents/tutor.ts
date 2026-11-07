@@ -34,12 +34,23 @@ export const GradeSchema = z.object({
     .object({ name: z.string().trim().min(2).max(120), hours: z.number().min(0.25).max(200) })
     .nullable()
     .default(null),
+  /** Flashcards whose fact the response states correctly and unaided; code counts each as a "Good" review. */
+  recalledCards: z.array(z.string().min(1)).max(12).default([]),
 });
 export type Grade = z.infer<typeof GradeSchema>;
 
-export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean) {
+/** The grade may name only the flashcards it was shown. */
+function gradeFor(cardIds: ReadonlySet<string>) {
+  return GradeSchema.superRefine((grade, ctx) => {
+    grade.recalledCards.forEach((id, i) => {
+      if (!cardIds.has(id)) ctx.addIssue({ code: 'custom', path: ['recalledCards', i], message: `${id} is not one of the flashcards listed` });
+    });
+  });
+}
+
+export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean, cardIds: ReadonlySet<string> = new Set()) {
   const card = nextStage ? CardSchemas[nextStage] : z.null();
-  const grade = expectGrade ? GradeSchema : z.null();
+  const grade = expectGrade ? gradeFor(cardIds) : z.null();
   return z.object({ grade, card });
 }
 
@@ -89,6 +100,8 @@ export interface TutorStepInput {
   previous: { stage: Stage; card: TutorCard; response: LearnerResponse } | null;
   /** The images attached to the previous response, sent with the message; earlier answers' images are not sent again. */
   images?: LlmImage[];
+  /** Flashcards on this idea and the ideas it builds on, for the grade to say which facts the response recalled. */
+  cards?: { id: string; front: string; back: string }[];
   nextStage: Stage | null;
 }
 
@@ -134,6 +147,8 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   if (input.previous) {
     sections.push(`## Previous card (${input.previous.stage})\n${cardText(input.previous.card)}\n\n## Learner's response\n${responseText(input.previous.response)}`);
   }
+  const cards = expectGrade ? (input.cards ?? []) : [];
+  if (cards.length) sections.push(`## The learner's flashcards on this idea and what it builds on\n${cards.map((c) => `- [${c.id}] ${c.front}\n  Answer: ${c.back.replace(/\n/g, ' ')}`).join('\n')}`);
   sections.push(
     input.nextStage
       ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
@@ -149,7 +164,7 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
     role: input.nextStage === 'reteach' ? 'tutorEscalation' : 'tutor',
     system: answerReadingPrompt('tutor'),
     messages: [{ role: 'user', content: sections.join('\n\n'), images: input.images }],
-    submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade) },
+    submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade, new Set(cards.map((c) => c.id))) },
   });
   return result.data as TutorStepResult;
 }

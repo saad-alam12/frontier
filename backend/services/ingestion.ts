@@ -21,6 +21,7 @@ import { nameSimilarity, topK } from '../ingest/similarity';
 import type { TextBlock } from '../ingest/types';
 import type { LlmProvider } from '../llm/provider';
 import { Semaphore } from '../llm/queue';
+import { nodesWithCards } from '../store/cards';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { getEmbeddingHash, listEmbeddings, upsertEmbedding } from '../store/embeddings';
@@ -104,7 +105,7 @@ export class IngestionService {
   /**
    * Prepare a source to be read again with the current extraction: split it into parts afresh (from its
    * file, or from its stored text when it has none) and retire the ideas only it gave that nothing
-   * depends on: no evidence, no other source, not in any session or open practice or probe. Ideas
+   * depends on: no evidence, no other source, no flashcard, not in any session or open practice or probe. Ideas
    * that stay are matched again like any other. Call `start` afterwards.
    */
   async prepareReread(sourceId: string): Promise<{ retired: string[] }> {
@@ -115,7 +116,7 @@ export class IngestionService {
     const parts = this.parts(source.kind, blocks);
     if (parts.length === 0) throw new Error('There is no text in this source to read again.');
     const old = coveredNodeIds(this.db, sourceId);
-    const keep = new Set([...nodesWithEvidence(this.db), ...coveredElsewhere(this.db, sourceId), ...nodesInOpenSets(this.db), ...nodesInSessions(this.db, old)]);
+    const keep = new Set([...nodesWithEvidence(this.db), ...coveredElsewhere(this.db, sourceId), ...nodesInOpenSets(this.db), ...nodesInSessions(this.db, old), ...nodesWithCards(this.db)]);
     const retired = old.filter((id) => !keep.has(id));
     transaction(this.db, () => {
       retireNodes(this.db, retired);

@@ -21,6 +21,10 @@ import { recordEvidence } from './evidence';
 import { abandonSession, cancelRespond, currentSession, pauseSession, respond, startSession } from './session';
 import { settleGrading } from './practice';
 import type { SessionState } from './session';
+import type { Grade } from '../agents/tutor';
+import type { IdeaFinished } from '../core/cards';
+import { reviewsByCard } from '../store/cards';
+import { saveCard } from './cards';
 
 /** A tutor that answers any stage with a plausible card and grades from a queue of scores. */
 function fakeTutor(scores: number[]) {
@@ -130,6 +134,58 @@ describe('stopping an answer (Esc)', () => {
     release();
     snap = await pending;
     expect(snap.history.nodes[0]?.status).toBe('done');
+  });
+});
+
+describe('flashcards in a session', () => {
+  it('a card whose fact the answer recalled gets a Good review, and a finished idea goes to the card writer', async () => {
+    const { db, ids, goal, deps, provider } = await setup([0.8, 0.8, 0.8]);
+    const profile = ids.get('profile') as string;
+    const card = saveCard(db, { front: 'What is a strategy profile?', back: 'One strategy per player', nodeIds: [profile], goalId: goal.id });
+    const base = fakeTutor([0.8, 0.8, 0.8]);
+    let shown = '';
+    provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      const out = base(req) as { grade: Grade | null; card: unknown };
+      const text = req.messages[0]?.content ?? '';
+      if (out.grade && text.includes(card.id)) {
+        shown = text;
+        out.grade = { ...out.grade, recalledCards: [card.id] };
+      }
+      return out;
+    });
+    const finished: IdeaFinished[] = [];
+    const withCards = { ...deps, onIdeaFinished: (e: IdeaFinished) => finished.push(e) };
+    let snap = await startSession(withCards, goal.id);
+    snap = await respond(withCards, snap.id, answer(''));
+    expect(snap.current?.nodeId).toBe(profile);
+    snap = await respond(withCards, snap.id, answer('one strategy per player'));
+    // the judgement saw the card, and code recorded the review
+    expect(shown).toContain('One strategy per player');
+    expect(reviewsByCard(db).get(card.id)).toMatchObject([{ rating: 3, source: 'session' }]);
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({ sessionId: snap.id, goalId: goal.id, nodeId: profile });
+    expect(finished[0]?.taught[0]).toContain('A profile is a list of strategies');
+    expect(finished[0]?.answers).toEqual([expect.objectContaining({ answer: 'one strategy per player', score: 0.8 })]);
+  });
+
+  it('a grade may name only the cards it was shown', async () => {
+    const { db, ids, goal, deps, provider } = await setup([0.8]);
+    saveCard(db, { front: 'What is a strategy profile?', back: 'One strategy per player', nodeIds: [ids.get('profile') as string], goalId: goal.id });
+    const base = fakeTutor([0.8, 0.8, 0.8]);
+    let attempts = 0;
+    provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      const out = base(req) as { grade: Grade | null; card: unknown };
+      if (out.grade) {
+        attempts += 1;
+        out.grade = { ...out.grade, recalledCards: attempts === 1 ? ['card_made_up'] : [] };
+      }
+      return out;
+    });
+    const snap = await startSession(deps, goal.id);
+    await respond(deps, snap.id, answer(''));
+    await respond(deps, snap.id, answer('one strategy per player'));
+    expect(attempts).toBe(2); // the made-up id went back to the model
+    expect([...reviewsByCard(db).values()].flat()).toEqual([]);
   });
 });
 

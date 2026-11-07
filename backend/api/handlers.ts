@@ -27,10 +27,30 @@ import { getSession } from '../store/sessions';
 import { approveRemap, dismissRemap, remapView, requestRemap } from '../services/remap';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
+import {
+  CardInputSchema,
+  ReviewInputSchema,
+  cardPreferences,
+  cardQueue,
+  cardStats,
+  cardSummary,
+  draftFor,
+  findIdeas,
+  goalCardSettings,
+  listCardViews,
+  removeCard,
+  reviewCard,
+  saveCard,
+  saveCardPreferences,
+  saveGoalCards,
+  suspendCard,
+} from '../services/cards';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
 export function buildHandlers(ctx: AppContext): Handlers {
+  /** Screens that count or list cards (the sidebar, Today, a goal page) refresh on this. */
+  const cardsChanged = (goalId: string | null) => ctx.emit('cards.changed', { goalId });
   const detail = (goalId: string) => {
     const d = goalDetail(ctx.db(), goalId, ctx.goalWorker().status(goalId));
     if (!d) throw new Error('unknown goal');
@@ -203,6 +223,37 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'attachments.save': (upload) => ({ name: saveAttachment(ctx.paths().attachments, upload) }),
     'attachments.read': ({ name }) => attachmentDataUrl(ctx.paths().attachments, name),
+    'cards.queue': ({ goalId }) => cardQueue(ctx.db(), goalId),
+    'cards.review': (input) => {
+      const { cardId, rating } = ReviewInputSchema.parse(input);
+      reviewCard(ctx.db(), cardId, rating);
+      cardsChanged(null);
+      return cardQueue(ctx.db(), input.goalId);
+    },
+    'cards.list': (filter) => listCardViews(ctx.db(), filter),
+    'cards.save': (input) => {
+      const card = saveCard(ctx.db(), CardInputSchema.parse(input));
+      cardsChanged(card.goalId);
+      return card;
+    },
+    'cards.delete': ({ cardId }) => {
+      removeCard(ctx.db(), cardId);
+      cardsChanged(null);
+      return undefined;
+    },
+    'cards.suspend': ({ cardId, suspended }) => {
+      const card = suspendCard(ctx.db(), cardId, suspended);
+      cardsChanged(card.goalId);
+      return card;
+    },
+    'cards.draft': (request) => draftFor({ db: ctx.db(), provider: ctx.provider() }, request),
+    'cards.findIdeas': ({ query }) => findIdeas(ctx.db(), query),
+    'cards.summary': ({ goalId }) => cardSummary(ctx.db(), goalId),
+    'cards.goalSettings': ({ goalId }) => goalCardSettings(ctx.db(), goalId),
+    'cards.saveGoalSettings': ({ goalId, settings }) => saveGoalCards(ctx.db(), goalId, settings),
+    'cards.preferences': () => cardPreferences(ctx.db()),
+    'cards.savePreferences': (prefs) => saveCardPreferences(ctx.db(), { withoutGoal: prefs.withoutGoal === true }),
+    'cards.stats': (filter) => cardStats(ctx.db(), filter),
   };
 }
 

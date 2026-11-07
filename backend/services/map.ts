@@ -11,6 +11,7 @@ import { PASS_SCORE } from '../core/types';
 import type { Depth, KnowledgeNode, Tier } from '../core/types';
 import type { Database } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
+import { cardCountsByNode } from '../store/cards';
 import { firstPasses } from '../store/evidence';
 import { listGoals, listTargets } from '../store/goals';
 import { getSession } from '../store/sessions';
@@ -39,6 +40,8 @@ export interface MapNodeView {
   topic: string | null;
   /** When the learner first showed it at some depth; null when not yet. */
   learnedAt: string | null;
+  /** Flashcards tagged with it. */
+  cards: number;
 }
 
 export interface MapView {
@@ -70,6 +73,7 @@ export function mapView(db: Database, now = new Date()): MapView {
   const topicOf = new Map<string, string>();
   for (const t of groups) for (const id of t.nodeIds) topicOf.set(id, t.id);
   const learned = firstPasses(db, PASS_SCORE);
+  const cardCounts = cardCountsByNode(db);
   const nodes: MapNodeView[] = [...view.nodes.values()].map((n) => {
     const state = view.states.get(n.id);
     return {
@@ -84,6 +88,7 @@ export function mapView(db: Database, now = new Date()): MapView {
       simplified: simplified.has(n.id),
       topic: topicOf.get(n.id) ?? null,
       learnedAt: learned.get(n.id) ?? null,
+      cards: cardCounts.get(n.id) ?? 0,
     };
   });
   const counts: Record<MapState, number> = { owned: 0, fringe: 0, beyond: 0 };
