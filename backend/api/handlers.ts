@@ -28,7 +28,6 @@ import { approveRemap, dismissRemap, remapView, requestRemap } from '../services
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 import {
-  CardInputSchema,
   ReviewInputSchema,
   cardPreferences,
   cardQueue,
@@ -232,7 +231,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'cards.list': (filter) => listCardViews(ctx.db(), filter),
     'cards.save': (input) => {
-      const card = saveCard(ctx.db(), CardInputSchema.parse(input));
+      const card = saveCard(ctx.db(), input);
       cardsChanged(card.goalId);
       return card;
     },

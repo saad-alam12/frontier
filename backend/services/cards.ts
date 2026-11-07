@@ -70,7 +70,7 @@ export interface CardQueueView {
   card: ReviewCardView | null;
   /** The queue as it stands, the current card included. */
   left: { due: number; new: number };
-  /** Reviews on the Cards screen today (all goals). */
+  /** Cards reviewed on the Cards screen today (all goals). */
   reviewedToday: number;
   /** New cards beyond today's limit, for tomorrow. */
   newWaiting: number;
@@ -151,7 +151,7 @@ export function cardQueue(db: Database, goalId: string | null, now = new Date())
     goalId,
     card: first ? { ...toView(first, names, goals), next: nextDueByRating(first.reviews, first.createdAt, now) } : null,
     left: { due: queue.cards.filter((c) => c.schedule.phase !== 'new').length, new: queue.cards.filter((c) => c.schedule.phase === 'new').length },
-    reviewedToday: all.reduce((n, s) => n + s.reviews.filter((r) => r.source === 'review' && r.at >= start).length, 0),
+    reviewedToday: all.filter((s) => s.reviews.some((r) => r.source === 'review' && r.at >= start)).length,
     newWaiting: queue.newWaiting,
     nextDue: queue.nextDue,
     total: inView.length,

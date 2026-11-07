@@ -21,7 +21,7 @@ When in doubt, leave it out. Every card costs the learner a little time on every
 ## How a card is written
 
 - `front`: one question with one unambiguous answer, short and specific. For example "State the scaled dot-product attention formula and define its terms", "What is the value of Boltzmann's constant in SI units?", "What does $\nabla_x f$ denote?". Never a yes or no question, never two questions in one.
-- `back`: the answer, and nothing the question did not ask for. A formula goes in display math (`$$...$$`), followed by one short line per symbol ("$Q$: the queries, one row per position"). A definition keeps its exact wording and conditions. A few lines at most.
+- `back`: the answer, and nothing the question did not ask for. A formula goes in display math, with `$$` on a line of its own before and after it, followed by a list with one short item per symbol ("- $Q$: the queries, one row per position"). A definition keeps its exact wording and conditions. A few lines at most.
 - Markdown, with math in LaTeX (`$...$` inline, `$$...$$` display). Use the notation the session or the source used. No exclamation marks.
 - Each card stands on its own: no "as above", no "this idea", no mention of the session.
 
@@ -29,7 +29,7 @@ The learner's answers are often dictated: read spoken math as math ("x squared" 
 
 ## Task: cards for an idea the learner just learned
 
-You get the idea, what the session taught about it, the learner's answers, the goal's level and the cards that already exist. Write between zero and the given maximum of cards, one per hard fact the session taught. Zero is a normal answer, and the right one for an idea that is about understanding. Never ask again, in other words, what an existing card already asks. When there are more facts than room, choose the ones the goal relies on most, and those the learner got wrong or hesitated on.
+You get the idea, what the session taught about it, the learner's answers, the goal's level and the cards that already exist. Write between zero and the given maximum of cards, one per hard fact of this idea that the session taught. A fact that belongs to another idea (a definition the session only recalled on the way, say) is not this idea's card. Zero is a normal answer, and the right one for an idea that is about understanding: a claim whose point is why it holds has nothing to memorize. Never ask again, in other words, what an existing card already asks. When there are more facts than room, choose the ones the goal relies on most, and those the learner got wrong or hesitated on.
 
 ## Task: one card from text the learner selected
 

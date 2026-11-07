@@ -4,13 +4,10 @@
  * tagged with, which goal it belongs to and how many are kept is decided in code.
  */
 import { z } from 'zod';
+import { CARD_BACK_MAX, CARD_FRONT_MAX } from '../core/cards';
 import type { GoalLevel, NodeKind } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
-
-/** Limits shared with the card editor: a card is a question and a short answer. */
-export const CARD_FRONT_MAX = 600;
-export const CARD_BACK_MAX = 2000;
 
 export const CardTextSchema = z.object({
   front: z.string().trim().min(3).max(CARD_FRONT_MAX),
@@ -62,6 +59,7 @@ export interface DraftInput {
   request?: string;
   /** What the learner already wrote on the card, for "Draft it for me". */
   partial?: { front: string; back: string };
+  /** The ideas' cards, shown only when the learner leaves the question to the writer: a card they asked for is written even if a similar one exists. */
   existing: CardText[];
 }
 
@@ -119,10 +117,11 @@ export async function draftCard(provider: LlmProvider, input: DraftInput): Promi
   }
   const wrote = input.partial && (input.partial.front.trim() || input.partial.back.trim()) ? input.partial : null;
   if (wrote) sections.push(`## What the learner already wrote\nFront: ${wrote.front.trim() || '(empty)'}\nBack: ${wrote.back.trim() || '(empty)'}`);
-  if (!input.selection && !input.request?.trim() && !wrote) sections.push('The learner left the question to you: write the one card these ideas most need, a hard fact none of the existing cards asks.');
+  const open = !input.selection && !input.request?.trim() && !wrote;
+  if (open) sections.push('The learner left the question to you: write the one card these ideas most need, a hard fact none of the existing cards asks.');
   sections.push(goalSection(input.goal));
   sections.push(`## The ideas it belongs to\n${input.ideas.length ? input.ideas.map((i) => `- ${i.name}: ${i.statement}`).join('\n') : '(none given)'}`);
-  sections.push(existingSection(input.existing));
+  if (open) sections.push(existingSection(input.existing));
   const result = await provider.complete({
     role: 'cardWriter',
     system: loadPrompt('card-writer'),

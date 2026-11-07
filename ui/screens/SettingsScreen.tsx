@@ -4,6 +4,7 @@ import type { AppInfo, ConnectionTestResult, Effort, ModelOptions, Role, Setting
 import { Screen } from '../components/Shell';
 import { Button, Section } from '../components/controls';
 import { EraseMap } from '../components/EraseMap';
+import { FlashcardPreferences } from '../components/CardSettings';
 
 const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'goalCompiler', label: 'Goal compiler', does: 'Turns a goal into skills and the ideas each needs' },
@@ -119,6 +120,8 @@ export function SettingsScreen() {
           ))}
         </ul>
       </Section>
+
+      <FlashcardPreferences />
 
       <Section title="Data" gap={14}>
         <div className="settings-group">

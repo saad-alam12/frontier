@@ -57,6 +57,8 @@ describe('card scheduling', () => {
     expect(formatInterval(30_000)).toBe('1 min');
     expect(formatInterval(10 * 60_000)).toBe('10 min');
     expect(formatInterval(5 * 3_600_000)).toBe('5 hours');
+    expect(formatInterval(59.6 * 60_000)).toBe('1 hour');
+    expect(formatInterval(23.8 * 3_600_000)).toBe('1 day');
     expect(formatInterval(86_400_000)).toBe('1 day');
     expect(formatInterval(8 * 86_400_000)).toBe('8 days');
     expect(formatInterval(65 * 86_400_000)).toBe('2 months');

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { ChartNoAxesColumn, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
+import { ChartNoAxesColumn, GalleryVerticalEnd, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
 
-export type ScreenName = 'today' | 'session' | 'map' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
+export type ScreenName = 'today' | 'session' | 'map' | 'cards' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
 
 interface NavEntry {
   name: ScreenName;
@@ -17,6 +17,7 @@ const PRIMARY: NavEntry[] = [
   { name: 'today', label: 'Today', icon: Sun, hint: 'What to do now' },
   { name: 'goals', label: 'Goals', icon: Target, hint: 'What you are learning toward, and the time you give it' },
   { name: 'map', label: 'Map', icon: Waypoints, hint: 'Every idea and how they connect' },
+  { name: 'cards', label: 'Cards', icon: GalleryVerticalEnd, hint: 'Flashcards for the facts to know by heart' },
   { name: 'stats', label: 'Stats', icon: ChartNoAxesColumn, hint: 'Your time and progress' },
 ];
 /** Where you look back and look things up. */
@@ -45,13 +46,32 @@ export function BrandMark({ size = 22, on = 'var(--bg-sidebar)' }: { size?: numb
  * The sidebar: the mark, a live Session entry while a session is open, the places you work in, the
  * places you look back in, and Settings at the bottom.
  */
-export function NavRail({ current, onSelect, sessionActive }: { current: ScreenName; onSelect: (s: ScreenName) => void; sessionActive: boolean }) {
-  const item = ({ name, label, icon: Icon, hint }: NavEntry) => (
-    <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={hint}>
-      <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
-      <span>{label}</span>
-    </button>
-  );
+export function NavRail({
+  current,
+  onSelect,
+  sessionActive,
+  counts = {},
+}: {
+  current: ScreenName;
+  onSelect: (s: ScreenName) => void;
+  sessionActive: boolean;
+  /** A quiet number beside a place: the flashcards to review now. */
+  counts?: Partial<Record<ScreenName, number>>;
+}) {
+  const item = ({ name, label, icon: Icon, hint }: NavEntry) => {
+    const count = counts[name] ?? 0;
+    return (
+      <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={count ? `${hint} · ${count} to review` : hint}>
+        <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+        <span>{label}</span>
+        {count > 0 && (
+          <span className="nav-count" aria-label={`${count} to review`}>
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
   return (
     <nav aria-label="Main" className="nav-rail">
       <div className="nav-titlebar" aria-hidden="true" />

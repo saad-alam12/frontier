@@ -7,6 +7,7 @@ import { Markdown } from '../components/Markdown';
 import { MapCanvas } from '../components/MapCanvas';
 import { MapViewPanel } from '../components/MapViewPanel';
 import { NodeCardView } from '../components/NodeCard';
+import { IdeaFlashcards } from '../components/IdeaFlashcards';
 import { seriesColor } from '../components/charts';
 import { DEFAULT_SETTINGS, buildGraph, growthOrder, mergeSettings, plain, visibleIdeas } from '../lib/mapGraph';
 import type { MapSettings } from '../lib/mapGraph';
@@ -27,13 +28,22 @@ function loadSettings(): MapSettings {
  * and colour it from the view panel, hover to see what an idea connects to, open its card, show only
  * its neighbourhood, replay how the map grew, or go full screen.
  */
-export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId: string) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void> }) {
+export function MapScreen({
+  onOpenTrail,
+  onGoDeeper,
+  initialId = null,
+}: {
+  onOpenTrail: (sessionId: string) => void;
+  onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
+  /** An idea to open on arrival ("Show on map"). */
+  initialId?: string | null;
+}) {
   const [map, setMap] = useState<MapView | null>(null);
   const [settings, setSettings] = useState<MapSettings>(loadSettings);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialId);
   const [card, setCard] = useState<NodeCard | null>(null);
   const [query, setQuery] = useState('');
-  const [focus, setFocus] = useState<{ id: string; seq: number } | null>(null);
+  const [focus, setFocus] = useState<{ id: string; seq: number } | null>(initialId ? { id: initialId, seq: 1 } : null);
   const [hops, setHops] = useState(0);
   const [panel, setPanel] = useState(false);
   const [full, setFull] = useState(false);
@@ -101,7 +111,9 @@ export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId
     document.addEventListener('fullscreenchange', onChange);
     const onKey = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      // keys inside a sheet (a flashcard being written) are the sheet's
+      const inSheet = e.target instanceof Element && e.target.closest('dialog') !== null;
+      if (typing || inSheet || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'f' || e.key === 'F') toggleFull();
       if (e.key === 'Escape' && !document.fullscreenElement) setSelected(null);
     };
@@ -216,7 +228,7 @@ export function MapScreen({ onOpenTrail, onGoDeeper }: { onOpenTrail: (sessionId
               </button>
             ))}
           </div>
-          <NodeCardView card={card} onSelect={(id) => select(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} compact />
+          <NodeCardView card={card} onSelect={(id) => select(id)} onTrail={onOpenTrail} onGoDeeper={onGoDeeper} compact extra={<IdeaFlashcards key={card.id} idea={{ id: card.id, name: card.name }} />} />
         </aside>
       )}
 

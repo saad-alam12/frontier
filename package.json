@@ -19,6 +19,7 @@
     "live:ingest": "tsx scripts/live-ingest.ts",
     "live:session": "tsx scripts/live-session.ts",
     "live:compare": "tsx scripts/live-compare.ts",
+    "live:cards": "tsx scripts/live-cards.ts",
     "build:win": "electron-vite build && electron-builder --win",
     "build:linux": "electron-vite build && electron-builder --linux"
   },

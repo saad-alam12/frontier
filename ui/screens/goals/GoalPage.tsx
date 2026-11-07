@@ -11,6 +11,7 @@ import { Markdown } from '../../components/Markdown';
 import { VerticalPath } from '../../components/paths';
 import type { PointState } from '../../components/paths';
 import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
+import { GoalCardsLine } from '../../components/CardsLine';
 import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, capitalize, dateLabel, formatDate, goalName, isExam, plural } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 
@@ -28,6 +29,7 @@ export function GoalPage({
   onStartSession,
   onGoDeeper,
   onChanged,
+  onReviewCards,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -36,6 +38,7 @@ export function GoalPage({
   /** Go deeper on simplified ideas (all, or these): their time joins the goal and a session on them opens. */
   onGoDeeper: (nodeIds?: string[]) => Promise<void>;
   onChanged: () => void;
+  onReviewCards: () => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -224,6 +227,8 @@ export function GoalPage({
           )}
         </div>
       )}
+
+      <GoalCardsLine goalId={goal.id} onReview={onReviewCards} />
 
       {compiled && (
         <Section title="Check where you stand" meta={probe ? 'Answers are kept until you submit' : undefined}>

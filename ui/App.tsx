@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { call } from './api';
+import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
 import { TodayScreen } from './screens/TodayScreen';
@@ -12,6 +12,7 @@ import { LookupScreen } from './screens/LookupScreen';
 import { TrailsScreen } from './screens/TrailsScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { CardsScreen, type CardsView } from './screens/CardsScreen';
 
 /** What each screen's time counts as; screens with none are not study. */
 const SURFACE: Partial<Record<ScreenName, 'session' | 'map' | 'lookup' | 'reading'>> = { session: 'session', map: 'map', lookup: 'lookup', trails: 'reading', library: 'reading' };
@@ -25,17 +26,37 @@ export function App() {
   /** Where Goals opens when another screen sends you there (a new goal, a draft, a goal page). */
   const [goalsView, setGoalsView] = useState<{ view: GoalsView; key: number } | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
+  /** Where Cards opens when another screen sends you there (Review for one goal). */
+  const [cardsView, setCardsView] = useState<{ view: Partial<CardsView>; key: number } | null>(null);
+  /** An idea to open on the Map ("Show on map"). */
+  const [mapIdea, setMapIdea] = useState<{ id: string; key: number } | null>(null);
+  const [cardsDue, setCardsDue] = useState(0);
 
   useEffect(() => startActivityTicker(), []);
   useEffect(() => {
     void call('session.current').then((s) => setSessionActive(s !== null && s.phase !== 'done'));
   }, [screen]);
   useSurface(practiceSet && screen === 'today' ? 'practice' : (SURFACE[screen] ?? null), { practiceSetId: screen === 'today' ? practiceSet : null });
+  useEffect(() => {
+    const count = () => void call('cards.summary', { goalId: null }).then((s) => setCardsDue(s.toReview));
+    count();
+    return onEvent('cards.changed', count);
+  }, [screen]);
 
   const navigate = (s: ScreenName) => {
     setPracticeSet(null);
     setGoalsView(null);
+    setCardsView(null);
+    setMapIdea(null);
     setScreen(s);
+  };
+  const openCards = (view: Partial<CardsView>) => {
+    setCardsView({ view, key: Date.now() });
+    setScreen('cards');
+  };
+  const showOnMap = (nodeId: string) => {
+    setMapIdea({ id: nodeId, key: Date.now() });
+    setScreen('map');
   };
   const openGoals = (view: GoalsView) => {
     setGoalsView({ view, key: Date.now() });
@@ -54,12 +75,13 @@ export function App() {
   return (
     <div className="app">
       <div className="window-drag" aria-hidden="true" />
-      <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} />
+      <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} counts={{ cards: cardsDue }} />
       {screen === 'today' && practiceSet && <PracticeScreen key={practiceSet} setId={practiceSet} onBack={() => setPracticeSet(null)} />}
-      {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} />}
+      {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onOpenCards={() => openCards({ tab: 'review' })} />}
       {screen === 'session' && <SessionScreen onNavigate={navigate} />}
-      {screen === 'map' && <MapScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
-      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} />}
+      {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
+      {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
+      {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} />}
       {screen === 'stats' && <StatsScreen />}
       {screen === 'lookup' && <LookupScreen onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
       {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}

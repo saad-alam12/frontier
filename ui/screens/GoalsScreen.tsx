@@ -11,7 +11,18 @@ import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
 
 export type GoalsView = { name: 'list' } | { name: 'new' } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
 
-export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (s: ScreenName) => void; onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>; initial?: GoalsView }) {
+export function GoalsScreen({
+  onNavigate,
+  onGoDeeper,
+  onReviewCards,
+  initial,
+}: {
+  onNavigate: (s: ScreenName) => void;
+  onGoDeeper: (goalId: string, nodeIds?: string[]) => Promise<void>;
+  /** Review one goal's flashcards on the Cards screen. */
+  onReviewCards: (goalId: string) => void;
+  initial?: GoalsView;
+}) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
   const [view, setView] = useState<GoalsView>(initial ?? { name: 'list' });
 
@@ -72,6 +83,7 @@ export function GoalsScreen({ onNavigate, onGoDeeper, initial }: { onNavigate: (
             onNavigate('session');
           }}
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}
+          onReviewCards={() => onReviewCards(detail.goal.id)}
         />
       );
     }

@@ -39,6 +39,10 @@ export interface CardSchedule {
   lastReview: string | null;
 }
 
+/** A card is a question and a short answer (the card writer and the card editor share these limits). */
+export const CARD_FRONT_MAX = 600;
+export const CARD_BACK_MAX = 2000;
+
 /** New cards that enter the review queue per day. */
 export const NEW_PER_DAY = 20;
 /** Automatic cards per finished idea. */
@@ -97,10 +101,15 @@ const DAY = 24 * HOUR;
 /** A wait in plain words for the rating buttons and card lists: "1 min", "5 hours", "3 days", "2 months". */
 export function formatInterval(ms: number): string {
   const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-  if (ms < HOUR) return `${Math.max(1, Math.round(ms / MINUTE))} min`;
-  if (ms < DAY) return plural(Math.round(ms / HOUR), 'hour');
-  if (ms < 30 * DAY) return plural(Math.round(ms / DAY), 'day');
-  if (ms < 365 * DAY) return plural(Math.round(ms / (30 * DAY)), 'month');
+  // each unit is chosen after rounding, so a wait just short of a day reads "1 day", not "24 hours"
+  const minutes = Math.max(1, Math.round(ms / MINUTE));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(ms / HOUR);
+  if (hours < 24) return plural(hours, 'hour');
+  const days = Math.round(ms / DAY);
+  if (days < 30) return plural(days, 'day');
+  const months = Math.round(ms / (30 * DAY));
+  if (months < 12) return plural(months, 'month');
   const years = Math.round((ms / (365 * DAY)) * 10) / 10;
   return `${years} ${years === 1 ? 'year' : 'years'}`;
 }

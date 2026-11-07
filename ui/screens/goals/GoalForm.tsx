@@ -8,6 +8,7 @@ import { TimePicker } from '../../components/budget';
 import { ASSESSMENT_OPTIONS, ASSESSMENT_PHRASE, FocusChips, KIND_OPTIONS, capitalize, dateLabel, formatDate, goalName, isExam, materialSummary } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
+import { GoalCardSettingsField, saveCardSettings, useGoalCardSettings } from '../../components/CardSettings';
 import type { Material } from './MaterialPicker';
 
 /**
@@ -28,6 +29,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [cards, setCards, cardsMade] = useGoalCardSettings(g.id);
 
   const dateName = dateLabel(assessment);
   const teaching = materials.filter((m) => m.role === 'teaching').length;
@@ -49,6 +51,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
     setError(null);
     try {
       await call('goals.update', { goalId: g.id, form: form() });
+      await saveCardSettings(g.id, cards);
       onDone(g.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -66,6 +69,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
           ...(dateName ? [{ label: 'Date', value: date ? formatDate(date) : '—' }] : []),
           { label: 'Time', value: `${describeBudget(budget, teaching).total}, ${describeBudget(budget, teaching).detail}` },
           { label: 'Material', value: materialSummary(materials, kind === 'course') },
+          { label: 'Flashcards', value: cards.enabled ? `At most ${cards.max}` : 'Off' },
         ]}
       />
       <p className="t-small m-0 text-muted">Saving re-plans the goal for its time. What you learned stays yours.</p>
@@ -124,6 +128,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
         <Question label="Material">
           <MaterialPicker materials={materials} onChange={setMaterials} />
         </Question>
+        <GoalCardSettingsField value={cards} onChange={setCards} made={cardsMade} />
         <div className="button-row border-t border-line pt-[18px]">
           {confirmRemove ? (
             <>
