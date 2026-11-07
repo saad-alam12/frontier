@@ -97,7 +97,12 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 
 ## Next step
 
-**R5 in progress.** Building `docs/feedback-round-5.md` section by section in a local session (commits `R5 §1`–`§7`). It ends with "CHECKPOINT R5 READY" and steps for the owner here.
+**R5 is built and merged; it moves to a cloud session overnight (2026-11-07).** §1 to §6 are merged on this branch (286 tests, typecheck and lint clean). What is left, in order:
+
+1. **Bug fixes from the two read-only reviews** of the R5 code (findings are in the cloud session's handover; fix the confirmed ones, check the plausible ones). Commit as `R5: fixes from review`.
+2. **Finish §7, the UI pass.** A local helper started it; if its work in progress was pushed (branch `claude/r5-ux-wip`), review it, merge it here and finish the screens it lists as not done; otherwise do the pass from the start (`docs/feedback-round-5.md` §7). Run the app on a sandbox (see Commands) and check every screen in screenshots.
+3. **Close R5:** the R5 summary at the top of this file, "CHECKPOINT R5 READY" here with exact steps for the owner, tests, typecheck, lint, push.
+4. **Overnight extras, on a separate branch** `claude/r6-overnight` cut from this branch after step 3 (the owner wants to review them apart from R5). The owner asked for more UI/UX improvement and new features that reduce friction and make Frontier more useful as an all-in-one tool for everything they want to learn. Keep to the design's principles (LLMs judge, code mechanizes; low effort on logistics; licensing rules), one commit per feature, tests for each, every screen checked in screenshots. Record each choice under Decisions on that branch, and end with a short, very simple summary of what changed at the top of this file on that branch. Push that branch; leave this branch at the R5 checkpoint.
 
 ## Owner feedback
 
