@@ -13,5 +13,6 @@ describe('plain errors', () => {
   it('keeps a message written for people, as a sentence', () => {
     expect(plainError('planner: nothing to teach for this goal yet')).toBe('Nothing to teach for this goal yet.');
     expect(plainError('A session is open. Finish or end it first.')).toBe('A session is open. Finish or end it first.');
+    expect(plainError('[\n  {\n    "code": "too_small",\n    "path": ["text"],\n    "message": "Paste at least a few sentences."\n  }\n]')).toBe('Paste at least a few sentences.');
   });
 });

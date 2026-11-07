@@ -13,6 +13,9 @@ const PLAIN: [RegExp, string][] = [
 
 /** One plain sentence for an error message from the backend. */
 export function plainError(message: string): string {
+  // a validation error arrives as the JSON list of its issues; the first one's message is for people
+  const issue = /"message":\s*"((?:[^"\\]|\\.)*)"/.exec(message);
+  if (message.trimStart().startsWith('[') && issue?.[1]) return plainError(issue[1]);
   for (const [pattern, plain] of PLAIN) if (pattern.test(message)) return plain;
   // drop a role prefix ("tutor: ...") and make it a sentence
   const said = message.replace(/^[a-zA-Z]+: /, '').trim().replace(/\.?$/, '.');
