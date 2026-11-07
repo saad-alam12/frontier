@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ideaCountFor } from '../core/budget';
 import { GOAL_LEVELS } from '../core/types';
-import type { Assessment, ExamProfile, GoalFocus, GoalKind, GoalLevel } from '../core/types';
+import type { Assessment, ExamProfile, GoalFocus, GoalKind, GoalLevel, RemapCause } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
 
@@ -110,6 +110,8 @@ export interface GoalCompilerInput {
   askCoverage: boolean;
   /** What the learner says they already know about the subject. */
   background: string | null;
+  /** Anything that shapes the goal, in the learner's words (reasons, purpose, constraints, what to skip). */
+  context: string | null;
   /** The level an earlier compile chose; null on the first compile. */
   level: GoalLevel | null;
   /** A re-map: the whole map is drawn again (the existing capabilities are replaced, not kept). */
@@ -117,18 +119,29 @@ export interface GoalCompilerInput {
 }
 
 export interface RemapRequest {
-  /** fill: add missing background the time covers; simplify: a gentler map; asked: the learner asked. */
-  kind: 'fill' | 'simplify' | 'asked';
+  /** fill: add missing background the time covers; simplify: a gentler map; asked: the learner asked; changed: the learner changed what the map is drawn around. */
+  kind: 'fill' | 'simplify' | 'asked' | 'changed';
+  /** For `changed`: what changed. */
+  causes: RemapCause[];
   gaps: { name: string; hours: number }[];
   hoursLeft: number | null;
 }
 
-const REMAP_TASK: Record<RemapRequest['kind'], string> = {
+const REMAP_TASK: Record<Exclude<RemapRequest['kind'], 'changed'>, string> = {
   fill: 'The learner showed they lack the prerequisites below, and the time left covers them. Map the goal again with them added at the depth the goal needs, as core ideas ahead of the ideas that rest on them.',
   simplify:
     'The learner lacks the foundations below, and the time left cannot also cover them. Map the goal again at a gentler level (usually `intuition`): keep its purpose, and choose the ideas that give a usable understanding without those foundations. Prefer the existing ideas at lower depths to new ones that say the same in simpler words. Suggest a separate goal for the missing foundation in `backgroundGoal` (a sentence the learner could have written, and rough hours).',
   asked: "The learner asked for a new map for their time and what they know now. Map the goal again from scratch for the time left.",
 };
+
+const CHANGE_TASK: Record<RemapCause, string> = {
+  context: "The learner changed the goal's context (above). Map the goal again so the map follows it: its reasons and purpose, what it asks to focus on, and what it asks to leave out.",
+};
+
+function remapTask(request: RemapRequest): string {
+  if (request.kind !== 'changed') return REMAP_TASK[request.kind];
+  return `${request.causes.map((c) => CHANGE_TASK[c]).join(' ')} Keep what still fits; when missing background is listed below, take it into account too.`;
+}
 
 const FOCUS_TEXT: Record<GoalFocus, string> = {
   concepts: 'conceptual understanding: what things mean, why they hold, how they connect',
@@ -157,6 +170,7 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
   ];
   if (input.focus.length) sections.push(`## What the learner wants from it\n${input.focus.map((f) => `- ${FOCUS_TEXT[f]}`).join('\n')}`);
   if (input.background) sections.push(`## What the learner says they already know\n${input.background}`);
+  if (input.context) sections.push(`## The learner's context\n${input.context}`);
   if (input.budgetHours !== null) {
     const left = Math.max(0, input.budgetHours - input.spentHours);
     sections.push(
@@ -170,7 +184,7 @@ export async function runGoalCompiler(provider: LlmProvider, input: GoalCompiler
   }
   if (input.remap) {
     const gaps = input.remap.gaps.map((g) => `- ${g.name} (about ${round(g.hours)} hours to learn from scratch)`).join('\n');
-    sections.push(`## Re-mapping\n${REMAP_TASK[input.remap.kind]}${gaps ? `\n\nMissing background the learner showed:\n${gaps}` : ''}${input.remap.hoursLeft !== null ? `\n\nTime left for this goal: about ${round(input.remap.hoursLeft)} hours.` : ''}`);
+    sections.push(`## Re-mapping\n${remapTask(input.remap)}${gaps ? `\n\nMissing background the learner showed:\n${gaps}` : ''}${input.remap.hoursLeft !== null ? `\n\nTime left for this goal: about ${round(input.remap.hoursLeft)} hours.` : ''}`);
   }
   if (input.existing.length) {
     sections.push(

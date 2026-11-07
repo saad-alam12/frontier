@@ -598,7 +598,7 @@ const DEPTH_WORD = ['a first look', 'recognizing it', 'explaining it', 'deriving
 
 /** What the tutor needs to know about the goal: its sentence and how the time reads it. */
 function tutorGoal(goal: Goal | undefined): TutorGoal {
-  return { text: goal?.text ?? '', level: goal?.level ?? null, scope: goal?.scope ?? null, assessment: goal?.assessment ?? 'none', focus: goal?.focus ?? [] };
+  return { text: goal?.text ?? '', level: goal?.level ?? null, scope: goal?.scope ?? null, assessment: goal?.assessment ?? 'none', focus: goal?.focus ?? [], context: goal?.context ?? null };
 }
 
 function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade): void {

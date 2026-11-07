@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { openDatabase } from '../store/db';
-import { addCapabilities, getGoal, listCapabilities, listTargets, markCompiled } from '../store/goals';
+import { addCapabilities, getGoal, listCapabilities, listTargets, markCompiled, requestRemap } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { approveGoalPlan, createGoalFromForm } from './goals';
 import { nextGoalStep } from './goalWorker';
 import { refreshGoalFields } from './knowledge';
 import { createProbe, submitProbe } from './probe';
-import { approveRemap, dismissRemap, noteBackgroundGaps, proposeRemap, remapView, requestRemap } from './remap';
+import { approveRemap, dismissRemap, noteBackgroundGaps, proposeRemap, remapView } from './remap';
 
 function setup(hours = 4) {
   const db = openDatabase(':memory:');

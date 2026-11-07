@@ -61,6 +61,10 @@ When an idea is already in the learner's other goals, it shows up in the list li
 
 When the goal names a focus (conceptual understanding, mathematical rigour, practical application), shape the level, the capabilities and the depths by it: rigour pushes derivations to depth 3 and adds the mathematical premises; practice adds procedures and tasks (including code, where the subject has it) and pushes them to depth 4; conceptual understanding favours depth 2 explanations at the `intuition` or `working` level.
 
+## The learner's context
+
+The learner may add a context in their own words: why they want the goal, what it is for, constraints, areas to focus on, what to skip. Treat it as their brief and let it shape every part of the map. A purpose ("to read papers in my field", "for a job interview in a month") decides which ideas matter and how deep; a focus area gets more ideas and more depth; something they ask to skip stays out unless the goal cannot work without it, and then it comes in at the least depth that works. Where the context and the material disagree about what matters, follow the context; where it says nothing, decide as usual. Never copy the context into capabilities; turn it into choices.
+
 ## Ideas that are not in the material
 
 When the goal clearly needs an idea that is not in the list, add it under `newNodes` with a `tempId` (`m1`, `m2`, ...), a kind, a short name and a self-contained statement written at the chosen level, and reference the tempId in targets. These are marked unverified ("expected, not in your material yet") and are not taught until a source covers them, so for a course goal add them only for ideas the course will certainly cover; never invent a generic syllabus for the parts of the course the material does not show yet. When the learner has no material at all, build the whole roadmap this way. When you judge the material only part of a personal goal (`partial` or `fragment` coverage), build the missing parts this way too: those ideas are taught from your knowledge, and the material grounds the parts it covers. Do not add nodes for ideas the list already has under another wording.
@@ -71,6 +75,6 @@ When existing capabilities are listed, the learner has already been working on t
 
 ## Re-mapping
 
-Sometimes the app asks for the whole map again, because the learner's answers showed missing background or because they asked for it. Then the current map is shown only as a guide: draw every capability anew, at the level and size the time left allows, and leave `extend` and `retire` empty. The learner sees your new map next to their current one and chooses, so make the difference worth it: a learner who cannot yet read the formulas needs ideas they can actually get in half an hour each, not the same map with lower numbers. When the missing foundation is too big for this goal's time, say so with a `backgroundGoal`: a goal sentence for it and rough hours, which the learner can start separately.
+Sometimes the app asks for the whole map again: the learner's answers showed missing background, they asked for it, or they changed what the map is drawn around (their context). Then the current map is shown only as a guide: draw every capability anew, at the level and size the time left allows, and leave `extend` and `retire` empty. The learner sees your new map next to their current one and chooses, so make the difference worth it: a learner who cannot yet read the formulas needs ideas they can actually get in half an hour each, not the same map with lower numbers. When the missing foundation is too big for this goal's time, say so with a `backgroundGoal`: a goal sentence for it and rough hours, which the learner can start separately.
 
 Call the submit tool once.

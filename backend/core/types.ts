@@ -172,6 +172,8 @@ export interface Goal {
   scope: string | null;
   /** What the learner says they already know about it, in their words. */
   background: string | null;
+  /** Anything that shapes the goal, in the learner's words: reasons, purpose, constraints, what to focus on or skip. */
+  context: string | null;
   /** Prerequisites the learner showed they lack, from the probe and sessions. */
   gaps: BackgroundGap[];
   /** A re-map waiting to be made or approved; null when there is none. */
@@ -204,7 +206,17 @@ export interface RemapProposal {
   backgroundGoal: { text: string; hours: number } | null;
 }
 
-export type GoalRemap = { state: 'requested'; at: string } | { state: 'ready'; at: string; proposal: RemapProposal };
+/** What the learner changed that asks for a new map. */
+export type RemapCause = 'context';
+
+/**
+ * A re-map waiting to be drawn (`requested`) or approved (`ready`). `causes` says what the learner
+ * changed when the request came from an edit; without it the learner asked, or their answers showed gaps.
+ */
+export type GoalRemap = { state: 'requested'; at: string; causes?: RemapCause[] } | { state: 'ready'; at: string; proposal: RemapProposal };
+
+/** The longest context a goal keeps, in characters. */
+export const CONTEXT_MAX_CHARS = 4000;
 
 /**
  * How deep the goal's language goes (design §3.1): intuition (plain words and pictures, no formulas),

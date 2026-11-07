@@ -8,7 +8,7 @@ import type { CompileResult, ExistingCapability, GoalCompilerInput, GraphSummary
 import { guessMaterialRole, runCourseProfile } from '../agents/materials';
 import { ancestors } from '../core/graph';
 import { centrality } from '../core/leverage';
-import { depthSkew, skillStatus } from '../core/goals';
+import { depthSkew, remapCauses, sameRemap, skillStatus } from '../core/goals';
 import type { SkillStatus } from '../core/goals';
 import { EXTRACTED_ROLES } from '../core/types';
 import type { Capability, Depth, Goal, KnowledgeNode, MaterialRole, Source, Target } from '../core/types';
@@ -35,6 +35,8 @@ import {
   listMaterials,
   listTargets,
   markCompiled,
+  requestRemap,
+  saveRemap,
   saveCoverage,
   saveProfile,
   setMaterials,
@@ -154,12 +156,21 @@ export function createGoalFromForm(db: Database, form: GoalForm, options: { draf
   });
 }
 
+/**
+ * Save an edit. A new time re-plans at once. A change to what the map is drawn around (the context)
+ * asks for a new map: a mapped goal gets a proposal to approve (design §3.2, step 7a); a draft, with
+ * nothing approved yet, is simply mapped again.
+ */
 export function updateGoalFromForm(db: Database, goalId: string, form: Partial<GoalForm>): void {
   const before = getGoal(db, goalId);
   const retimed = 'budget' in form && JSON.stringify(form.budget ?? null) !== JSON.stringify(before?.budget ?? null);
   transaction(db, () => {
     const { materials, ...fields } = form;
     updateGoal(db, goalId, fields);
+    const after = getGoal(db, goalId);
+    const causes = before && after ? remapCauses(before, after) : [];
+    // a draft not mapped yet may be mapping right now from what it said before, so it asks too
+    if (causes.length && before && (before.status === 'draft' || before.compiledAt !== null)) requestRemap(db, goalId, causes);
     if (materials) {
       const had = new Set(listMaterials(db, goalId).map((m) => m.sourceId));
       setMaterials(db, goalId, materials);
@@ -343,6 +354,7 @@ export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInp
       focus: goal.focus,
       askCoverage: goal.coverage === null && sources.length > 0,
       background: goal.background,
+      context: goal.context,
       level: goal.level,
     },
   };
@@ -396,7 +408,12 @@ export async function compileGoal(options: CompileOptions, goalId: string): Prom
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   const { input, sources } = compileInput(db, goal);
   const result = await runGoalCompiler(provider, input);
-  transaction(db, () => applyCompile(db, goal, result, sources));
+  transaction(db, () => {
+    applyCompile(db, goal, result, sources);
+    // a draft's first map read the goal as it is now, so a change asked for before it began is answered
+    const now = getGoal(db, goalId);
+    if (goal.status === 'draft' && input.existing.length === 0 && goal.remap?.state === 'requested' && now && sameRemap(now.remap, goal.remap)) saveRemap(db, goalId, null);
+  });
 
   const skew = depthSkew(listTargets(db, goalId).map((t) => t.depth));
   if (skew.overTargeted) console.warn(`goal ${goalId}: ${Math.round(skew.deepShare * 100)}% of targets are at depth 3 or more; the compiler is over-targeting`);

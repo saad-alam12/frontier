@@ -7,7 +7,7 @@
 import { runGoalCompiler } from '../agents/goalCompiler';
 import type { RemapRequest } from '../agents/goalCompiler';
 import { formatHours } from '../core/budget';
-import { remapNeed } from '../core/goals';
+import { remapNeed, sameRemap } from '../core/goals';
 import type { RemapNeed } from '../core/goals';
 import type { BackgroundGap, Goal, GoalLevel, RemapProposal } from '../core/types';
 import type { Database } from '../store/db';
@@ -50,9 +50,13 @@ export function pendingRemapNeed(db: Database, goal: Goal): RemapNeed {
   );
 }
 
-/** The learner asked for a new map for their time (goals from before levels existed, or any goal). */
-export function requestRemap(db: Database, goalId: string): void {
-  saveRemap(db, goalId, { state: 'requested', at: nowIso() });
+/** What the compiler is asked to do for the goal's waiting request, gaps and time left. */
+function remapRequestFor(db: Database, goal: Goal): { request: RemapRequest; fresh: BackgroundGap[] } {
+  const fresh = goal.gaps.filter((g) => g.status === 'new');
+  const causes = goal.remap?.state === 'requested' ? (goal.remap.causes ?? []) : [];
+  const need = pendingRemapNeed(db, goal);
+  const kind: RemapRequest['kind'] = causes.length ? 'changed' : need === 'none' ? 'asked' : need;
+  return { request: { kind, causes, gaps: fresh.map((g) => ({ name: g.name, hours: g.hours })), hoursLeft: hoursLeft(db, goal) }, fresh };
 }
 
 /** Draw the goal's map again and store it as a proposal; the gaps it answers are marked proposed. */
@@ -60,27 +64,47 @@ export async function proposeRemap(options: CompileOptions, goalId: string): Pro
   const { db, provider } = options;
   const goal = getGoal(db, goalId);
   if (!goal) return;
-  const fresh = goal.gaps.filter((g) => g.status === 'new');
-  const need = pendingRemapNeed(db, goal);
-  const kind: RemapRequest['kind'] = need === 'none' ? 'asked' : need;
-  const left = hoursLeft(db, goal);
+  const { request, fresh } = remapRequestFor(db, goal);
   const { input } = compileInput(db, goal);
-  const result = await runGoalCompiler(provider, { ...input, remap: { kind, gaps: fresh.map((g) => ({ name: g.name, hours: g.hours })), hoursLeft: left } });
+  const result = await runGoalCompiler(provider, { ...input, remap: request });
   const proposal: RemapProposal = {
-    reason: reasonFor(kind, fresh, left),
+    reason: reasonFor(request, fresh),
     title: result.title,
     level: result.level ?? goal.level ?? 'working',
     scope: result.scope ?? goal.scope ?? '',
     capabilities: result.capabilities,
     newNodes: result.newNodes,
-    backgroundGoal: kind === 'simplify' ? result.backgroundGoal : null,
+    backgroundGoal: request.kind === 'simplify' ? result.backgroundGoal : null,
   };
   const answered = new Set(fresh.map((g) => key(g.name)));
   transaction(db, () => {
     const now = getGoal(db, goalId) ?? goal;
+    // the learner changed the goal again while this was drawn: the newer request is drawn next
+    if (!sameRemap(now.remap, goal.remap)) return;
     saveGaps(db, goalId, now.gaps.map((g) => (answered.has(key(g.name)) ? { ...g, status: 'proposed' as const } : g)));
     saveRemap(db, goalId, { state: 'ready', at: nowIso(), proposal });
   });
+}
+
+/**
+ * A draft changed after it was mapped (design §3.2): nothing is approved yet, so it is simply mapped
+ * again, with its last map as a guide so ideas that still fit keep their ids.
+ */
+export async function redrawDraft(options: CompileOptions, goalId: string): Promise<void> {
+  const { db, provider } = options;
+  const goal = getGoal(db, goalId);
+  if (!goal || goal.status !== 'draft' || goal.remap?.state !== 'requested') return;
+  const { request } = remapRequestFor(db, goal);
+  const { input } = compileInput(db, goal);
+  const result = await runGoalCompiler(provider, { ...input, remap: request });
+  transaction(db, () => {
+    const now = getGoal(db, goalId);
+    // approved meanwhile (the request becomes a proposal), or changed again (drawn next)
+    if (!now || now.status !== 'draft' || !sameRemap(now.remap, goal.remap)) return;
+    applyProposal(db, now, { reason: '', title: result.title, level: result.level ?? now.level ?? 'working', scope: result.scope ?? now.scope ?? '', capabilities: result.capabilities, newNodes: result.newNodes, backgroundGoal: null });
+    saveRemap(db, goalId, null);
+  });
+  refreshGoalFields(db);
 }
 
 /** "best responses (about 2 hours) and linear algebra (about 10 hours)". */
@@ -89,9 +113,11 @@ function gapList(gaps: BackgroundGap[]): string {
   return items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : (items[0] ?? '');
 }
 
-function reasonFor(kind: RemapRequest['kind'], gaps: BackgroundGap[], left: number | null): string {
-  if (kind === 'fill') return `Your answers showed you are missing ${gapList(gaps)}. Your time covers it, so the new map teaches it first.`;
-  if (kind === 'simplify') {
+function reasonFor(request: RemapRequest, gaps: BackgroundGap[]): string {
+  const left = request.hoursLeft;
+  if (request.kind === 'changed') return 'Your context changed. The new map follows it.';
+  if (request.kind === 'fill') return `Your answers showed you are missing ${gapList(gaps)}. Your time covers it, so the new map teaches it first.`;
+  if (request.kind === 'simplify') {
     return `Your answers showed you are missing ${gapList(gaps)}${left !== null ? `, and this goal has about ${formatHours(left * 60)} left` : ''}. The new map gets you a usable understanding without it.`;
   }
   return 'A fresh map for your time and what you know now.';

@@ -13,6 +13,7 @@ import type { PointState } from '../../components/paths';
 import { ProbeFlow, ProbeResults } from '../../components/ProbeFlow';
 import { ASSESSMENT_LABEL, LEVEL_LABEL, ROLE_OPTIONS, SKILL_LABEL, SKILL_TONE, capitalize, dateLabel, formatDate, goalName, isExam, plural } from './labels';
 import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
+import { ContextNote } from './ContextField';
 
 const SKILLS_SHOWN = 6;
 /** A lecture counts as done once this share of its ideas is yours. */
@@ -160,6 +161,7 @@ export function GoalPage({
       <section className="flex flex-col gap-[12px]">
         <h1 className="t-display">{goalName(detail)}</h1>
         {goal.title && goal.title !== goal.text && <p className="t-lead m-0">{goal.text}</p>}
+        {goal.context && <ContextNote text={goal.context} />}
         <MetaLine
           items={[
             course ? 'Course' : 'On your own',

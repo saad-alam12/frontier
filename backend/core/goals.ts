@@ -1,8 +1,8 @@
 /**
  * Goal mechanics (design §3): the depth-distribution sanity check, the status of a skill, and when
- * missing background calls for a new map.
+ * missing background or an edit calls for a new map.
  */
-import type { Depth } from './types';
+import type { Depth, GoalRemap, RemapCause } from './types';
 
 /** Above this share of targets at depth 3 or more, a compile is over-targeting (design §2.3: most ideas need 1–2). */
 export const DEEP_TARGET_LIMIT = 0.5;
@@ -39,4 +39,27 @@ export function remapNeed(gaps: { hours: number }[], hoursLeft: number | null): 
   if (total < MIN_GAP_HOURS) return 'none';
   if (hoursLeft === null || total <= REMAP_SHARE * hoursLeft) return 'fill';
   return 'simplify';
+}
+
+/** What the learner sets on a goal that the map is drawn around, beyond its sentence and time. */
+export interface MapShaping {
+  context: string | null;
+}
+
+/**
+ * What an edit changed that calls for a new map (design §3.2): a mapped goal asks for one when its
+ * context changes. Whitespace alone is not a change.
+ */
+export function remapCauses(before: MapShaping, after: MapShaping): RemapCause[] {
+  const causes: RemapCause[] = [];
+  if ((before.context ?? '').trim() !== (after.context ?? '').trim()) causes.push('context');
+  return causes;
+}
+
+/**
+ * A model run started from the goal's re-map state; it may write its result only while that state is
+ * still the latest. A request made meanwhile is newer and is drawn next.
+ */
+export function sameRemap(a: GoalRemap | null, b: GoalRemap | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }

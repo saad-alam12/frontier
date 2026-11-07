@@ -62,7 +62,7 @@ export async function createProbe(db: Database, provider: LlmProvider, goalId: s
       targetDepth: targetDepthFor(r.nodeId, view.goals),
     };
   });
-  const questions = await generateProbeQuestions(provider, goal.text, candidates, Math.min(maxQuestions, candidates.length), goal.examProfile?.summary ?? null);
+  const questions = await generateProbeQuestions(provider, goal.text, candidates, Math.min(maxQuestions, candidates.length), goal.examProfile?.summary ?? null, goal.context);
   const set = transaction(db, () => createProbeSet(db, goalId, questions));
   return probeView(db, set.id) as ProbeView;
 }

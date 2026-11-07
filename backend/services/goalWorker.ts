@@ -9,10 +9,10 @@ import { getSource } from '../store/sources';
 import { compileGoal, extractedSources, profileGoal } from './goals';
 import type { GoalWorkState } from './goals';
 import type { IngestionService } from './ingestion';
-import { pendingRemapNeed, proposeRemap } from './remap';
+import { pendingRemapNeed, proposeRemap, redrawDraft } from './remap';
 
 /** What a goal still needs before it is up to date, in order. Pure decision over stored state. */
-export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | 'remap' | null {
+export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' | 'compile' | 'redraw' | 'remap' | null {
   const goal = getGoal(db, goalId);
   if (!goal) return null;
   const materials = listMaterials(db, goalId);
@@ -23,9 +23,18 @@ export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' |
   const readable = extracted.filter((s) => getSource(db, s)?.status === 'done');
   if (goal.compiledAt === null) return materials.length === 0 || readable.length > 0 ? 'compile' : null;
   if (readable.some((s) => !goal.compiledSources.includes(s))) return 'compile';
+  // a draft changed after it was mapped: nothing is approved yet, so it is mapped again
+  if (goal.status === 'draft' && goal.remap?.state === 'requested') return 'redraw';
   // a re-map the learner asked for, or one their missing background calls for (proposed, never applied)
   if (goal.status === 'active' && (goal.remap?.state === 'requested' || (goal.remap === null && pendingRemapNeed(db, goal) !== 'none'))) return 'remap';
   return null;
+}
+
+/** What the goal page says while a new map is drawn: for an edit, the edit; otherwise the answers behind it. */
+function remapMessage(db: Database, goalId: string): string {
+  const remap = getGoal(db, goalId)?.remap;
+  if (remap?.state === 'requested' && remap.causes?.length) return 'Drawing a map that follows your changes';
+  return remap?.state === 'requested' ? 'Drawing a new map for your time' : 'Drawing a map that fits what your answers showed';
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -91,8 +100,10 @@ export class GoalWorker {
         step === 'profile'
           ? await this.step(goalId, 'profiling', "Learning the exam's style from your material", () => profileGoal(options, goalId))
           : step === 'remap'
-            ? await this.step(goalId, 'compiling', 'Drawing a map that fits what your answers showed', () => proposeRemap(options, goalId))
-            : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal(options, goalId));
+            ? await this.step(goalId, 'compiling', remapMessage(this.deps.db(), goalId), () => proposeRemap(options, goalId))
+            : step === 'redraw'
+              ? await this.step(goalId, 'compiling', 'Mapping your goal again for your changes', () => redrawDraft(options, goalId))
+              : await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal(options, goalId));
       if (!ok) return;
     }
   }

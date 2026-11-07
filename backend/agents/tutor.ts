@@ -68,6 +68,8 @@ export interface TutorGoal {
   scope: string | null;
   assessment: Assessment;
   focus: GoalFocus[];
+  /** Why the learner wants it, what it is for, constraints, what to skip: in their words. */
+  context: string | null;
 }
 
 export interface TutorStepInput {
@@ -184,6 +186,7 @@ function goalSection(goal: TutorGoal, why: string): string {
   if (goal.scope) lines.push(`What it means in the learner's time: ${goal.scope}`);
   if (goal.level) lines.push(`Level: ${LEVEL_TEXT[goal.level]}.`);
   lines.push(`Assessed by ${ASSESSMENT_TEXT[goal.assessment]}.${goal.focus.length ? ` The learner wants ${goal.focus.map((f) => FOCUS_TEXT[f]).join(' and ')}.` : ''}`);
+  if (goal.context) lines.push(`The learner's context: ${goal.context}`);
   lines.push(`Why this node today: ${why}`);
   return lines.join('\n\n');
 }

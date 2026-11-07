@@ -12,6 +12,7 @@ import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
 import type { Material } from './MaterialPicker';
 import { Question } from './GoalForm';
+import { ContextField } from './ContextField';
 
 type Step = 'goal' | 'material' | 'time' | 'plan';
 const STEPS: { key: Step; label: string }[] = [
@@ -38,6 +39,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
   const [grade, setGrade] = useState(d?.targetGrade ?? '');
   const [focus, setFocus] = useState<GoalFocus[]>(d?.focus ?? []);
   const [background, setBackground] = useState(d?.background ?? '');
+  const [context, setContext] = useState(d?.context ?? '');
   const [materials, setMaterials] = useState<Material[]>(draft?.materials.map((m) => ({ sourceId: m.sourceId, title: m.title, role: m.role })) ?? []);
   const [budget, setBudget] = useState<GoalBudget | null>(d?.budget ?? null);
   const [goalId, setGoalId] = useState<string | null>(d?.id ?? null);
@@ -59,6 +61,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
     budget: time,
     focus,
     background: background.trim() || null,
+    context: context.trim() || null,
     materials: materials.map((m) => ({ sourceId: m.sourceId, role: m.role })),
   });
 
@@ -158,6 +161,7 @@ export function GoalWizard({ draft, onDone, onCancel }: { draft: GoalDetail | nu
                     <input id="goal-background" className="input" value={background} onChange={(e) => setBackground(e.target.value)} />
                   </Field>
                 )}
+                {assessment && <ContextField value={context} onChange={setContext} note={goalId && (d?.context ?? '').trim() !== context.trim() ? 'The plan is drawn again around it when you continue.' : null} />}
               </div>
             )}
             <WizardNav onNext={() => setStep('material')} nextDisabled={!text.trim() || !kind || !assessment} />

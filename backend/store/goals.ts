@@ -1,7 +1,8 @@
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { newId } from './ids';
-import type { Assessment, BackgroundGap, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, GoalRemap, MaterialRole, Target, UpcomingUnit } from '../core/types';
+import { CONTEXT_MAX_CHARS } from '../core/types';
+import type { Assessment, BackgroundGap, Capability, Coverage, Depth, ExamProfile, Goal, GoalBudget, GoalFocus, GoalKind, GoalLevel, GoalMaterial, GoalRemap, MaterialRole, RemapCause, Target, UpcomingUnit } from '../core/types';
 
 interface GoalRow {
   id: string;
@@ -28,6 +29,7 @@ interface GoalRow {
   level: GoalLevel | null;
   scope: string | null;
   background: string | null;
+  context: string | null;
   gaps: string;
   remap: string | null;
   extra_minutes: number;
@@ -74,6 +76,7 @@ const toGoal = (r: GoalRow): Goal => ({
   level: r.level,
   scope: r.scope,
   background: r.background,
+  context: r.context,
   gaps: parseJson<BackgroundGap[]>(r.gaps, []),
   remap: parseJson<GoalRemap | null>(r.remap, null),
   extraMinutes: r.extra_minutes,
@@ -101,6 +104,15 @@ export interface GoalInput {
   priority?: number;
   /** What the learner already knows about it, in their words. */
   background?: string | null;
+  /** Anything that shapes the goal, in their words (at most CONTEXT_MAX_CHARS). */
+  context?: string | null;
+}
+
+/** The context as stored: trimmed, null when empty. Longer than the limit is refused, never cut. */
+function cleanContext(context: string | null | undefined): string | null {
+  const text = context?.trim() ?? '';
+  if (text.length > CONTEXT_MAX_CHARS) throw new Error(`The context can be at most ${CONTEXT_MAX_CHARS.toLocaleString('en-GB')} characters.`);
+  return text || null;
 }
 
 /** A new goal is active unless created as a draft to preview its plan first. */
@@ -109,7 +121,7 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
   const id = newId('goal');
   const now = nowIso();
   db.prepare(
-    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)',
+    'INSERT INTO goals (id, text, kind, assessment, target_grade, date, budget, focus, priority, status, created_at, approved_at, compiled_at, background, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)',
   ).run(
     id,
     g.text,
@@ -124,6 +136,7 @@ export function createGoal(db: Database, input: GoalInput | string, options: { p
     now,
     options.draft ? null : now,
     g.background?.trim() || null,
+    cleanContext(g.context),
   );
   return getGoal(db, id) as Goal;
 }
@@ -132,7 +145,7 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
   const current = getGoal(db, id);
   if (!current) return;
   const next = { ...current, ...patch };
-  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ?, background = ? WHERE id = ?').run(
+  db.prepare('UPDATE goals SET text = ?, kind = ?, assessment = ?, target_grade = ?, date = ?, budget = ?, focus = ?, priority = ?, status = ?, background = ?, context = ? WHERE id = ?').run(
     next.text,
     next.kind,
     next.assessment,
@@ -143,6 +156,7 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
     next.priority,
     next.status,
     next.background?.trim() || null,
+    cleanContext(next.context),
     id,
   );
 }
@@ -216,6 +230,18 @@ export function saveGaps(db: Database, goalId: string, gaps: BackgroundGap[]): v
 
 export function saveRemap(db: Database, goalId: string, remap: GoalRemap | null): void {
   db.prepare('UPDATE goals SET remap = ? WHERE id = ?').run(remap ? JSON.stringify(remap) : null, goalId);
+}
+
+/**
+ * Ask for a new map: the learner asked (no causes), or changed what the map is drawn around. A
+ * request still waiting keeps its causes and gains the new ones; a proposal not yet chosen is dropped,
+ * because it was drawn for the goal as it was.
+ */
+export function requestRemap(db: Database, goalId: string, causes: RemapCause[] = []): void {
+  const goal = getGoal(db, goalId);
+  if (!goal) return;
+  const merged = [...new Set([...(goal.remap?.state === 'requested' ? (goal.remap.causes ?? []) : []), ...causes])];
+  saveRemap(db, goalId, { state: 'requested', at: nowIso(), ...(merged.length ? { causes: merged } : {}) });
 }
 
 export function startUnverified(db: Database, goalId: string, nodeId: string): void {

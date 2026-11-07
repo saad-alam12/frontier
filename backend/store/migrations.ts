@@ -352,6 +352,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE sources ADD COLUMN extraction INTEGER NOT NULL DEFAULT 1;
     `,
   },
+  {
+    version: 12,
+    sql: `
+      -- R5: the learner's context for a goal (reasons, purpose, constraints, what to focus on or skip).
+      ALTER TABLE goals ADD COLUMN context TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

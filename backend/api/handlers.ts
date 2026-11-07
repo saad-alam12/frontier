@@ -20,11 +20,11 @@ import { mapView, nodeCard } from '../services/map';
 import { EraseRequestSchema, eraseFromMap, previewErase } from '../services/erase';
 import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
-import { deleteGoal, listGoals, startUnverified } from '../store/goals';
+import { deleteGoal, listGoals, requestRemap, startUnverified } from '../store/goals';
 import { deleteSource } from '../store/sources';
 import { getProbeSet } from '../store/probes';
 import { getSession } from '../store/sessions';
-import { approveRemap, dismissRemap, remapView, requestRemap } from '../services/remap';
+import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 
