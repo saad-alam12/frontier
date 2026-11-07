@@ -30,6 +30,8 @@ const MIN_ZOOM = 0.08;
 const MAX_ZOOM = 4;
 const FONT_PX = 12;
 const LABEL_H = 16;
+/** Labels kept at any zoom for the most connected ideas (placed first, never overlapping). */
+const LANDMARK_LABELS = 14;
 const WARM_TICKS = 300;
 /** Screen space the title, search and legend cover, kept clear when fitting. */
 const FIT_INSET = { top: 180, right: 40, bottom: 64, left: 40 };
@@ -332,10 +334,10 @@ export function MapCanvas({
         ctx.fillStyle = colors.textSecondary;
         ctx.fillRect(x - 3, y + r + 2.5, 6, 1.6);
       }
-      // label candidates: the lens and its neighbours, matches, and (zoomed in) everything
+      // label candidates: the lens and its neighbours, matches, and everything else by priority
+      // (zoomed out, only the top few of those are drawn, as landmarks)
       const important = n.id === selected ? 1000 : n.id === hover.current ? 900 : lit?.has(n.id) ? 500 : found.has(n.id) ? 400 : 0;
-      const zoomedIn = cam.zoom >= st.labelZoom;
-      if (!important && (!zoomedIn || faded)) continue;
+      if (!important && faded) continue;
       const text = labelText(ctx, widths.current, plain(v.name));
       const w = ctx.measureText(text).width;
       boxes.push({ id: n.id, x: x + r + 5, y: y - LABEL_H / 2, w, h: LABEL_H, priority: important || 10 + n.dependents * 4 + (v.state === 'fringe' ? 3 : v.state === 'owned' ? 2 : 0) });
@@ -345,12 +347,18 @@ export function MapCanvas({
     ctx.font = `400 ${FONT_PX}px Geist, system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
     const fade = Math.max(0, Math.min(1, (cam.zoom - st.labelZoom) / (st.labelZoom * 0.35)));
+    let landmarks = 0;
     for (const b of placeLabels(boxes, sz.w, sz.h, overlayRects(wrapRef.current, OVERLAYS))) {
       const v = views.get(b.id);
       if (!v) continue;
       const strong = b.priority >= 400;
-      ctx.globalAlpha = strong ? 1 : fade;
-      if (strong) {
+      // the most connected ideas keep a label at any zoom, so the map is never a field of bare dots
+      const landmark = !strong && landmarks < LANDMARK_LABELS;
+      if (landmark) landmarks += 1;
+      if (!strong && !landmark && fade === 0) continue;
+      ctx.globalAlpha = strong ? 1 : landmark ? Math.max(fade, 0.8) : fade;
+      // a plate behind the label keeps it legible over the dots and lines it crosses
+      if (strong || (landmark && fade < 1)) {
         ctx.fillStyle = colors.bg;
         ctx.globalAlpha = 0.8;
         ctx.fillRect(b.x - 3, b.y, b.w + 6, b.h);

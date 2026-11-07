@@ -346,9 +346,21 @@ textarea.card-face-box:focus {
 .cards-toolbar .push {
   margin-left: auto;
 }
+/* the three controls share one height so the row reads as one line */
 .cards-toolbar .btn {
   min-height: 36px;
   font-size: 13px;
+}
+.cards-toolbar .segmented {
+  box-sizing: border-box;
+  height: 36px;
+  padding: 3px;
+}
+.cards-toolbar .segmented button {
+  padding: 0 14px;
+}
+.cards-toolbar .select-quiet {
+  height: 36px;
 }
 .review {
   display: flex;
@@ -503,6 +515,9 @@ kbd.key {
 .card-filters .input {
   flex: 1 1 240px;
   min-height: 40px;
+}
+.card-filters .select-quiet {
+  height: 40px;
 }
 /* styles.css loads after this file, so the list's own rules need the extra class to win */
 .list-card.card-list > li {

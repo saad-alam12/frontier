@@ -312,6 +312,10 @@ function Legend({ map, settings }: { map: MapView; settings: MapSettings }) {
         <span className="legend-dot" style={{ width: 10, height: 10, border: '1.5px solid var(--accent)' }} aria-hidden="true" />
         Learnable now
       </span>
+      <span title="An idea taught from the model's knowledge, not read from your material">
+        <span className="legend-dot" style={{ width: 10, height: 10, border: '1.5px dashed var(--accent)' }} aria-hidden="true" />
+        Not from your material
+      </span>
       <span>
         <span className="legend-dot" style={{ width: 7, height: 7, background: 'var(--node-muted)' }} aria-hidden="true" />
         Beyond your edge
