@@ -20,7 +20,7 @@ export function AddComposer({ goalId, onClose, onSent }: { goalId: string; onClo
     setBusy(true);
     setError(null);
     void call('goals.additionRequest', { goalId, request: text }).then(onSent, (e: unknown) => {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
       setBusy(false);
     });
   };
@@ -147,7 +147,7 @@ export function AdditionPanel({ goal, onChanged, onNewGoal }: { goal: Goal; onCh
     setBusy(label);
     setError(null);
     void fn()
-      .then(onChanged, (e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .then(onChanged, (e: unknown) => setError(plainError(e instanceof Error ? e.message : String(e))))
       .finally(() => setBusy(null));
   };
   const cancel = () => act('cancel', () => call('goals.additionDismiss', { goalId: goal.id }));

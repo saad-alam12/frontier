@@ -49,3 +49,13 @@ export function rankItems(items: PaletteItem[], query: string, limit = 12): Pale
   scored.sort((a, b) => b.score - a.score || GROUP_ORDER.indexOf(a.item.group) - GROUP_ORDER.indexOf(b.item.group) || a.index - b.index);
   return scored.slice(0, limit).map((x) => x.item);
 }
+
+/** ⌘1 to ⌘8 open the sidebar's places in their order there; ⌘, opens Settings, as on a Mac. */
+export const PLACE_SHORTCUTS = ['today', 'goals', 'map', 'cards', 'stats', 'lookup', 'trails', 'library'] as const;
+
+/** The place a key pressed with ⌘ (or Ctrl) opens, if any. */
+export function placeForKey(key: string): (typeof PLACE_SHORTCUTS)[number] | 'settings' | null {
+  if (key === ',') return 'settings';
+  const n = Number(key);
+  return Number.isInteger(n) && n >= 1 && n <= PLACE_SHORTCUTS.length ? (PLACE_SHORTCUTS[n - 1] ?? null) : null;
+}

@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useState } from 'react';
 import type { TodayGoal, TodayView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
@@ -47,7 +48,7 @@ export function TodayScreen({
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(null);
     }

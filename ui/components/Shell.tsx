@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ChartNoAxesColumn, Command, GalleryVerticalEnd, History, LibraryBig, Search, Settings, Sun, Target, Waypoints, type LucideIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
+import { PLACE_SHORTCUTS } from '../lib/palette';
 import { useSessionWork } from '../lib/sessionWork';
 
 export type ScreenName = 'today' | 'session' | 'map' | 'cards' | 'goals' | 'stats' | 'lookup' | 'trails' | 'library' | 'settings';
@@ -68,8 +69,10 @@ export function NavRail({
   const status = work?.status === 'running' ? 'Thinking…' : unseen && !here ? 'Your turn' : here ? 'Open now' : 'Continue';
   const item = ({ name, label, icon: Icon, hint }: NavEntry) => {
     const count = counts[name] ?? 0;
+    const n = PLACE_SHORTCUTS.indexOf(name as (typeof PLACE_SHORTCUTS)[number]);
+    const key = name === 'settings' ? ' (⌘,)' : n >= 0 ? ` (⌘${n + 1})` : '';
     return (
-      <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={count ? `${hint} · ${count} to review` : hint}>
+      <button key={name} type="button" className="nav-item" aria-current={current === name ? 'page' : undefined} onClick={() => onSelect(name)} title={`${count ? `${hint} · ${count} to review` : hint}${key}`}>
         <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
         <span>{label}</span>
         {count > 0 && (

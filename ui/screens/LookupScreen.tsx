@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LookupAnswer, NodeCard } from '../../backend/api/contract';
 import { call } from '../api';
+import { plainError } from '../lib/errors';
 import { Screen } from '../components/Shell';
 import { Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
@@ -27,7 +28,7 @@ export function LookupScreen({ onOpenTrail, onGoDeeper, initialQuery }: { onOpen
       setResult({ ...r, query: q });
       if (r.hits[0] && !r.answer) void open(r.hits[0].nodeId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

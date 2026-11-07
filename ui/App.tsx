@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
@@ -16,6 +16,7 @@ import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CardsScreen, type CardsView } from './screens/CardsScreen';
 import { CommandPalette } from './components/CommandPalette';
+import { placeForKey, PLACE_SHORTCUTS } from './lib/palette';
 import type { PaletteItem } from './lib/palette';
 import type { GoalDetail } from '../backend/api/contract';
 
@@ -62,9 +63,17 @@ export function App() {
   const [lookupQuery, setLookupQuery] = useState<{ query: string; key: number } | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((open) => !open);
+        return;
+      }
+      // ⌘1 to ⌘8 and ⌘, open a place; not while a sheet is open, whose work it would hide
+      const place = placeForKey(e.key);
+      if (place && !document.querySelector('dialog[open]')) {
+        e.preventDefault();
+        navigateRef.current(place);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -99,6 +108,9 @@ export function App() {
     setLookupQuery(null);
     setScreen(s);
   };
+  // the key handler is set up once; it reaches the current navigate through this ref
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const openCards = (view: Partial<CardsView>) => {
     setCardsView({ view, key: Date.now() });
     setScreen('cards');
@@ -126,7 +138,11 @@ export function App() {
     { id: 'do:new-goal', group: 'Actions', label: 'New goal', hint: 'Say what you want to learn', keywords: ['add goal', 'create'] },
     { id: 'do:review', group: 'Actions', label: 'Review flashcards', hint: 'The cards due now', keywords: ['cards'] },
     ...(sessionActive ? [{ id: 'place:session', group: 'Places' as const, label: 'Session', hint: 'Your open session', keywords: ['continue'] }] : []),
-    ...PLACES.map((p) => ({ id: `place:${p.name}`, group: 'Places' as const, label: p.label, hint: p.hint, keywords: p.keywords })),
+    ...PLACES.map((p) => {
+      const n = PLACE_SHORTCUTS.indexOf(p.name as (typeof PLACE_SHORTCUTS)[number]);
+      const key = p.name === 'settings' ? '⌘,' : n >= 0 ? `⌘${n + 1}` : null;
+      return { id: `place:${p.name}`, group: 'Places' as const, label: p.label, hint: key ? `${p.hint} · ${key}` : p.hint, keywords: p.keywords };
+    }),
     ...paletteGoals.map((g) => ({ id: `goal:${g.goal.id}`, group: 'Goals' as const, label: g.goal.title ?? g.goal.text, hint: g.goal.status === 'draft' ? 'Plan waiting for you' : g.goal.text, keywords: [g.goal.text] })),
   ];
   const runPalette = (item: PaletteItem) => {

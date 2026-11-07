@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useState } from 'react';
 import type { PracticeView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
@@ -29,7 +30,7 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
       setView(await call('practice.submit', { problemId, answer, confidence }));
       setRevealed(problemId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

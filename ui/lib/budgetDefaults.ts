@@ -1,4 +1,4 @@
-import type { GoalBudget, GoalKind } from '../../backend/api/contract';
+import type { Assessment, GoalBudget, GoalKind } from '../../backend/api/contract';
 
 /** Whole weeks until an ISO date (0 once it has passed); null without a date. */
 export function weeksUntil(iso: string | null, now = Date.now()): number | null {
@@ -16,4 +16,12 @@ export function defaultBudget(kind: GoalKind | null, date: string | null, now = 
   const weeks = weeksUntil(date, now);
   if (kind === 'course') return { mode: 'rate', hours: 4, per: 'week', length: Math.max(1, weeks ?? 12), lengthUnit: 'weeks' };
   return { mode: 'total', hours: 10 };
+}
+
+/**
+ * The assessment a goal starts with once its kind is chosen, so the usual case is one click: most
+ * courses end in a written exam, and a goal of your own is usually not assessed. Always changeable.
+ */
+export function defaultAssessment(kind: GoalKind): Assessment {
+  return kind === 'course' ? 'written_exam' : 'none';
 }

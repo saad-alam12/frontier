@@ -81,7 +81,7 @@ export function GoalPage({
     try {
       await fn();
     } catch (e) {
-      if (!isCancelled(e)) setError(e instanceof Error ? e.message : String(e));
+      if (!isCancelled(e)) setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(null);
     }

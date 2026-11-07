@@ -1,3 +1,4 @@
+import { plainError } from '../../lib/errors';
 import { useState } from 'react';
 import { call } from '../../api';
 import type { Assessment, GoalBudget, GoalDetail, GoalFocus, GoalForm as GoalFormData, GoalKind, GoalLevel } from '../../../backend/api/contract';
@@ -64,7 +65,7 @@ export function GoalFormScreen({ existing, onDone, onCancel, onRemoved }: { exis
       await saveCardSettings(g.id, cards);
       onDone(g.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
       setBusy(false);
     }
   };

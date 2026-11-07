@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { call, onEvent } from '../api';
@@ -121,7 +122,7 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
         setQueue(await call('cards.review', { cardId: card.id, rating, goalId }));
         setShown(false);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(plainError(e instanceof Error ? e.message : String(e)));
       } finally {
         setBusy(false);
       }
@@ -267,7 +268,7 @@ function AllCards({ goalId, onEdit, onShowOnMap }: { goalId: string | null; onEd
       await fn();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     }
   };
 

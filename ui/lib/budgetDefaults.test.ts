@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultBudget, weeksUntil } from './budgetDefaults';
+import { defaultAssessment } from './budgetDefaults';
 
 describe('default budgets', () => {
   const now = new Date('2026-10-29T12:00:00Z').getTime();
@@ -13,5 +14,12 @@ describe('default budgets', () => {
     expect(weeksUntil('2026-11-05', now)).toBe(1);
     expect(weeksUntil('2026-10-01', now)).toBe(0);
     expect(weeksUntil(null, now)).toBeNull();
+  });
+});
+
+describe('the assessment a new goal starts with', () => {
+  it('is a written exam for a course and none for a goal of your own', () => {
+    expect(defaultAssessment('course')).toBe('written_exam');
+    expect(defaultAssessment('personal')).toBe('none');
   });
 });

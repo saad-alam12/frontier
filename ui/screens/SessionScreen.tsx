@@ -77,7 +77,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(null);
       setSending(null);

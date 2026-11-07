@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useEffect, useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { call } from '../api';
@@ -89,7 +90,7 @@ export function CardSheet({ start, ideas: initialIdeas, goalId, sessionId, onClo
       onSaved?.(card);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
       setSaving(false);
     }
   };

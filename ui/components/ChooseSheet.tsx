@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { FreeChoice, FreePlanView, MakerView, MapState, MapView } from '../../backend/api/contract';
 import { MAX_FREE_IDEAS, joinNames } from '../../backend/core/freeSession';
@@ -92,7 +93,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
           setPreview(p);
           setError(null);
         },
-        (e: unknown) => live && setError(e instanceof Error ? e.message : String(e)),
+        (e: unknown) => live && setError(plainError(e instanceof Error ? e.message : String(e))),
       );
     }, 120);
     return () => {
@@ -122,7 +123,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
     try {
       setMaker(await call('session.make', { description, goalId }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     }
   };
   const start = async () => {
@@ -134,7 +135,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
       if (mode === 'describe') drafts.set(DESCRIPTION_KEY, EMPTY_DESCRIPTION);
       onStarted();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
       setStarting(false);
     }
   };

@@ -10,7 +10,7 @@ import { IdeaField, TimePicker, estimateLine, planSummary, trimSentence } from '
 import { TimeChoice, WANTED_LEVEL_TITLE } from '../../components/TimeChoice';
 import { submitOnModEnter } from '../../components/AnswerSurface';
 import { ASSESSMENT_OPTIONS, FocusChips, KIND_OPTIONS, LEVEL_LABEL, dateLabel, isExam } from './labels';
-import { defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
+import { defaultAssessment, defaultBudget, weeksUntil } from '../../lib/budgetDefaults';
 import { MaterialPicker } from './MaterialPicker';
 import type { Material } from './MaterialPicker';
 import { Question } from './GoalForm';
@@ -83,7 +83,7 @@ export function GoalWizard({ draft, initialText, onDone, onCancel }: { draft: Go
       else setGoalId((await call('goals.create', { form: f, draft: true })).goal.id);
       setStep('plan');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -118,7 +118,7 @@ export function GoalWizard({ draft, initialText, onDone, onCancel }: { draft: Go
               autoFocus
               placeholder="Say it in one sentence"
               onChange={(e) => setText(e.target.value.replace(/\n/g, ' '))}
-              onKeyDown={(e) => submitOnModEnter(e, () => text.trim() && setStep('material'))}
+              onKeyDown={(e) => submitOnModEnter(e, () => text.trim() && kind && assessment && setStep('material'))}
             />
             {!text.trim() && (
               <div className="example-row">
@@ -133,7 +133,15 @@ export function GoalWizard({ draft, initialText, onDone, onCancel }: { draft: Go
             {text.trim() && (
               <div className="flex flex-col gap-[28px]">
                 <Question label="Is it a course, or something of your own?" hint="A course has lectures that keep arriving and usually an exam.">
-                  <ChoiceChips label="Kind of goal" options={KIND_OPTIONS} value={kind} onChange={setKind} />
+                  <ChoiceChips
+                    label="Kind of goal"
+                    options={KIND_OPTIONS}
+                    value={kind}
+                    onChange={(k) => {
+                      setKind(k);
+                      if (!assessment) setAssessment(defaultAssessment(k));
+                    }}
+                  />
                 </Question>
                 {kind && (
                   <Question label="How is it assessed?" hint="This shapes what you practise: exam problems, explaining aloud, or doing the thing.">
@@ -299,7 +307,7 @@ function PlanStep({
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(null);
     }

@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '../api';
 import type { EraseRequest, ErasePreview, EraseScope } from '../../backend/api/contract';
@@ -81,7 +82,7 @@ export function EraseMap() {
     try {
       setPreview(await call('map.erasePreview', request));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -98,7 +99,7 @@ export function EraseMap() {
       await load();
     } catch (e) {
       setPreview(null);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

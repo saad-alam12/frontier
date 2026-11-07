@@ -1,3 +1,4 @@
+import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
 import { call } from '../../api';
 import type { MaterialRole, SourceSummary } from '../../../backend/api/contract';
@@ -27,7 +28,7 @@ export function MaterialPicker({ materials, onChange, big }: { materials: Materi
       const found = await pick();
       onChange([...materials.filter((m) => !found.some((f) => f.sourceId === m.sourceId)), ...found]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(plainError(e instanceof Error ? e.message : String(e)));
     } finally {
       setAdding(false);
     }

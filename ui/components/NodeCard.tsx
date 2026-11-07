@@ -1,3 +1,4 @@
+import { plainError } from '../lib/errors';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
@@ -164,7 +165,7 @@ function SimplifiedNote({ entry, onGoDeeper }: { entry: NodeCard['simplified'][n
             setBusy(true);
             setError(null);
             onGoDeeper().catch((e: unknown) => {
-              setError(e instanceof Error ? e.message : String(e));
+              setError(plainError(e instanceof Error ? e.message : String(e)));
               setBusy(false);
             });
           }}

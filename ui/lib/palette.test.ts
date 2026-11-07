@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchScore, rankItems } from './palette';
+import { matchScore, placeForKey, rankItems } from './palette';
 import type { PaletteItem } from './palette';
 
 const items: PaletteItem[] = [
@@ -28,5 +28,16 @@ describe('the command palette', () => {
 
   it('shows actions, then places, then goals, with no query', () => {
     expect(rankItems(items, '', 4).map((i) => i.group)).toEqual(['Actions', 'Actions', 'Places', 'Places']);
+  });
+});
+
+describe('place shortcuts', () => {
+  it('opens the sidebar places with ⌘1 to ⌘8 and Settings with ⌘,', () => {
+    expect(placeForKey('1')).toBe('today');
+    expect(placeForKey('4')).toBe('cards');
+    expect(placeForKey('8')).toBe('library');
+    expect(placeForKey('9')).toBeNull();
+    expect(placeForKey(',')).toBe('settings');
+    expect(placeForKey('k')).toBeNull();
   });
 });
