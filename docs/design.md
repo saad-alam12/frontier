@@ -455,6 +455,8 @@ Rules:
 
 **Keeping the data safe.** Everything the learner has built lives in `frontier.db`, so: a copy is made each day the app is used and before every schema upgrade (`VACUUM INTO`, consistent while the app runs); Settings lists the copies, makes one on request and restores one (the data as it is now is copied first, so a restore can be undone); when the file opens it is checked, and data that is damaged or was written by a newer version of the app is refused with a message that names the file and the backups, instead of starting on an empty database; only one copy of the app runs per data folder.
 
+**The log.** Errors do not vanish: a call from the window that fails, a model call that fails (with its role), background work that tells the learner something went wrong, and anything nothing caught are written to `frontier.log` beside the settings file, with the time and where it was thrown. It holds error messages only, never the learner's words, a prompt or a key. Past a megabyte it becomes `frontier.log.1` and a new file starts. Settings has "Show log".
+
 ---
 
 ## 12. What is proven and what is a bet

@@ -137,6 +137,11 @@ export function SettingsScreen() {
           </div>
         </div>
         <Backups />
+        <div className="settings-group">
+          <SettingRow label="Log" hint="What went wrong in the background: a source that failed, a call that did not come back. It holds error messages, never your answers or your key. Send it along when you report a problem.">
+            <Button onClick={() => void call('app.showLog')}>Show log</Button>
+          </SettingRow>
+        </div>
         {info && <p className="m-0 text-[12px] text-muted">Frontier {info.version}. Settings file: {info.settingsFile}</p>}
       </Section>
 

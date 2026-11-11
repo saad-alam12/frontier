@@ -10,6 +10,7 @@ import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
+import { isCancelled } from '../llm/provider';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
 import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, setGoalStatus, updateGoalFromForm, useFreedTime } from '../services/goals';
@@ -82,6 +83,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
   };
   return {
     'app.info': () => ({ version: ctx.version, dataFolder: ctx.settings.get().dataFolder, settingsFile: ctx.settingsFile }),
+    'app.showLog': () => {
+      ctx.log.touch();
+      shell.showItemInFolder(ctx.log.path);
+      return null;
+    },
     'backups.list': () => ctx.backups(),
     'backups.create': () => ctx.backupNow(),
     'backups.restore': ({ file }) => {
@@ -359,6 +365,7 @@ export function registerIpc(ctx: AppContext, fromApp: (url: string) => boolean):
     try {
       return { ok: true, value: await handler(input) };
     } catch (error) {
+      if (!isCancelled(error)) ctx.log.error(`call ${name}`, error);
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

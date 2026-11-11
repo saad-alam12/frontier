@@ -97,9 +97,14 @@ void app.whenReady().then(() => {
     join(app.getPath('home'), 'Frontier'),
   );
   context = ctx;
+  ctx.log.info('app', `Frontier ${app.getVersion()} started on ${process.platform}`);
+  // an error nothing caught: keep it, and keep the app running
+  process.on('uncaughtException', (error) => ctx.log.error('uncaught', error));
+  process.on('unhandledRejection', (reason) => ctx.log.error('unhandled', reason));
   try {
     ctx.db();
   } catch (error) {
+    ctx.log.error('opening the data', error);
     // The data cannot be opened (damaged, or written by a newer version). Say so and stop: starting
     // on a fresh database would look as if everything was gone.
     const paths = ctx.paths();
@@ -110,7 +115,7 @@ void app.whenReady().then(() => {
     app.quit();
     return;
   }
-  ctx.emit = eventSink(() => mainWindow);
+  ctx.sink = eventSink(() => mainWindow);
   registerIpc(ctx, (url) => isAppPage(url, appUrl()));
   createWindow();
   ctx.backupIfDue();

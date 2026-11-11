@@ -1,5 +1,5 @@
 import type { CompleteRequest, CompleteResult, LlmProvider, Role } from './provider';
-import { CancelledError } from './provider';
+import { CancelledError, isCancelled } from './provider';
 
 /** Counting semaphore. A waiter whose signal aborts leaves the queue without running. */
 export class Semaphore {
@@ -79,6 +79,8 @@ export class ThrottledProvider implements LlmProvider {
   constructor(
     private inner: LlmProvider,
     limit: number,
+    /** Told of every call that failed (not of one the learner stopped), for the log. */
+    private readonly onError?: (role: Role, error: unknown) => void,
   ) {
     this.semaphore = new Semaphore(limit);
   }
@@ -94,6 +96,11 @@ export class ThrottledProvider implements LlmProvider {
 
   complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
     const lane = WAITED_ON.has(req.role) ? this.waitedOn : this.semaphore;
-    return lane.run(() => this.inner.complete(req), req.signal);
+    return lane
+      .run(() => this.inner.complete(req), req.signal)
+      .catch((error: unknown) => {
+        if (!isCancelled(error)) this.onError?.(req.role, error);
+        throw error;
+      });
   }
 }

@@ -76,6 +76,8 @@ export interface AppInfo {
 
 export interface ApiMethods {
   'app.info': { input: undefined; output: AppInfo };
+  /** Show the log file (errors of calls and background work) in the file manager. */
+  'app.showLog': { input: undefined; output: null };
   /** Copies of the data: one a day, one before each upgrade and each restore, and those the learner asked for. */
   'backups.list': { input: undefined; output: BackupInfo[] };
   'backups.create': { input: undefined; output: BackupInfo[] };

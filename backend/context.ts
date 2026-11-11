@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { EventSink } from './api/handlers';
 import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
@@ -7,6 +7,7 @@ import { createInnerProvider, createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import type { ThrottledProvider } from './llm/queue';
 import type { IdeaFinished } from './core/cards';
+import { LogFile } from './log';
 import { IngestionService } from './services/ingestion';
 import { queueIdeaCards } from './services/cards';
 import type { CardWriterDeps } from './services/cards';
@@ -26,11 +27,14 @@ import type { Database } from './store/db';
 /** Everything the IPC handlers need. Built once in main.ts; pieces are rebuilt when settings change. */
 export class AppContext {
   readonly settings: SettingsStore;
+  /** Errors of calls and of background work, kept beside the settings file. */
+  readonly log: LogFile;
   /** Planning and judging in flight; it outlives the Session screen and survives a settings change. */
   readonly sessionWork = new SessionWork();
   /** "Describe it": the session maker's call and the proposal it leaves. */
   readonly sessionMaker = new SessionMaker();
-  emit: EventSink = () => {};
+  /** Where events for the window go; set once the window exists. */
+  sink: EventSink = () => {};
   private cachedProvider: ThrottledProvider | null = null;
   private cachedDb: Database | null = null;
   /** Databases of data folders the learner switched away from: closed at quit, never under work that still writes to them. */
@@ -45,6 +49,7 @@ export class AppContext {
     defaultDataFolder: string,
   ) {
     this.settings = new SettingsStore(settingsFile, defaultDataFolder);
+    this.log = new LogFile(join(dirname(settingsFile), 'frontier.log'));
     this.ensureFolders();
     this.sessionWork.subscribe((event) => this.emit('session.work', event));
     this.sessionMaker.subscribe((maker) => this.emit('session.maker', { maker }));
@@ -54,8 +59,16 @@ export class AppContext {
     return dataPaths(this.settings.get().dataFolder);
   }
 
+  /** Send an event to the window. What the learner is told went wrong is also written to the log. */
+  readonly emit: EventSink = (event, payload) => {
+    const said = payload as { kind?: string; message?: string; sourceId?: string };
+    if (event === 'app.toast' && said.kind === 'error') this.log.error('notice', said.message ?? '');
+    if (event === 'library.progress' && said.message) this.log.error(`source ${said.sourceId ?? ''}`, said.message);
+    this.sink(event, payload);
+  };
+
   provider(): LlmProvider {
-    if (!this.cachedProvider) this.cachedProvider = createProvider(this.settings.get(), this.paths().agentCwd);
+    if (!this.cachedProvider) this.cachedProvider = createProvider(this.settings.get(), this.paths().agentCwd, (role, error) => this.log.error(`model call: ${role}`, error));
     return this.cachedProvider;
   }
 
