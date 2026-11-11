@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "seed": "tsx scripts/seed.ts",
     "live:connection": "tsx scripts/live-connection.ts",
+    "live:tools": "tsx scripts/live-tools.ts",
     "live:ingest": "tsx scripts/live-ingest.ts",
     "live:session": "tsx scripts/live-session.ts",
     "live:compare": "tsx scripts/live-compare.ts",

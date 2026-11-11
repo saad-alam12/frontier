@@ -17,6 +17,8 @@ export interface AgentSdkProviderOptions {
   /** Working directory for the agent process. Nothing is read from it; it keeps the SDK away from the source tree. */
   cwd: string;
   maxTurns?: number;
+  /** What the model can see in a call, as the SDK reports it when the call starts (`npm run live:tools` prints it). */
+  onInit?: (info: { tools: string[]; mcpServers: { name: string; status: string }[]; permissionMode: string }) => void;
 }
 
 const SERVER_NAME = 'frontier';
@@ -79,6 +81,9 @@ export class AgentSdkProvider implements LlmProvider {
           systemPrompt: system,
           tools: [],
           mcpServers: { [SERVER_NAME]: server },
+          // only the app's own in-process tools: no connectors from the learner's Claude account, user
+          // settings or plugins, because calls read text from sources the learner did not write
+          strictMcpConfig: true,
           allowedTools: [`mcp__${SERVER_NAME}__*`],
           settingSources: [],
           persistSession: false,
@@ -86,6 +91,9 @@ export class AgentSdkProvider implements LlmProvider {
         },
       });
       for await (const message of run) {
+        if (message.type === 'system' && message.subtype === 'init') {
+          this.options.onInit?.({ tools: message.tools, mcpServers: message.mcp_servers, permissionMode: message.permissionMode });
+        }
         if (message.type === 'result') {
           usage.inputTokens += message.usage.input_tokens;
           usage.outputTokens += message.usage.output_tokens;
