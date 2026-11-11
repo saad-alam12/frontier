@@ -4,8 +4,16 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
+/** Links open in the system browser (the main process sends a new window there); the app's window never leaves the app. */
+const LINKS: Components = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noreferrer noopener">
+      {children}
+    </a>
+  ),
+};
 /** Inline use renders paragraphs as plain runs of text, so a name can sit inside a sentence or a button. */
-const INLINE: Components = { p: ({ children }) => <>{children}</> };
+const INLINE: Components = { ...LINKS, p: ({ children }) => <>{children}</> };
 
 /**
  * Markdown with GitHub tables/lists and LaTeX math (KaTeX). Every statement, question and explanation
@@ -15,7 +23,7 @@ export function Markdown({ text, className = '', inline }: { text: string; class
   const Tag = inline ? 'span' : 'div';
   return (
     <Tag className={`markdown${inline ? ' is-inline' : ''} ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={inline ? INLINE : undefined}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={inline ? INLINE : LINKS}>
         {text}
       </ReactMarkdown>
     </Tag>

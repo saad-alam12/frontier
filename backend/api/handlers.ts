@@ -303,9 +303,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
 }
 
 /** Transport only: route every invoke to its handler and wrap errors as plain data. */
-export function registerIpc(ctx: AppContext): void {
+export function registerIpc(ctx: AppContext, fromApp: (url: string) => boolean): void {
   const handlers = buildHandlers(ctx);
-  ipcMain.handle(IPC_CHANNEL, async (_event, name: string, input: unknown) => {
+  ipcMain.handle(IPC_CHANNEL, async (event, name: string, input: unknown) => {
+    // only the app's own page may call the backend, never a page or frame that got loaded some other way
+    if (!fromApp(event.senderFrame?.url ?? '')) return { ok: false, error: 'This page may not call Frontier.' };
     const handler = (handlers as Record<string, (input: unknown) => unknown>)[name];
     if (!handler) return { ok: false, error: `Unknown method ${name}` };
     try {
