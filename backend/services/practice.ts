@@ -268,6 +268,8 @@ export async function startPractice(deps: PracticeDeps, goalId: string, options:
 }
 
 const pending = new Set<Promise<void>>();
+/** Answers whose grade is being written right now, so a retry never grades one twice. */
+const grading = new Set<string>();
 
 /** Resolves when every grade started so far has landed (for tests and orderly shutdown). */
 export async function settleGrading(): Promise<void> {
@@ -289,10 +291,29 @@ export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answ
 }
 
 function track(deps: PracticeDeps, record: AnswerRecord): void {
+  if (grading.has(record.id)) return;
+  grading.add(record.id);
   const job = gradeAnswer(deps, record)
-    .catch((error: unknown) => deps.onError?.(`Grading failed; it will be retried when the app starts again. ${error instanceof Error ? error.message : String(error)}`))
-    .finally(() => pending.delete(job));
+    .catch((error: unknown) => deps.onError?.(`Grading failed; it is tried again when you open practice. ${error instanceof Error ? error.message : String(error)}`))
+    .finally(() => {
+      grading.delete(record.id);
+      pending.delete(job);
+    });
   pending.add(job);
+}
+
+/**
+ * Leave a set: it is closed as it stands. Problems already answered keep their grades (and are still
+ * graded if the grade has not arrived); problems not answered write nothing at all, so stopping early
+ * never counts against an idea.
+ */
+export function endPracticeSet(db: Database, setId: string): void {
+  const set = getPracticeSet(db, setId);
+  if (!set || set.status !== 'open') return;
+  transaction(db, () => {
+    closePracticeSet(db, set.id);
+    logEvent(db, 'practice.done', { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId }, { kind: set.kind, endedEarly: true });
+  });
 }
 
 /** Grade one answer and turn it into practice evidence on each idea, with implicit credit to premises. */
@@ -349,7 +370,7 @@ function withPremises(nodeIds: string[], view: KnowledgeView): string[] {
   return [...new Set([...nodeIds, ...premises])].filter((id) => view.nodes.has(id));
 }
 
-/** Grade answers left ungraded when the app last quit. */
+/** Grade answers that have no grade yet: left by a quit, or by a grade that failed. Answers being graded right now are skipped. */
 export function resumeGrading(deps: PracticeDeps): void {
   for (const answer of ungradedAnswers(deps.db)) track(deps, answer);
 }

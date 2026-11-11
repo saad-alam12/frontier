@@ -10,7 +10,8 @@ import { getPracticeSet, listProblems } from '../store/practice';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { recordEvidence } from './evidence';
 import { refreshGoalFields } from './knowledge';
-import { currentPractice, goalSchedule, settleGrading, startPractice, submitPracticeAnswer } from './practice';
+import { currentPractice, endPracticeSet, goalSchedule, resumeGrading, settleGrading, startPractice, submitPracticeAnswer } from './practice';
+import type { PracticeDeps } from './practice';
 import { todayView } from './today';
 import { reviewsByCard } from '../store/cards';
 import { saveCard } from './cards';
@@ -184,6 +185,48 @@ describe('practice', () => {
     await settleGrading();
     expect(reviewsByCard(db).get(recalled.id)).toMatchObject([{ rating: 3, source: 'practice' }]);
     expect(reviewsByCard(db).get(missed.id)).toBeUndefined();
+  });
+
+  it('leaving a set closes it without a word about the problems not answered', async () => {
+    const { db, goal, deps } = setup(8);
+    const set = await startPractice(deps, goal.id);
+    if (!set) throw new Error('no set');
+    const [first, ...rest] = listProblems(db, set.id);
+    if (!first || !rest.length) throw new Error('needs several problems');
+    submitPracticeAnswer(deps, first.id, 'Both undercut, so they end at (1,1).', 0.66);
+    await settleGrading();
+    const untouched = [...new Set(rest.flatMap((p) => p.nodeIds))].filter((nodeId) => !first.nodeIds.includes(nodeId));
+    const evidenceBefore = untouched.map((nodeId) => listEvidenceForNode(db, nodeId).length);
+
+    endPracticeSet(db, set.id);
+    expect(getPracticeSet(db, set.id)?.status).toBe('done');
+    expect(currentPractice(db)).toBeNull(); // Today offers practice again instead of "Continue practice" for good
+    expect(untouched.map((nodeId) => listEvidenceForNode(db, nodeId).length)).toEqual(evidenceBefore);
+    endPracticeSet(db, set.id); // a second time changes nothing
+  });
+
+  it('a grade that failed is tried again when practice is opened, and never twice at once', async () => {
+    const { db, goal, provider, deps } = setup(8);
+    const set = await startPractice(deps, goal.id);
+    const first = set?.problems[0];
+    if (!set || !first) throw new Error('no problem');
+    const gradesBefore = provider.calls.filter((c) => c.role === 'grader').length;
+    let fail = true;
+    const errors: string[] = [];
+    const flaky: PracticeDeps = {
+      db,
+      onError: (m) => void errors.push(m),
+      provider: { name: 'flaky', complete: <T>(req: CompleteRequest<T>) => (req.role === 'grader' && fail ? Promise.reject(new Error('overloaded')) : provider.complete(req)) },
+    };
+    submitPracticeAnswer(flaky, first.id, 'Both undercut.', 0.66);
+    await settleGrading();
+    expect(errors[0]).toContain('tried again when you open practice');
+    fail = false;
+    resumeGrading(flaky);
+    resumeGrading(flaky); // the answer is already being graded: no second call
+    await settleGrading();
+    expect(provider.calls.filter((c) => c.role === 'grader').length).toBe(gradesBefore + 1);
+    expect(listProblems(db, set.id).flatMap((p) => p.nodeIds).some((nodeId) => listEvidenceForNode(db, nodeId).some((e) => e.kind === 'practice' && !e.context.implicit))).toBe(true);
   });
 
   it('returns null when nothing is fading', async () => {

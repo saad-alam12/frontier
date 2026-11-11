@@ -169,6 +169,8 @@ export interface ApiMethods {
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock' }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null }; output: PracticeView };
+  /** Leave a set as it stands: answered problems count, the rest write nothing. */
+  'practice.end': { input: { setId: string }; output: null };
   'map.view': { input: undefined; output: MapView };
   /** An idea's card without counting it as a lookup (the map's selection). */
   'map.card': { input: { nodeId: string }; output: NodeCard };

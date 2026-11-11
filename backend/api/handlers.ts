@@ -19,7 +19,7 @@ import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { refreshGoalFields } from '../services/knowledge';
-import { currentPractice, practiceView, startPractice, submitPracticeAnswer } from '../services/practice';
+import { currentPractice, practiceView, startPractice, submitPracticeAnswer, endPracticeSet, resumeGrading } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
 import { EraseRequestSchema, eraseFromMap, previewErase } from '../services/erase';
@@ -247,7 +247,15 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'today.view': () => todayView(ctx.db()),
     'practice.current': () => currentPractice(ctx.db()),
-    'practice.get': ({ setId }) => practiceView(ctx.db(), setId),
+    'practice.get': ({ setId }) => {
+      // a grade that failed earlier is tried again whenever the learner comes back to practice
+      resumeGrading(ctx.practiceDeps());
+      return practiceView(ctx.db(), setId);
+    },
+    'practice.end': ({ setId }) => {
+      endPracticeSet(ctx.db(), setId);
+      return null;
+    },
     'practice.start': ({ goalId, kind }) => startPractice(ctx.practiceDeps(), goalId, { kind }),
     'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
     'map.view': () => mapView(ctx.db()),

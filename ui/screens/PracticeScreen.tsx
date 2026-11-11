@@ -36,6 +36,19 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
     }
   };
 
+  /** Leave the set as it stands and go back; nothing is recorded for the problems not answered. */
+  const stop = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await call('practice.end', { setId });
+      onBack();
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+      setBusy(false);
+    }
+  };
+
   if (!view) return <Screen>{null}</Screen>;
   const mock = view.kind === 'mock';
   const finished = view.currentIndex === null && revealed === null;
@@ -81,6 +94,14 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
       </div>
       {error && <Notice error>{error}</Notice>}
       <PracticeFlow view={view} revealedId={revealed} busy={busy} onSubmit={(id, a, c) => void submit(id, a, c)} onNext={() => setRevealed(null)} />
+      {!finished && (
+        <div className="button-row border-t border-line pt-[18px]">
+          <Button kind="quiet" disabled={busy} onClick={() => void stop()}>
+            Stop here
+          </Button>
+          <span className="t-small text-muted">What you answered counts. The problems you leave count for nothing.</span>
+        </div>
+      )}
       {finished && (
         <section className="flex flex-col gap-[18px] border-t border-line pt-[28px]">
           <h2 className="t-heading m-0">{mean === null ? 'All answered' : `Done: ${mean.toFixed(1)} out of 10 on average`}</h2>
