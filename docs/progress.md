@@ -139,9 +139,12 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
 | R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
 | R6 Overnight extras (separate branch) | Done, to review | Command palette, place shortcuts, paste text into the Library, notes export, fewer clicks, plain errors; branch `claude/r6-overnight` |
+| R7 Review of the whole app: improvement plan | Waiting for the owner's approval | `docs/improvement-plan.md`; no code changed. Three backend code reviews and a pass over every screen on sandbox data; the UI code review stopped early at the usage limit |
 | R5 Background work, goals by depth, your own sessions, flashcards | Done, checkpoint ready | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally with helper agents, finished in a cloud session (review fixes, §7); 298 tests |
 
 ## Next step
+
+**Proposals waiting for the owner (2026-11-11, branch `claude/wizardly-faraday-2jex8f`).** `docs/improvement-plan.md` lists ideas for the UI, new features, existing features and bug fixes, each with an ID. Nothing in it is built. Do not start on any of it until the owner approves items by ID; then build only those. Its "Decisions I need from you" section must be answered before D2, D12 and D13.
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
