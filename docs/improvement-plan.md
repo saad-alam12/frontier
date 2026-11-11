@@ -1,18 +1,32 @@
-# Improvement plan (proposals to approve)
+# Improvement plan
 
-Status: 2026-11-11, cloud session. **Nothing here is built.** Approve items by their ID (for example "D1 to D8, A2, B1") and a later session builds only those.
+Status: 2026-11-11. **The owner approved every item** and set the order below. Built items are ticked in `docs/progress.md`.
 
-## Approved so far (owner, 2026-11-11)
+## Build order (owner's rule, 2026-11-11)
 
-Still not built: the owner has not yet said which other items to build, or when to start.
+The owner's rule: first high impact and low time, then high impact and medium time, then medium impact and low time. High impact with high time, and medium impact with medium time, wait for the next session. Low impact is archived in `docs/notes/archived-ideas.md`, not deleted. Impact and time are my judgement.
 
-- **D2:** yes. One review per idea per sitting, built from its graded steps, with the prediction left out.
-- **D12:** yes. Keep only the first tidying rule (drop a chain when another chain to the same idea needs fewer of the same ideas). Update `docs/design.md` §2.1 in the same commit.
-- **D13:** yes, the middle way. One failure only lowers freshness; two clear failures on different days drop the idea one level, so it is taught again. Update `docs/design.md` §3.4.
-- **B4:** yes, for sources and pages that are mostly images or have little text. The tutor should refer to the figures and show them in the session.
-- **B14:** keep it general and simple (see the row).
+**This session, in this order**
+
+1. *High impact, low time:* D1, D5, D4, D3, D18, D15, A7, A2, C2, the quick parts of C1 (tutor calls first, lower planner effort), of D16 (pin model calls to the app's tools, a settings file that cannot be lost), of C9 (leave a practice set without a penalty) and of D11 (stuck sources, a message for sources with no text, a clean "Remove from library"), then D8.
+2. *High impact, medium time:* D2 with D13, D12, D6 with D10, D7, D9, the rest of D11, D14, C3, B1, B2, A1, B6, C8, B3.
+3. *Medium impact, low time:* D26, A5, A6, A10, B12, B14, the first part of C5 (misconceptions get resolved), D25.
+
+**Next session** (high impact and high time; medium impact and medium time): B4, B19, the rest of C1 (no thrown-away cards, explanations shown as they are written, prompt caching), A3, A4, B7, B8, B9, B10, B15, B17, C4, the rest of C5, C6, C10, the rest of D16 (keychain, time limits), D19, D20, D21, D22, D23.
+
+**After that** (medium impact, high time; the rule does not name this case, so it waits): B5.
+
+**Archived** (low impact): A8, A9, A11, A12, A13, A14, B11, B13, B16, B18, C7, C11, D17, D24.
+
+## Decisions (owner, 2026-11-11)
+
+- **D2:** one review per idea per sitting, built from its graded steps, with the prediction left out.
+- **D12:** keep only the first tidying rule (drop a chain when another chain to the same idea needs fewer of the same ideas). Update `docs/design.md` §2.1 in the same commit.
+- **D13:** the middle way. One failure only lowers freshness; two clear failures on different days drop the idea one level, so it is taught again. Update `docs/design.md` §3.4.
+- **B4:** for sources and pages that are mostly images or have little text. The tutor refers to the figures and shows them in the session.
+- **B14:** keep it general and simple: a multilingual search model, English for the app and explanations, no language setting.
 - **D16:** yes to the check on the Mac.
-- **B19:** wanted ("runnable code is a great idea"). How the code is run is still open, see Decisions.
+- **B19:** run code with the Python already on the Mac, only when the learner presses Run. When a library is missing the app installs it; when that is not possible it shows the commands to run in a terminal. The owner gives the app full permission for this. Pyodide (MPL-2.0) is not needed now.
 
 ## How this list was made
 
@@ -24,14 +38,6 @@ Still not built: the owner has not yet said which other items to build, or when 
 **Not checked.** The review of the UI code stopped early at the usage limit, so UI code bugs are under-represented (see D25). No real model ran, so prompt quality is judged from reading only. Speed was not measured. The macOS build was not run.
 
 Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
-
-## What I would do first
-
-1. **Fix what gives wrong results or can lose data:** D1 to D8, D15, D18. Mostly small.
-2. **Fix what makes the plan and the review schedule inaccurate:** D9 to D14. Some need a decision from you (see "Decisions").
-3. **Make the session better:** B1, B2, C1, C2, C3, A2. This is where learning time is spent.
-4. **Material in, practice out:** B3, B4, B6, C9, C10.
-5. **Comfort:** A1, A3, A4, A5, A6, B12.
 
 ---
 
@@ -46,13 +52,7 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | A5 | **Flashcard review comfort.** Undo the last rating (⌘Z), show "3 of 12", and end with one summary line. | A mis-pressed key cannot be taken back. No progress is shown. | S | Yes |
 | A6 | **Stats tidy-up.** Stop the "Recognize" and "Own" labels overlapping. Hide rows with 0 answers. Show a chart only when it has enough data, otherwise one quiet line. | Seen in the screenshot: overlapping labels, three confidence rows of which two are empty, a one-bar chart. | S | Yes |
 | A7 | **Pause and finish a goal.** Add "Pause" and "Mark as finished" to the goal page. Group the Goals list: active, drafts, paused, finished. Show days to the exam. | The backend supports paused and finished goals, but the UI can only delete a goal, and deleting drops its time from Stats. | S | Yes |
-| A8 | **Light theme and text size.** Light and "follow the system", and ⌘+ / ⌘− for text size. | The app is dark only and has no zoom. | M | — |
-| A9 | **Lookup.** Make the example questions clickable, keep recent lookups, and fill the empty page with something useful (ideas that are fading). | The examples are plain text. The page is empty until you type. | S | — |
 | A10 | **Library.** Drop files anywhere on the window. Show a time estimate and a Cancel while a source is read. Add "Open original". | Files can be dropped only in the goal's material step. A running read cannot be cancelled. | S | — |
-| A11 | **Trails.** Search and filter by goal. Give sessions with the same title a second line with the ideas they covered. | The list showed four sessions all named "Profiles, best responses and equilibrium". | S | — |
-| A12 | **First run.** "Try with an example" (the 36-idea example map already exists) and a connection check before the first goal. | A new user sees an empty app until their first goal is mapped. | S | — |
-| A13 | **Shortcut sheet and menu bar.** ⌘/ lists the shortcuts. A native menu with New goal, Search, Review flashcards. | Shortcuts exist but are listed nowhere. The app has the default menu. | S | — |
-| A14 | **Map.** Stronger links at the default zoom, and "Show the path to this idea" drawn on the graph. | Links are very faint. The path exists only as a list in the idea's card. | S | — |
 
 ---
 
@@ -70,14 +70,10 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | B8 | **Oral exam and teach-back.** The tutor plays the examiner with "why" and "what if" follow-ups, or a beginner you must teach. Optionally spoken: read aloud with the system voice, dictation with a local speech model. | The design promises the examiner for oral exams. Today "oral exam" only changes a few words in the prompts. | M (text), L (voice) | — |
 | B9 | **Real diagrams.** Rendered diagrams and simple plots in explanations. | The tutor may only draw "a diagram in text". | M | — |
 | B10 | **Notes and a cheat sheet.** A notes view per goal (your own words, formulas, worked examples), a one-page sheet before an exam, print or PDF, and a free note on each idea. | Notes exist only as a Markdown export. | M | — |
-| B11 | **Anki import and export.** Review your cards on the phone, and bring in decks you already have. | Cards live only in Frontier. | M | — |
 | B12 | **Reminders.** A quiet system notification when reviews are due or at a study time you choose, and the count on the dock icon. | The app says nothing when it is closed or in the background. | S | Yes |
-| B13 | **Week plan.** Which days and how long, days off, days to the exam, calendar export. | The weekly rhythm is split over five days with no say from you. | M | — |
 | B14 | **German and English material.** Replace the English-only model for "search by meaning" with a multilingual one of the same size, so a German source matches as well as an English one. The app and all explanations stay in English. No language setting. | The search model is English only, so matching and Lookup are weak on German lectures. The owner's material is in both languages (answered 2026-11-11: keep it general and simple). The new model's licence must be checked first. | S to M | Yes |
 | B15 | **Edit your map.** Rename an idea, merge duplicates, correct a statement, and "I know this: test me" from the map or the goal page. | The only edit today is erase. | M | — |
-| B16 | **Conflicts between sources.** Show them and resolve each in a short investigation. | The design describes it. Today a conflict is stored but never shown, and a single-part source can never report one. | M | — |
 | B17 | **Weekly review.** One page a week: what you learned, what faded, where you were too sure, and one suggested change to the plan. | Stats has the numbers but no summary over time. | M | — |
-| B18 | **Tell the story of a trail.** "How did I get from linear algebra to attention?" | An open question in `docs/progress.md`. One model call over a trail. | S | — |
 | B19 | **Code practice.** A code answer field with highlighting, and running the code. | Goals can ask for "practical application, including code", but answers are plain text. The owner wants it (2026-11-11). Open: run it with the Python already on the Mac (no licence question, every installed library, not sandboxed) or inside the app with Pyodide (sandboxed and self-contained, MPL-2.0, fewer libraries). | L | Yes |
 
 ---
@@ -92,11 +88,9 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | C4 | **A session that adapts.** Pull in a missing prerequisite mid-session. Open the next session with the question the last one left. | The design says both. The plan is fixed at the start, and the preview question is shown but never used. | M | — |
 | C5 | **Misconceptions that end.** Mark one resolved after a few clean answers. Recognize a repeat by meaning. Add a Misconceptions view. Schedule a contrast problem because of one. | They are never resolved (the code for it is never called) and are matched by exact sentence, so the tutor's list only grows. | M | Yes |
 | C6 | **Lookup that reads your sources.** Search the source text too, with page citations. Allow follow-up questions. Match idea names inside a question when the search model is missing. | Lookup answers only from idea cards. Without the model, "difference between SPE and Nash" finds nothing. | M | — |
-| C7 | **Flashcards.** Fill-in-the-gap cards, reversed cards, daily limits in Settings, and "problem cards": a card missed many times is rewritten or its idea is taught again. | New cards are fixed at 20 a day. A card that keeps failing is just repeated. | M | — |
 | C8 | **Goals that use freed time.** When the probe shows you know half, offer the left-out ideas back. Say when a goal has only an exam or a syllabus. Ask "finished?" when the date has passed. | Freed hours stay unused, and the goal page never says so. See D14. | M | Yes |
 | C9 | **Practice sets.** Leave a set without a penalty. Retry grading without a restart. Images and quotes in practice answers. | The only way out of a set is "No idea", which records zeros on every idea. | S to M | Yes |
 | C10 | **Library.** Watch a course folder so new lectures arrive on their own. Clear messages for scanned, empty or locked PDFs. Readers for Word, PowerPoint, EPUB and notebooks. | Only PDF, Markdown, text and HTML are read. | M | — |
-| C11 | **A list beside the map.** Ideas in a sortable table: state, depth, due, goal. | The graph is good for shape, poor for "what is due". | M | — |
 
 ---
 
@@ -127,7 +121,6 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | D14 | **Goal edge cases.** A 10-hour goal with its exam in three days shows "70 hours this week". A new time is "behind" at once, because the clock starts at the first approval. A goal with only an exam or syllabus is never mapped and the wizard waits forever. "Map more ideas" during background work writes skills twice. Deleting a goal removes its time from Stats. A waiting "new map" breaks after "Read again". | Reviewer reproduced most | M to L | Yes |
 | D15 | **Stats dates are wrong in Germany.** Weeks are labelled with Sunday's date, and one day disappears from the calendar and the streak each spring. (`backend/services/stats.ts`) | Reviewer reproduced | S | Yes |
 | D16 | **Model layer safety.** Pin model calls to the app's own tools, so connectors on your Claude account are never visible to calls that read source text. Add a time limit to stuck calls. Store the API key in the system keychain, not in plain text. A settings file with one bad field is silently replaced by defaults. | First point suspected, rest read | M | Yes |
-| D17 | **Smaller.** The Cards queue fails if the clock was set back. Usage from the Claude login always reads 0. | Reproduced / read | S | — |
 
 ### Code health
 
@@ -139,18 +132,17 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | D21 | **Restore the layer rules.** The transport layer holds logic and calls the database directly (how D11e happened). The "one writer" of the map is six places. | M | — |
 | D22 | **Split oversized files.** `services/session.ts` (983 lines, the root of D6), `services/goals.ts`, `GoalPage.tsx` (807), `styles.css` (3,406). | M | — |
 | D23 | **Speed as the map grows.** Almost every request rebuilds the whole graph from all evidence, and every card's schedule is replayed on each call. Fine at 36 ideas, not at 2,000. Not measured. | M | — |
-| D24 | **Remove dead code and fix the docs.** An unused command that costs a model call, unused helpers, an empty `exports/` folder, and three places where `docs/design.md` no longer matches the code. | S | — |
 | D25 | **Finish the UI code review.** It stopped at the usage limit. What I checked by hand was sound: shortcuts do not fire while typing, buttons have names, the map has a text alternative. | S | Yes |
 | D26 | **A log file.** Errors in background work vanish. Write them to a file and add "Show log" in Settings. | S | Yes |
 
 ---
 
-## Decisions I need from you
+## The questions I asked, with the answers
 
 1. **D2, how a sitting counts.** Answered 2026-11-11: yes. One review per idea per sitting, built from its graded steps, with the prediction left out.
 2. **D13d, failing a known idea.** Answered 2026-11-11: the middle way. One failure only lowers freshness; two clear failures on different days drop the idea one level.
 3. **D12a, tidying chains.** Answered 2026-11-11: yes. Keep an argument unless another one needs strictly fewer of the same ideas. This changes a rule in `docs/design.md`.
 4. **B14.** Answered 2026-11-11: the material is in German and English. Keep it general, no language setting, English for the app and explanations.
 5. **B4.** Answered 2026-11-11: yes, for sources and pages that are mostly images or have little text; the tutor refers to the figures and shows them in the session.
-6. **B19.** Open. The owner wants runnable code. Choose how: the Python on the Mac, Pyodide inside the app (needs MPL-2.0 allowed in `CLAUDE.md` as a named exception), or the first now and the second later.
+6. **B19.** Answered 2026-11-11: the Python on the Mac; the app installs what is missing or shows the commands.
 7. **D16.** Answered 2026-11-11: yes. The session that builds D16 adds a small script that prints which tools a model call can see; the next local session on the Mac runs it once with the Claude login.
