@@ -1,0 +1,9 @@
+{
+  "name": "sharp",
+  "version": "0.35.5",
+  "private": true,
+  "description": "Stand-in for sharp. Frontier embeds text only and never processes images, so the real package (whose prebuilt libvips binaries are LGPL-3.0) is not installed or shipped.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": "./index.js"
+}
