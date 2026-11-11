@@ -6,7 +6,7 @@ import { Button, Notice, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
 import { plainError } from '../lib/errors';
 import { EraseMap } from '../components/EraseMap';
-import { FlashcardPreferences } from '../components/CardSettings';
+import { FlashcardPreferences, Switch } from '../components/CardSettings';
 
 const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'goalCompiler', label: 'Goal compiler', does: 'Turns a goal into skills and the ideas each needs' },
@@ -124,6 +124,27 @@ export function SettingsScreen() {
       </Section>
 
       <FlashcardPreferences />
+
+      <Section title="Reminders" gap={14}>
+        <div className="settings-group">
+          <SettingRow label="Daily reminder" htmlFor="reminder-daily" hint="One quiet notification a day, when something is due and you have not studied yet. None while you are in the app. Frontier has to be running; closing its window is fine.">
+            <input
+              className="input is-time"
+              type="time"
+              aria-label="Time of the reminder"
+              value={settings.reminderTime}
+              disabled={!settings.reminderDaily}
+              onChange={(e) => {
+                if (e.target.value) void update({ reminderTime: e.target.value });
+              }}
+            />
+            <Switch id="reminder-daily" on={settings.reminderDaily} onChange={(on) => void update({ reminderDaily: on })} />
+          </SettingRow>
+          <SettingRow label="Number on the app icon" htmlFor="icon-badge" hint="How many flashcards are waiting for review.">
+            <Switch id="icon-badge" on={settings.iconBadge} onChange={(on) => void update({ iconBadge: on })} />
+          </SettingRow>
+        </div>
+      </Section>
 
       <Section title="Data" gap={14}>
         <div className="settings-group">

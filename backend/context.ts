@@ -35,6 +35,8 @@ export class AppContext {
   readonly sessionMaker = new SessionMaker();
   /** Where events for the window go; set once the window exists. */
   sink: EventSink = () => {};
+  /** Told when settings changed, for what lives outside this context (the number on the app's icon). */
+  afterSettings: () => void = () => {};
   private cachedProvider: ThrottledProvider | null = null;
   private cachedDb: Database | null = null;
   /** Databases of data folders the learner switched away from: closed at quit, never under work that still writes to them. */
@@ -194,6 +196,7 @@ export class AppContext {
    */
   onSettingsChanged(previous: Settings): void {
     const next = this.settings.get();
+    this.afterSettings();
     this.cachedProvider?.reconfigure(createInnerProvider(next, this.paths().agentCwd), next.concurrency);
     this.cachedIngestion?.setConcurrency(next.concurrency);
     if (next.dataFolder === previous.dataFolder) return;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_REMINDER_TIME, clockMinutes } from '../core/reminders';
 import { ROLES, type Role } from '../llm/provider';
 
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -54,6 +55,12 @@ const FIELDS = {
   /** Absolute path of the data folder (database, sources, exports). Empty means the default. */
   dataFolder: z.string(),
   concurrency: z.number().int().min(1).max(8),
+  /** One notification a day when something is due and nothing was studied yet. */
+  reminderDaily: z.boolean(),
+  /** The time of day for it, "HH:MM". */
+  reminderTime: z.string().refine((time) => clockMinutes(time) !== null, 'A time of day, like 18:00.'),
+  /** Flashcards to review as a number on the app's icon. */
+  iconBadge: z.boolean(),
 };
 
 export const SettingsSchema = z.object({
@@ -63,6 +70,9 @@ export const SettingsSchema = z.object({
   efforts: FIELDS.efforts.default({}),
   dataFolder: FIELDS.dataFolder.default(''),
   concurrency: FIELDS.concurrency.default(3),
+  reminderDaily: FIELDS.reminderDaily.default(true),
+  reminderTime: FIELDS.reminderTime.default(DEFAULT_REMINDER_TIME),
+  iconBadge: FIELDS.iconBadge.default(true),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -79,6 +89,9 @@ export const SettingsPatchSchema = z.strictObject({
   efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS).nullable()).optional(),
   dataFolder: FIELDS.dataFolder.optional(),
   concurrency: FIELDS.concurrency.optional(),
+  reminderDaily: FIELDS.reminderDaily.optional(),
+  reminderTime: FIELDS.reminderTime.optional(),
+  iconBadge: FIELDS.iconBadge.optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
@@ -114,7 +127,7 @@ export function modelChoice(settings: Settings, role: Role): ModelChoice {
 export function salvageSettings(raw: unknown): Settings {
   const input = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   const kept: Record<string, unknown> = {};
-  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency'] as const) {
+  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency', 'reminderDaily', 'reminderTime', 'iconBadge'] as const) {
     const parsed = FIELDS[key].safeParse(input[key]);
     if (parsed.success) kept[key] = parsed.data;
   }

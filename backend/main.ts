@@ -1,10 +1,11 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, Notification, shell } from 'electron';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
 import { externalUrl, isAppPage } from './api/navigation';
 import { resumeGrading } from './services/practice';
+import { badgeCount, takeReminder } from './services/reminders';
 
 let mainWindow: BrowserWindow | null = null;
 let context: AppContext | null = null;
@@ -81,13 +82,52 @@ if (sandbox) app.setPath('userData', sandbox);
 const first = app.requestSingleInstanceLock();
 if (!first) app.quit();
 app.on('second-instance', () => {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
+  if (mainWindow) showWindow();
 });
 
 /** How often an open app checks whether today's backup exists (it may stay open for days). */
 const BACKUP_CHECK_MS = 3 * 3_600_000;
+/** How often the reminder and the number on the icon are looked at. */
+const REMINDER_CHECK_MS = 60_000;
+
+function showWindow(): void {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+/** Flashcards to review, as the number on the app's icon; nothing when the learner switched it off. */
+function updateBadge(ctx: AppContext): void {
+  try {
+    const count = ctx.settings.get().iconBadge ? badgeCount(ctx.db()) : 0;
+    if (process.platform === 'darwin') app.dock?.setBadge(count ? String(count) : '');
+    else app.setBadgeCount(count);
+  } catch (error) {
+    ctx.log.error('icon badge', error);
+  }
+}
+
+/**
+ * The daily reminder: a quiet notification, once a day at most, and only while the learner is not
+ * looking at the app (someone in the app sees what is due on Today).
+ */
+function remind(ctx: AppContext): void {
+  try {
+    const settings = ctx.settings.get();
+    if (!settings.reminderDaily || mainWindow?.isFocused() || !Notification.isSupported()) return;
+    const text = takeReminder(ctx.db(), settings.reminderTime);
+    if (!text) return;
+    const notification = new Notification({ title: 'Time to study', body: text, silent: true });
+    notification.on('click', showWindow);
+    notification.show();
+  } catch (error) {
+    ctx.log.error('reminder', error);
+  }
+}
 
 void app.whenReady().then(() => {
   if (!first) return;
@@ -115,11 +155,21 @@ void app.whenReady().then(() => {
     app.quit();
     return;
   }
-  ctx.sink = eventSink(() => mainWindow);
+  const send = eventSink(() => mainWindow);
+  ctx.sink = (event, payload) => {
+    send(event, payload);
+    if (event === 'cards.changed') updateBadge(ctx);
+  };
   registerIpc(ctx, (url) => isAppPage(url, appUrl()));
   createWindow();
   ctx.backupIfDue();
   setInterval(() => ctx.backupIfDue(), BACKUP_CHECK_MS).unref();
+  updateBadge(ctx);
+  ctx.afterSettings = () => updateBadge(ctx);
+  setInterval(() => {
+    updateBadge(ctx);
+    remind(ctx);
+  }, REMINDER_CHECK_MS).unref();
   ctx.resumeGoalWork();
   resumeGrading(ctx.practiceDeps());
   app.on('activate', () => {

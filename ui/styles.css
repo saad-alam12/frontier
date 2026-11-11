@@ -3521,7 +3521,12 @@ button.map-label:hover {
 }
 .settings-control {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
+}
+.settings-control .input.is-time {
+  width: 124px;
 }
 .settings-control .input {
   width: 260px;

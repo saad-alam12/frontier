@@ -364,9 +364,11 @@ A desktop app (macOS first, then Windows/Linux). The rail has the five places yo
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions (a chosen one with what was asked), replay |
 | Library | Add sources (files, also dropped anywhere on the window; a link to a page or a PDF; or pasted text: notes, an article, a video's transcript, read like a file), open a source's stored original, see about how long a source being read still takes and stop it (what was read stays, the rest waits for "Run again"), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
-| Settings | Model provider and models, flashcards in sessions without a goal, data folder, backups (make one, restore one), preferences |
+| Settings | Model provider and models, flashcards in sessions without a goal, reminders, data folder, backups (make one, restore one), the log, preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.
+
+**Reminders.** One quiet system notification a day at most, from a time the learner chooses (18:00 unless changed): only when something is due (flashcards to review, fading ideas to practise, a goal with ideas left to learn) and nothing was studied yet that day, and never while the learner is looking at the app. It names what is due; clicking it brings the window forward. The number of flashcards to review shows on the app's icon. Both can be switched off in Settings. The app has to be running (on a Mac, closing the window leaves it running); nothing wakes it when it is quit.
 
 ---
 
