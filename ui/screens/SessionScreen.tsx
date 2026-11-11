@@ -30,6 +30,13 @@ const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' }
 /** The answer just sent, shown in the conversation while the tutor works. */
 type Pending = { card: PublicCard | null; stage: Stage | null; response: LearnerResponse } | null;
 
+/** "Idea 2 of 3 · 6 of 13 minutes": where the learner is in today's plan and in this idea's time. */
+function whereInSession(current: NonNullable<SessionSnapshot['current']>): string {
+  const idea = current.planned > 1 && current.position > 0 ? `Idea ${current.position} of ${current.planned}` : null;
+  const time = current.minutesUsed >= 1 ? `${current.minutesUsed} of ${current.minutesAllowed} minutes` : `up to ${current.minutesAllowed} minutes`;
+  return [idea, time].filter(Boolean).join(' · ');
+}
+
 export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: ScreenName) => void; onChoose: (init?: ChooseInit) => void }) {
   const [snap, setSnap] = useState<SessionSnapshot | null | undefined>(undefined);
   const [goals, setGoals] = useState<GoalDetail[]>([]);
@@ -218,7 +225,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
   return (
     <Screen aside={panel} asideLabel={current ? 'Your frontier' : "Today's plan"} asideGap={current ? 22 : 28} mainRef={mainRef}>
-      <div className="flex flex-col gap-[26px]">
+      <div className="session-head">
         <div className="section-head">
           <Breadcrumb items={crumbs} />
           <button type="button" className="link-button shrink-0" onClick={() => setCardSheet({ mode: 'request' })} aria-live="polite">
@@ -235,6 +242,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
             }))}
           />
         )}
+        {snap.phase === 'teach' && current && <p className="session-where">{whereInSession(current)}</p>}
       </div>
 
       <QuoteReply containerRef={mainRef} onMakeCard={(selection) => setCardSheet({ mode: 'selection', selection })} />

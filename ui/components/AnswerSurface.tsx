@@ -4,7 +4,6 @@ import { Button } from './controls';
 import { AttachButton, PendingExtras, attachHandlers, clearQuote, useAnswerExtras, useExtrasTarget } from './AnswerExtras';
 
 export const ANSWER_PLACEHOLDER = 'Say it or type it, however it comes. Leave it empty if you have no idea.';
-const HINT = 'Speak or type, however it comes';
 /** Text that arrives several characters at once (dictation tools paste or type in bursts). */
 const BURST_CHARS = 4;
 const LISTENING_MS = 1500;
@@ -90,9 +89,7 @@ export function AnswerSurface({
               </span>
               <span>Listening</span>
             </>
-          ) : (
-            <span>{HINT}</span>
-          )}
+          ) : null}
         </div>
         {onConfidence && (
           <div role="radiogroup" aria-label="How sure are you" className="confidence-chips">

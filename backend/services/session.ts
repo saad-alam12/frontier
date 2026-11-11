@@ -137,6 +137,12 @@ export interface SessionSnapshot {
     stages: Stage[];
     stageIndex: number;
     stageCount: number;
+    /** Where the idea sits in today's plan, counting from 1, and how many ideas the plan has. */
+    position: number;
+    planned: number;
+    /** Minutes spent on the idea so far and the minutes it gets at most (its half hour, or less). */
+    minutesUsed: number;
+    minutesAllowed: number;
   } | null;
   card: PublicCard | null;
   previousNodes: { id: string; name: string }[];
@@ -903,6 +909,10 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
             stages,
             stageIndex: Math.max(0, stages.indexOf(s.supportAfter ?? s.stage)),
             stageCount: stages.length,
+            position: s.plan.steps.findIndex((st) => st.nodeId === step.nodeId) + 1,
+            planned: s.plan.steps.length,
+            minutesUsed: Math.round(minutesOn(db, s, session.id, step.nodeId)),
+            minutesAllowed: Math.round(ideaAllowance(step.minutes)),
           }
         : null,
     card: publicCard(s.card),

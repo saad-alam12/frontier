@@ -1531,6 +1531,43 @@ button.map-label:hover {
   flex-shrink: 0;
 }
 
+/* The session's header (where you are: goal, idea, step, time) stays in view while the conversation
+   scrolls under it. Its own top padding keeps it clear of the window's drag strip on macOS. */
+.session-head {
+  position: sticky;
+  /* The column's own top padding (56) does not count as room to stick in, so the header reaches up
+     over it; stuck, 28 of that space stays above the breadcrumb and the rest scrolls away. */
+  top: -84px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: -56px;
+  padding: 56px 0 14px;
+  background: var(--bg);
+}
+/* a step scrolled to (from the step path or the map) lands below the header, not under it */
+.main-column:has(.session-head) {
+  scroll-padding-top: 176px;
+}
+.session-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -18px;
+  height: 18px;
+  background: linear-gradient(var(--bg), transparent);
+  pointer-events: none;
+}
+.session-where {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Practice ---------- */
 
 .solution-block {
