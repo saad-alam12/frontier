@@ -168,6 +168,8 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] D7 daily backups, a copy before upgrades, restore in Settings, a check of the data file at start, one copy of the app per data folder
 - [x] D14 goal edge cases: weekly target near and past the date, the rhythm starts again with a new time or after a pause, goals with only an exam or syllabus are mapped, one compile at a time, a missing premise is charged once, previews match what saving gives
 - [x] B1 ask the tutor during a session: a question of your own on any card; on explanations also "Explain it differently", "Simpler", "Show an example". Fake model only: the real answers are the owner's to judge
+- [x] B2 hints: up to two on a question; an answer given with hints counts for less (0.85, 0.7)
+- [x] C3 a missed question is asked again once in a fresh version; a missed prediction is no longer a failure
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -297,6 +299,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 B2, C3): Hints and asking again. Hints are asides of mode `hint` on check, derive and use cards (`HINT_STAGES`), at most two (`MAX_HINTS`); the tutor is shown the answer key for them and the hints already given. `countedScore` (× 0.85, × 0.7) is what the evidence stores (with `context.hints`) and what `applyGrade` sees; the grade in the conversation stays the tutor's. So with both hints only a full answer still passes, and an idea whose deciding question needed hints can end below its aim and be marked for going deeper. A hint is not added to the transcript. `applyGrade` returns `retry` the first time a check, derive or use answer is below the pass mark (once per stage per idea, `edge.retried`); the service writes a new card of the same stage with `retry` set, which tells the tutor to ask from another side. No retry when the idea's time is up or a worked example is due. A prediction under 0.5 no longer counts toward the three failures. Both ran only on the fake model: how good the hints and second questions are is the owner's to judge. Design §4.2 and §4.3 updated.
 
 - 2026-11-11 (R7 B1): Asking the tutor. `session.ask` (`askTutor`) runs as the session's work (so no answer can be sent meanwhile; not stoppable), calls `runTutorAside` on the `tutor` role with the step's context, the open card and the mode (`question`, `different`, `simpler`, `example`), and appends an `aside` session event; the state's transcript gets the answer. Its prompt is `prompts/tutor-ask.md` (written for this project): at most about 150 words for a question and 250 for another form, never the answer to an open question. The snapshot carries `asides` for the open card and each history item its own; Trails shows them under the step. A question is at most 2,000 characters. The selection pill (Reply, Make a flashcard) does not offer "Ask about this" yet; carried-over steps do not bring their asides along.
 

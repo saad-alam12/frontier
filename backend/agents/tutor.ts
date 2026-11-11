@@ -84,7 +84,7 @@ export interface TutorGoal {
 }
 
 /** Everything about the idea, the learner and the goal that a tutor call starts from. */
-export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'cards' | 'nextStage'>;
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'cards' | 'nextStage' | 'retry'>;
 
 export interface TutorStepInput {
   goal: TutorGoal;
@@ -108,6 +108,8 @@ export interface TutorStepInput {
   /** Flashcards on this idea and the ideas it builds on, for the grade to say which facts the response recalled. */
   cards?: { id: string; front: string; back: string }[];
   nextStage: Stage | null;
+  /** The learner missed the last question of this stage: the card to produce asks it again in a fresh version. */
+  retry?: boolean;
 }
 
 export interface TutorStepResult {
@@ -165,6 +167,11 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
       ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
       : '## Task\nGrade the response. No card is needed; this node is finished.',
   );
+  if (input.retry && input.nextStage) {
+    sections.push(
+      `The learner missed the last **${input.nextStage}** question (it is under "Earlier in this node", with their answer and your feedback). Ask about the same step again from another side: a fresh question, not the same one reworded, that the feedback they just read prepares them for. Do not explain again here.`,
+    );
+  }
   if (input.nextStage === 'reteach') {
     sections.push(
       'The learner has failed this idea again after a worked example. Read everything above about this idea, work out the one misunderstanding that best explains all of their answers, and write a fresh explanation that starts from it.',
@@ -180,8 +187,16 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   return result.data as TutorStepResult;
 }
 
+/** The answer key and rubric of a card that has them, as text for the tutor. */
+function answerKeyOf(card: TutorCard): string | null {
+  const key = 'answerKey' in card && typeof card.answerKey === 'string' ? card.answerKey : null;
+  const rubric = 'rubric' in card && Array.isArray(card.rubric) ? card.rubric : [];
+  if (!key && !rubric.length) return null;
+  return [key ? `Answer key: ${key}` : null, rubric.length ? `Rubric: ${rubric.join('; ')}` : null].filter(Boolean).join('\n');
+}
+
 /** What the learner asked for outside the step loop: their own question, or the explanation in another form. */
-export const ASIDE_MODES = ['question', 'different', 'simpler', 'example'] as const;
+export const ASIDE_MODES = ['question', 'different', 'simpler', 'example', 'hint'] as const;
 export type AsideMode = (typeof ASIDE_MODES)[number];
 
 const ASIDE_TASK: Record<AsideMode, string> = {
@@ -189,6 +204,7 @@ const ASIDE_TASK: Record<AsideMode, string> = {
   different: 'The learner asked for the idea explained differently: explain it again from another angle than before.',
   simpler: 'The learner asked for a simpler explanation: give the core of the idea in everyday words with one concrete picture.',
   example: 'The learner asked for an example: give one small, concrete, fully worked example of the idea.',
+  hint: 'The learner asked for a hint on the open question.',
 };
 
 export interface TutorAsideInput extends TutorContext {
@@ -197,6 +213,8 @@ export interface TutorAsideInput extends TutorContext {
   mode: AsideMode;
   /** The learner's own words, for a question. */
   question: string;
+  /** For a hint: which one this is (1 is the first), and the hints already given on this question. */
+  hint?: { number: number; of: number; earlier: string[] };
 }
 
 /**
@@ -211,7 +229,14 @@ export async function runTutorAside(provider: LlmProvider, input: TutorAsideInpu
     }`,
   );
   if (input.mode === 'question') sections.push(`## The learner asks\n${input.question}`);
-  sections.push(`## Task\n${ASIDE_TASK[input.mode]}`);
+  if (input.mode === 'hint' && input.hint) {
+    const key = answerKeyOf(input.open.card);
+    if (key) sections.push(`## The answer to the open question (for you only)\n${key}`);
+    if (input.hint.earlier.length) sections.push(`## Hints already given on this question\n${input.hint.earlier.map((h, i) => `${i + 1}. ${h}`).join('\n')}`);
+    sections.push(`## Task\n${ASIDE_TASK.hint} This is hint ${input.hint.number} of at most ${input.hint.of}.`);
+  } else {
+    sections.push(`## Task\n${ASIDE_TASK[input.mode]}`);
+  }
   const result = await provider.complete({
     role: 'tutor',
     system: `${loadPrompt('tutor-ask')}\n\n${loadPrompt('answering')}`,

@@ -78,6 +78,8 @@ export interface EdgeState {
   jumpedFrom?: Stage | null;
   /** The idea had its half hour: one last step, then on. */
   wrapping?: boolean;
+  /** Questions of this idea already asked again after a miss; each is asked again once. */
+  retried?: Stage[];
 }
 
 export const FAIL_SCORE = 0.5;
@@ -91,7 +93,20 @@ export const STRONG_TO_CHECK_OFF = 2;
  * - `testOut`: jump to the aim's question; `done`: the aim is shown, on to the next idea;
  * - `resume`: a test-out failed, so teach after all.
  */
-export type EdgeAction = 'none' | 'support' | 'escalate' | 'testOut' | 'done' | 'resume';
+export type EdgeAction = 'none' | 'support' | 'escalate' | 'testOut' | 'done' | 'resume' | 'retry';
+
+/** Questions that are asked again, once, in a fresh version when the learner misses them. */
+export const RETRY_STAGES: ReadonlySet<Stage> = new Set<Stage>(['check', 'derive', 'use']);
+
+/** Questions the learner can take a hint on, how many, and what an answer counts for with each. */
+export const HINT_STAGES: ReadonlySet<Stage> = RETRY_STAGES;
+export const MAX_HINTS = 2;
+export const HINT_FACTOR = [1, 0.85, 0.7] as const;
+
+/** What an answer counts for after the hints taken on its question: an aided answer is not an unaided one. */
+export function countedScore(score: number, hints: number): number {
+  return score * (HINT_FACTOR[Math.max(0, Math.min(MAX_HINTS, hints))] ?? 1);
+}
 
 export function emptyEdge(): EdgeState {
   return { consecutiveFailures: 0, strongStreak: 0 };
@@ -111,20 +126,29 @@ export function isStrong(score: number, confidence: number | undefined): boolean
  * escalates once (a stronger model re-diagnoses and explains afresh). Knowing it: a strong prediction,
  * or two strong answers in a row, jump to the question that shows the aim (a test-out); passing that
  * question strongly, or as the second strong answer, checks the idea off. A failed test-out goes back
- * to teaching. Flags persist for the idea.
+ * to teaching. A missed prediction is no failure: it is made before the idea is taught. A missed
+ * question (check, derive, use) is asked again once, in a fresh version, before the loop moves on.
+ * Flags persist for the idea.
  */
 export function applyGrade(edge: EdgeState, input: { score: number; confidence?: number; stage: Stage; aim: number }): { edge: EdgeState; action: EdgeAction } {
-  const flags = { supported: edge.supported ?? false, escalated: edge.escalated ?? false, wrapping: edge.wrapping ?? false };
+  const flags = { supported: edge.supported ?? false, escalated: edge.escalated ?? false, wrapping: edge.wrapping ?? false, retried: edge.retried ?? [] };
+  const asksAgain = RETRY_STAGES.has(input.stage) && input.score < PASS_SCORE && !flags.retried.includes(input.stage);
+  const again = { ...flags, retried: [...flags.retried, input.stage] };
   const aimStage = certifyingStage(input.aim);
   if (edge.jumpedFrom && input.stage === aimStage && input.score < PASS_SCORE) {
     return { edge: { consecutiveFailures: input.score < FAIL_SCORE ? 1 : 0, strongStreak: 0, ...flags, jumpedFrom: edge.jumpedFrom }, action: 'resume' };
   }
+  // a prediction is a guess made before teaching: missing it is expected and counts toward nothing
+  if (input.stage === 'predict' && input.score < FAIL_SCORE) return { edge: { consecutiveFailures: edge.consecutiveFailures, strongStreak: 0, ...flags }, action: 'none' };
   if (input.score < FAIL_SCORE) {
     if (flags.supported && !flags.escalated) return { edge: { consecutiveFailures: 0, strongStreak: 0, ...flags, escalated: true }, action: 'escalate' };
     const failures = edge.consecutiveFailures + 1;
     if (failures >= FAILURES_BEFORE_SUPPORT) return { edge: { consecutiveFailures: 0, strongStreak: 0, ...flags, supported: true }, action: 'support' };
+    if (asksAgain) return { edge: { consecutiveFailures: failures, strongStreak: 0, ...again }, action: 'retry' };
     return { edge: { consecutiveFailures: failures, strongStreak: 0, ...flags }, action: 'none' };
   }
+  // not a failure, not a pass: the feedback says what was missing, and the question comes once more
+  if (asksAgain) return { edge: { consecutiveFailures: 0, strongStreak: 0, ...again, jumpedFrom: edge.jumpedFrom ?? null }, action: 'retry' };
   const strong = isStrong(input.score, input.confidence);
   const streak = strong ? edge.strongStreak + 1 : 0;
   const next: EdgeState = { consecutiveFailures: 0, strongStreak: streak, ...flags, jumpedFrom: edge.jumpedFrom ?? null };
@@ -148,6 +172,7 @@ export function testOutEdge(edge: EdgeState, from: Stage): EdgeState {
 export function nextStage(stages: Stage[], current: Stage, action: EdgeAction | 'wrapUp', edge?: EdgeState, aim?: number): Stage | null {
   const i = stages.indexOf(current);
   if (action === 'done') return null;
+  if (action === 'retry') return current;
   if (action === 'testOut' && aim !== undefined) {
     const target = certifyingStage(aim);
     return stages.indexOf(target) > i ? target : (stages[i + 1] ?? null);

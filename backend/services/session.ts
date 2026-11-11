@@ -7,7 +7,7 @@ import { cardText, runRecall, runTutorStep, runTutorAside } from '../agents/tuto
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput, AsideMode } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
-import { IDEA_MAX_MINUTES, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
+import { HINT_STAGES, IDEA_MAX_MINUTES, MAX_HINTS, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, countedScore, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
 import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
@@ -146,6 +146,8 @@ export interface SessionSnapshot {
     /** Minutes spent on the idea so far and the minutes it gets at most (its half hour, or less). */
     minutesUsed: number;
     minutesAllowed: number;
+    /** Hints the learner can still take on the open question; 0 when it takes none. */
+    hintsLeft: number;
   } | null;
   card: PublicCard | null;
   /** What the learner asked the tutor about the open card, oldest first. */
@@ -592,6 +594,8 @@ async function produceCard(
    * the next card is not written yet" and never at the card that was answered (which would grade it twice).
    */
   afterOutcome = false,
+  /** The card asks again, in a fresh version, a question the learner just missed. */
+  retry = false,
 ): Promise<Grade | null> {
   // on failure, where the session stands if what came before this call is kept (see respondTo)
   const owe = (error: unknown): never => {
@@ -605,7 +609,7 @@ async function produceCard(
     state.owed = true;
     saveSessionState(deps.db, sessionId, state);
   }
-  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined }).catch(owe);
+  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined, retry }).catch(owe);
   stillOpen(deps.db, sessionId);
   if (!result.card) return owe(new Error('the tutor returned no card'));
   state.stage = stage;
@@ -658,9 +662,12 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     stillOpen(db, sessionId);
   }
   if (!grade) throw new Error('the tutor returned no grade');
+  // an answer given with hints is not an unaided one: it counts for less, in the evidence and in what comes next
+  const hints = hintsTaken(openAsides(db, sessionId, step.nodeId, stage));
+  const counted = countedScore(grade.score, hints);
   finishHistory(state, step.nodeId, stage, response, grade);
-  appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade });
-  writeOutcome(db, sessionId, state, step, stage, response, grade);
+  appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade, ...(hints ? { hints } : {}) });
+  writeOutcome(db, sessionId, state, step, stage, response, grade, counted, hints);
   // The answer is judged and written. From here on a quit or a crash must never bring the answered
   // card back: with no next card yet (the idea's last step) the session is saved as owing one.
   if (state.card === card) {
@@ -669,7 +676,7 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   }
   saveSessionState(db, sessionId, state);
 
-  const { edge, action } = applyGrade(state.edge, { score: grade.score, confidence: response.confidence, stage, aim: step.aim });
+  const { edge, action } = applyGrade(state.edge, { score: counted, confidence: response.confidence, stage, aim: step.aim });
   state.edge = edge;
   if (action === 'support' || action === 'escalate') {
     state.supportAfter = stage;
@@ -678,7 +685,7 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   }
 
   // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
-  const missing = stage !== 'predict' && grade.score < PASS_SCORE && grade.missingBackground !== null;
+  const missing = stage !== 'predict' && counted < PASS_SCORE && grade.missingBackground !== null;
   // a chosen session's gaps are about what the learner asked, not about the goal's map
   if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
   const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
@@ -691,6 +698,11 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     return;
   }
   if (box === 'wrapUp') state.edge = { ...state.edge, wrapping: true };
+  // a missed question comes once more in a fresh version (the feedback just said what was missing), unless the idea's time is up
+  if (action === 'retry' && box === 'none') {
+    await produceCard(deps, sessionId, state, step, stage, null, goal, true, true);
+    return;
+  }
   const next = box === 'wrapUp' ? nextStage(stepStages(step), stage, 'wrapUp') : nextStage(stepStages(step), stage, action, edge, step.aim);
   // a failed test-out goes back to teaching once; after that, a miss on the same question is an
   // ordinary miss (it counts toward the worked example) instead of sending the learner round again
@@ -788,18 +800,18 @@ function tutorGoalFor(db: Database, state: SessionState): TutorGoal {
   return { text: asked, level: free.level, scope: null, assessment: 'none', focus: [], context: null };
 }
 
-function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade): void {
+function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade, counted = grade.score, hints = 0): void {
   const kind = evidenceKindFor(stage);
   if (kind) {
     recordEvidence(db, {
       nodeId: step.nodeId,
       kind,
-      score: grade.score,
+      score: counted,
       reasoning: grade.feedback,
       confidence: response.confidence ?? null,
       effort: state.pendingEffort ?? response.effort ?? null,
       sessionId,
-      context: { step: stage },
+      context: hints ? { step: stage, hints } : { step: stage },
     });
     state.pendingEffort = null;
   }
@@ -981,6 +993,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
             planned: s.plan.steps.length,
             minutesUsed: Math.round(minutesOn(db, s, session.id, step.nodeId)),
             minutesAllowed: Math.round(ideaAllowance(step.minutes)),
+            hintsLeft: s.card && HINT_STAGES.has(s.stage) ? Math.max(0, MAX_HINTS - hintsTaken(openAsides(db, session.id, step.nodeId, s.stage))) : 0,
           }
         : null,
     card: publicCard(s.card),
@@ -999,6 +1012,8 @@ function asideOf(event: { id: string; payload: Record<string, unknown> }): Aside
   const p = event.payload as { mode?: AsideMode; question?: string; answer?: string };
   return p.mode && typeof p.answer === 'string' ? { id: event.id, mode: p.mode, question: p.question ?? '', answer: p.answer } : null;
 }
+
+const hintsTaken = (asides: Aside[]) => asides.filter((a) => a.mode === 'hint').length;
 
 /** What was asked about the card that is open now: the asides since that card was shown. */
 function openAsides(db: Database, sessionId: string, nodeId: string, stage: Stage): Aside[] {
@@ -1034,14 +1049,20 @@ export async function askTutor(deps: SessionDeps, sessionId: string, input: { mo
   const question = (input.question ?? '').trim();
   if (input.mode === 'question' && !question) throw new Error('Write your question first.');
   if (question.length > ASIDE_MAX_CHARS) throw new Error(`A question can be up to ${ASIDE_MAX_CHARS} characters.`);
+  const earlier = openAsides(db, sessionId, step.nodeId, stage).filter((a) => a.mode === 'hint').map((a) => a.answer);
+  if (input.mode === 'hint') {
+    if (!HINT_STAGES.has(stage)) throw new Error('This step takes no hints.');
+    if (earlier.length >= MAX_HINTS) throw new Error('There are no more hints for this question.');
+  }
   await deps.work.run({ kind: 'respond', sessionId, goalId: state.goalId, sent: null, stoppable: false }, async () => {
     const goal = tutorGoalFor(db, state);
     const { previous: _previous, images: _images, cards: _cards, nextStage: _nextStage, ...context } = buildTutorInput(db, state, step, null, null, goal);
-    const answer = await runTutorAside(deps.provider, { ...context, open: { stage, card, unanswered: isGraded(stage) }, mode: input.mode, question });
+    const hint = input.mode === 'hint' ? { number: earlier.length + 1, of: MAX_HINTS, earlier } : undefined;
+    const answer = await runTutorAside(deps.provider, { ...context, open: { stage, card, unanswered: isGraded(stage) }, mode: input.mode, question, hint });
     stillOpen(db, sessionId);
     appendSessionEvent(db, sessionId, 'aside', { nodeId: step.nodeId, stage, mode: input.mode, question, answer });
-    // what the tutor said is taught material: it is read into the map with the rest, and the card writer sees it
-    state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: answer });
+    // what the tutor said is taught material: it is read into the map with the rest, and the card writer sees it (a hint is not)
+    if (input.mode !== 'hint') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: answer });
     saveSessionState(db, sessionId, state);
   });
   return snapshot(db, normalized(getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>), deps.work);

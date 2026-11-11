@@ -346,7 +346,7 @@ describe('flashcards in a session', () => {
 
 describe('teaching session', () => {
   it('runs a node through the step loop, writing evidence, own words and bugs', async () => {
-    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.2, 0.7, 0.7, 0.8]);
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.2, 0.7, 0.7, 0.7, 0.8]);
     let snap = await startSession(deps, goal.id);
     expect(snap.phase).toBe('orient'); // no previous session: no reconstruct
     expect(snap.plan.steps.map((s) => s.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
@@ -367,9 +367,11 @@ describe('teaching session', () => {
     expect(snap.history.nodes.find((n) => n.nodeId === brId)?.items.at(-1)?.grade?.score).toBe(0.8);
     snap = await respond(deps, snap.id, { answer: '', effort: 2 });
     expect(snap.current?.stage).toBe('check');
-    await walk('no idea'); // 0.2 → misconception recorded
-    expect(snap.current?.stage).toBe('derive');
+    await walk('no idea'); // 0.2 → misconception recorded, and the question comes once more in a fresh version
+    expect(snap.current?.stage).toBe('check');
     expect(listBugsForNode(db, brId)).toHaveLength(1);
+    await walk('nobody gains by moving alone'); // 0.7
+    expect(snap.current?.stage).toBe('derive');
     await walk('mutual best responses'); // 0.7
     expect(snap.current?.stage).toBe('connect');
     await walk('this requires payoffs'); // 0.7 → link kept for the transcript
@@ -384,13 +386,13 @@ describe('teaching session', () => {
     expect(restored?.history.nodes.map((n) => n.name)).toEqual(['Strategy profile', 'Best response', 'Nash equilibrium']);
     expect(restored?.history.nodes.slice(0, 2).every((n) => n.status === 'done' && n.score !== null)).toBe(true);
     const nashItems = restored?.history.nodes[2]?.items ?? [];
-    expect(nashItems.map((h) => h.stage)).toEqual(['predict', 'explain', 'check', 'derive', 'connect', 'compress']);
+    expect(nashItems.map((h) => h.stage)).toEqual(['predict', 'explain', 'check', 'check', 'derive', 'connect', 'compress']);
     expect(nashItems[0]?.response?.answer).toBe('the move that pays best given the others');
     expect(nashItems[0]?.grade?.feedback).toBe('Scored 0.8.');
     expect(nashItems[2]?.card).toEqual({ stage: 'check', question: 'Is (A,B) stable here?' });
     expect(JSON.stringify(restored?.history)).not.toContain('answerKey');
     const evidence = listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === brId);
-    expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'derive', 'explain', 'predict'].sort());
+    expect(evidence.map((e) => e.kind).sort()).toEqual(['check', 'check', 'derive', 'explain', 'predict'].sort());
     expect(evidence.find((e) => e.kind === 'check')?.effort).toBe(2);
     expect(getState(db, brId)?.depth).toBe(3);
   });
@@ -522,17 +524,19 @@ describe('teaching session', () => {
   });
 
   it('drops to a worked example after three failures; an idea that ends below its aim is marked simplified', async () => {
-    const { db, ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.95, 0.95]);
+    const { db, ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.95, 0.95]);
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, answer(''));
     const nashId = ids.get('nash') as string;
     while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('x'));
-    // the index passes consumed two scores; Nash: predict 0.1, check 0.1, derive 0.1 → support
+    // the index passes consumed two scores; Nash: predict 0.1 (a guess, no failure), check 0.1 twice (it is asked again), derive 0.1 → support
     snap = await respond(deps, snap.id, answer('wrong'));
     expect(snap.current?.stage).toBe('explain');
     snap = await respond(deps, snap.id, answer(''));
     expect(snap.current?.stage).toBe('check');
     snap = await respond(deps, snap.id, answer('wrong again'));
+    expect(snap.current?.stage).toBe('check'); // asked once more
+    snap = await respond(deps, snap.id, answer('and again'));
     expect(snap.current?.stage).toBe('derive');
     snap = await respond(deps, snap.id, answer('still wrong'));
     expect(snap.current?.stage).toBe('support');
@@ -683,14 +687,15 @@ describe('teaching session', () => {
   });
 
   it('escalates to a fresh explanation from the escalation model when the learner fails after a worked example', async () => {
-    const { ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.2, 0.8]);
+    const { ids, goal, deps } = await setup([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.2, 0.8]);
     let snap = await startSession(deps, goal.id);
     snap = await respond(deps, snap.id, answer(''));
     const nashId = ids.get('nash') as string;
     while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('x'));
     snap = await respond(deps, snap.id, answer('wrong')); // predict 0.1
     snap = await respond(deps, snap.id, answer('')); // explain read
-    snap = await respond(deps, snap.id, answer('wrong')); // check 0.1
+    snap = await respond(deps, snap.id, answer('wrong')); // check 0.1: asked once more
+    snap = await respond(deps, snap.id, answer('wrong')); // check 0.1 again
     snap = await respond(deps, snap.id, answer('wrong')); // derive 0.1 → worked example
     expect(snap.current?.stage).toBe('support');
     snap = await respond(deps, snap.id, answer(''));
@@ -921,4 +926,54 @@ describe('R7 B1: asking the tutor', () => {
     await expect(askTutor(deps, teaching.id, { mode: 'question', question: '   ' })).rejects.toThrow('Write your question first');
     await expect(askTutor(deps, teaching.id, { mode: 'question', question: 'x'.repeat(2001) })).rejects.toThrow('up to 2000 characters');
   });
+
+  it('gives up to two hints on a question, and an answer given with hints counts for less', async () => {
+    const { db, ids, goal, deps } = await setup([0.4, 1, 0.8], [], pickDominant);
+    const asked = withAsides(deps, [0.4, 1, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.hintsLeft).toBe(0); // a prediction is a guess: no hints
+    snap = await respond(deps, snap.id, answer('Not sure.', 0.33));
+    snap = await respond(deps, snap.id, { answer: '' });
+    expect(snap.current?.stage).toBe('check');
+    expect(snap.current?.hintsLeft).toBe(2);
+
+    snap = await askTutor(deps, snap.id, { mode: 'hint' });
+    expect(snap.current?.hintsLeft).toBe(1);
+    expect(asked[0]).toContain('Answer key: Yes'); // the tutor sees the answer to hint toward it
+    expect(asked[0]).toContain('This is hint 1 of at most 2.');
+    snap = await askTutor(deps, snap.id, { mode: 'hint' });
+    expect(asked[1]).toContain('## Hints already given on this question');
+    expect(snap.current?.hintsLeft).toBe(0);
+    await expect(askTutor(deps, snap.id, { mode: 'hint' })).rejects.toThrow('no more hints');
+    // a hint is not teaching material
+    expect(getSession<SessionState>(db, snap.id)?.state.transcript.filter((t) => t.text.includes('promise'))).toHaveLength(0);
+
+    // a perfect answer with both hints counts as 0.7: a pass, but not a strong one
+    snap = await respond(deps, snap.id, answer('Yes: neither player gains by moving alone.', 0.9));
+    const evidence = listEvidenceForSession(db, snap.id).find((e) => e.nodeId === ids.get('dominant') && e.kind === 'check');
+    expect(evidence?.score).toBeCloseTo(0.7);
+    expect(evidence?.context.hints).toBe(2);
+    expect(snap.current?.stage).toBe('compress'); // it passed, so the question is not asked again
+    const checked = snap.history.nodes.flatMap((n) => n.items).find((i) => i.stage === 'check');
+    expect(checked?.grade?.score).toBe(1); // the tutor's judgement of the answer itself is kept
+    expect(checked?.asides.filter((a) => a.mode === 'hint')).toHaveLength(2);
+  });
+
+  it('asks a missed question again and tells the tutor to write a fresh one', async () => {
+    const { goal, deps } = await setup([0.4, 0.3, 0.8, 0.8], [], pickDominant);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    snap = await respond(deps, snap.id, answer('Not sure.', 0.33));
+    snap = await respond(deps, snap.id, { answer: '' });
+    const before = deps.provider.calls.length;
+    snap = await respond(deps, snap.id, answer('It is the best outcome for everyone.', 0.66)); // 0.3
+    expect(snap.current?.stage).toBe('check');
+    const retry = deps.provider.calls.slice(before).at(-1)?.messages[0]?.content ?? '';
+    expect(retry).toContain('The learner missed the last **check** question');
+    expect(retry).toContain('a fresh question, not the same one reworded');
+    snap = await respond(deps, snap.id, answer('No player gains by changing alone.', 0.66)); // 0.8
+    expect(snap.current?.stage).toBe('compress');
+  });
 });
+

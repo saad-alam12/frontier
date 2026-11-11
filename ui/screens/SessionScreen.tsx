@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { call, isCancelled, onEvent } from '../api';
 import type { AsideMode, GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
+import { countedScore } from '../../backend/core/session';
 import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Notice, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
@@ -434,6 +435,11 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
             {item.grade.confidentlyWrong && <span className="t-small text-secondary">Confidently wrong, worth a second look</span>}
           </div>
           <Markdown text={item.grade.feedback} className="text-soft" />
+          {hintCount(item.asides) > 0 && (
+            <p className="t-small m-0 text-secondary">
+              With {hintCount(item.asides) === 1 ? 'a hint' : `${hintCount(item.asides)} hints`}, it counts as {Math.round(countedScore(item.grade.score, hintCount(item.asides)) * 10)}/10.
+            </p>
+          )}
           {item.grade.misconception && <p className="t-small m-0 text-secondary">Noted to repair: {item.grade.misconception}</p>}
         </div>
       )}
@@ -441,6 +447,8 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
     </article>
   );
 }
+
+const hintCount = (asides: { mode: string }[]) => asides.filter((a) => a.mode === 'hint').length;
 
 /** Cards the learner reads and rates, rather than answers. */
 function isReading(stage: Stage): boolean {
@@ -670,7 +678,7 @@ function TeachStep({ snap, busy, refocus, onSend, onAsk }: { snap: SessionSnapsh
         )}
       </div>
       <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} onTestMe={testMe} disabled={busy} />
-      <AskTutor explains={false} busy={busy} onAsk={onAsk} />
+      <AskTutor explains={false} hints={current.hintsLeft > 0 || hintCount(snap.asides) > 0 ? { taken: hintCount(snap.asides), left: current.hintsLeft } : undefined} busy={busy} onAsk={onAsk} />
     </section>
   );
 }

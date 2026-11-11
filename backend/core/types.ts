@@ -52,6 +52,8 @@ export interface EvidenceContext {
   implicit?: { fromNodeId: string; fromEvidenceId: string; hops: number; weight: number };
   /** Free-form label: which step or problem produced it. */
   step?: string;
+  /** Hints the learner took on the question; the score is already what the answer counts for with them. */
+  hints?: number;
   problemId?: string;
 }
 

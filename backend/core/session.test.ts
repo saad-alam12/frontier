@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, nextStage, stagesFor, timebox } from './session';
+import { applyGrade, certifyingStage, countedScore, emptyEdge, evidenceKindFor, ideaAllowance, nextStage, stagesFor, timebox } from './session';
 import type { EdgeState } from './session';
 
 const grade = (edge: EdgeState, score: number, stage: Parameters<typeof applyGrade>[1]['stage'] = 'check', aim = 2, confidence?: number) => applyGrade(edge, { score, stage, aim, confidence });
@@ -28,12 +28,55 @@ describe('session mechanics', () => {
     let edge = emptyEdge();
     let action;
     ({ edge, action } = grade(edge, 0.2));
-    expect(action).toBe('none');
+    expect(action).toBe('retry'); // the first miss of a question brings it once more, and still counts
     ({ edge, action } = grade(edge, 0.4));
     expect(action).toBe('none');
     ({ edge, action } = grade(edge, 0.1));
     expect(action).toBe('support');
     expect(edge.consecutiveFailures).toBe(0);
+  });
+
+  it('asks a missed question again once, in each of check, derive and use', () => {
+    for (const stage of ['check', 'derive', 'use'] as const) {
+      const first = grade(emptyEdge(), 0.3, stage, 4);
+      expect(first.action, stage).toBe('retry');
+      expect(nextStage(stagesFor(4), stage, first.action)).toBe(stage);
+      expect(grade(first.edge, 0.3, stage, 4).action, stage).toBe('none'); // only once
+    }
+    // not a failure, not a pass: asked again too, without counting as a failure
+    const middling = grade(emptyEdge(), 0.6, 'check', 3);
+    expect(middling.action).toBe('retry');
+    expect(middling.edge.consecutiveFailures).toBe(0);
+    // a pass moves on; a question of another kind is never asked again
+    expect(grade(emptyEdge(), 0.7, 'check', 3).action).toBe('none');
+    expect(grade(emptyEdge(), 0.2, 'connect', 3).action).toBe('none');
+    // what was asked again is remembered for the idea, across the other rules
+    expect(grade(first(), 0.9, 'derive', 4).edge.retried).toEqual(['check']);
+    function first() {
+      return grade(emptyEdge(), 0.3, 'check', 4).edge;
+    }
+  });
+
+  it('a missed prediction is no failure', () => {
+    let edge = emptyEdge();
+    let action;
+    ({ edge, action } = grade(edge, 0.1, 'predict', 3));
+    expect(action).toBe('none');
+    expect(edge.consecutiveFailures).toBe(0);
+    // so a worked example comes after three missed questions, not two and a guess
+    ({ edge, action } = grade(edge, 0.1, 'check', 3));
+    ({ edge, action } = grade(edge, 0.1, 'check', 3));
+    expect(action).toBe('none');
+    ({ edge, action } = grade(edge, 0.1, 'derive', 3));
+    expect(action).toBe('support');
+  });
+
+  it('an answer given with hints counts for less', () => {
+    expect(countedScore(0.9, 0)).toBe(0.9);
+    expect(countedScore(1, 1)).toBeCloseTo(0.85);
+    expect(countedScore(1, 2)).toBeCloseTo(0.7); // with both hints only a full answer still passes
+    expect(countedScore(0.8, 1)).toBeLessThan(0.7);
+    expect(countedScore(1, 5)).toBeCloseTo(0.7);
   });
 
   it('a middling score resets both counters', () => {
