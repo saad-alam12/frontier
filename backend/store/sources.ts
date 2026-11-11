@@ -10,6 +10,7 @@ interface SourceRow {
   title: string;
   path: string | null;
   hash: string;
+  origin: string | null;
   added_at: string;
   status: Source['status'];
   chunk_count: number;
@@ -50,6 +51,7 @@ const toSource = (r: SourceRow): Source => ({
   title: r.title,
   path: r.path,
   hash: r.hash,
+  origin: r.origin,
   addedAt: r.added_at,
   status: r.status,
   chunkCount: r.chunk_count,
@@ -76,6 +78,12 @@ export function findSourceByHash(db: Database, hash: string): Source | undefined
   return row ? toSource(row) : undefined;
 }
 
+/** The source added from this address, if any: a page changes a little with every visit, so its content hash would not find it. */
+export function findSourceByOrigin(db: Database, origin: string): Source | undefined {
+  const row = db.prepare('SELECT * FROM sources WHERE origin = ? ORDER BY added_at LIMIT 1').get(origin) as SourceRow | undefined;
+  return row ? toSource(row) : undefined;
+}
+
 export function getSource(db: Database, id: string): Source | undefined {
   const row = db.prepare('SELECT * FROM sources WHERE id = ?').get(id) as SourceRow | undefined;
   return row ? toSource(row) : undefined;
@@ -85,15 +93,16 @@ export function listSources(db: Database): Source[] {
   return (db.prepare('SELECT * FROM sources ORDER BY added_at DESC').all() as unknown as SourceRow[]).map(toSource);
 }
 
-export function createSource(db: Database, input: { kind: SourceKind; title: string; path: string | null; hash: string }, chunks: { text: string; locator: string }[]): Source {
+export function createSource(db: Database, input: { kind: SourceKind; title: string; path: string | null; hash: string; origin?: string | null }, chunks: { text: string; locator: string }[]): Source {
   const id = newId('src');
   const addedAt = nowIso();
-  db.prepare('INSERT INTO sources (id, kind, title, path, hash, added_at, status, chunk_count, chunks_done, extraction) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)').run(
+  db.prepare('INSERT INTO sources (id, kind, title, path, hash, origin, added_at, status, chunk_count, chunks_done, extraction) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)').run(
     id,
     input.kind,
     input.title,
     input.path,
     input.hash,
+    input.origin ?? null,
     addedAt,
     'pending',
     chunks.length,

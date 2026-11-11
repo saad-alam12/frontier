@@ -325,6 +325,8 @@ export interface Source {
   path: string | null;
   /** Content hash; re-adding the same content is a no-op. */
   hash: string;
+  /** The web address it came from, when it was added by a link. */
+  origin: string | null;
   addedAt: string;
   status: 'pending' | 'running' | 'done' | 'failed';
   chunkCount: number;

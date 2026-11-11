@@ -1,13 +1,17 @@
 /** Read models for the Library screen: sources with chunk progress, and the delta view per source. */
 import { z } from 'zod';
 import { classifyDelta } from '../core/delta';
+import { parseLink, transcriptBlocks, transcriptCues } from '../core/links';
 import type { DeltaClass } from '../core/delta';
 import { EXTRACTED_ROLES, EXTRACTION } from '../core/types';
 import type { Depth, MaterialRole, Source } from '../core/types';
 import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
 import { activeSession } from '../store/sessions';
-import { coveredNodeIds, listChunks, listSources } from '../store/sources';
+import { coveredNodeIds, findSourceByOrigin, listChunks, listSources } from '../store/sources';
+import { LinkError, fetchDocument, fetchVideoTitle } from '../ingest/link';
+import type { Fetcher } from '../ingest/link';
+import { readBytes } from '../ingest/readers';
 import type { SourceChunk } from '../store/sources';
 import { afterSourceReread } from './goals';
 import type { IngestionService } from './ingestion';
@@ -124,6 +128,8 @@ export function deltaForSource(db: Database, sourceId: string): DeltaSummary {
 export const PastedTextSchema = z.object({
   title: z.string().trim().max(120).optional(),
   text: z.string().trim().min(80, 'Paste at least a few sentences.').max(400_000, 'That is too long for one source. Split it into parts.'),
+  /** The address the text was copied from (a video whose transcript this is). */
+  origin: z.string().trim().max(2000).optional(),
 });
 export type PastedText = z.input<typeof PastedTextSchema>;
 
@@ -136,12 +142,46 @@ export function pastedTitle(text: string): string {
 }
 
 /**
- * Add pasted text to the library as a Markdown source and start reading it, like a file. The same
- * text twice is the same source.
+ * Add pasted text to the library and start reading it, like a file. The same text twice is the same
+ * source. A transcript copied from a video's page (time stamps, then what is said) is kept by the
+ * minute, so an idea can say where in the video it comes from; anything else is read as Markdown.
  */
 export async function addPastedText(ingestion: IngestionService, input: PastedText): Promise<{ source: Source; existed: boolean }> {
-  const { title, text } = PastedTextSchema.parse(input);
-  const added = await ingestion.addText({ kind: 'markdown', title: title || pastedTitle(text), text });
+  const { title, text, origin } = PastedTextSchema.parse(input);
+  const from = origin ? (parseLink(origin)?.url ?? null) : null;
+  const cues = transcriptCues(text);
+  const added = cues
+    ? await ingestion.addText({ kind: 'text', title: title || 'Video transcript', text, blocks: transcriptBlocks(cues), origin: from })
+    : await ingestion.addText({ kind: 'markdown', title: title || pastedTitle(text), text, origin: from });
   if (added.source.status !== 'done') ingestion.start(added.source.id);
   return added;
+}
+
+/** What adding a link gave: a source in the library, or a video whose transcript the learner pastes. */
+export type LinkResult = { state: 'added'; sourceId: string; existed: boolean } | { state: 'needs-transcript'; url: string; title: string };
+
+/** Pages that need a browser to show their text come back nearly empty. */
+const MIN_PAGE_CHARS = 300;
+
+/**
+ * Add what an address points at (design §7). A web page, a PDF or a text file is fetched once and
+ * read like a file. A video is not fetched: its site gives the transcript only to its own player,
+ * and Frontier does not pretend to be one. The learner copies the transcript from the video's page
+ * and pastes it; this finds the title for it. The same address twice is the same source.
+ */
+export async function addLink(deps: { ingestion: IngestionService; fetcher: Fetcher; userAgent: string }, address: string): Promise<LinkResult> {
+  const link = parseLink(address);
+  if (!link) throw new Error('That does not look like a web address. It should start with https:// or be something like example.org/page.');
+  const { ingestion, fetcher, userAgent } = deps;
+  const known = findSourceByOrigin(ingestion.db, link.url);
+  if (known) return { state: 'added', sourceId: known.id, existed: true };
+  if (link.kind === 'video') return { state: 'needs-transcript', url: link.url, title: await fetchVideoTitle(fetcher, link.url, userAgent) };
+  const document = await fetchDocument(fetcher, link.url, userAgent);
+  if (document.kind === 'html') {
+    const read = await readBytes('html', document.bytes, '');
+    if (read.blocks.reduce((n, b) => n + b.text.length, 0) < MIN_PAGE_CHARS) throw new LinkError('Frontier found almost no text on that page. It may only show its text in a browser. Copy the text there and paste it.');
+  }
+  const added = await ingestion.addDocument({ ...document, origin: link.url });
+  if (added.source.status !== 'done') ingestion.start(added.source.id);
+  return { state: 'added', sourceId: added.source.id, existed: added.existed };
 }

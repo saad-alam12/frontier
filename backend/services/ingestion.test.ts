@@ -16,7 +16,8 @@ import type { Embedder } from '../ingest/embedder';
 import { removeSource } from './erase';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
-import { addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain } from './library';
+import { addLink, addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain } from './library';
+import type { Fetcher } from '../ingest/link';
 import { recordEvidence } from './evidence';
 import { createGoal, addCapabilities, getGoal, listCapabilities, markCompiled, setMaterials } from '../store/goals';
 import { createSession, endSession } from '../store/sessions';
@@ -355,6 +356,91 @@ describe('pasted text', () => {
     expect(long.length).toBeLessThanOrEqual(61);
     expect(long.endsWith('…')).toBe(true);
     expect(long).not.toMatch(/\s…$/);
+  });
+});
+
+/** A site made of canned answers; every request is recorded. */
+function fakeSite(pages: Record<string, { status?: number; type?: string; body: string }>) {
+  const requests: { url: string; userAgent: string | undefined }[] = [];
+  const fetcher: Fetcher = async (url, init) => {
+    requests.push({ url, userAgent: init?.headers?.['User-Agent'] });
+    const page = pages[url];
+    if (!page) throw new TypeError('fetch failed');
+    const response = new Response(page.body, { status: page.status ?? 200, headers: page.type === undefined ? { 'content-type': 'text/html; charset=utf-8' } : page.type ? { 'content-type': page.type } : {} });
+    Object.defineProperty(response, 'url', { value: url });
+    return response;
+  };
+  return { fetcher, requests };
+}
+
+const ARTICLE = `<html><head><title>Equilibrium, explained</title></head><body><nav>Home | About</nav><article><h1>Equilibrium, explained</h1>
+<p>NODE[term] Strategy profile: One strategy for each player.</p>
+<p>NODE[term] Nash equilibrium: A strategy profile in which no player can gain by changing only their own strategy.</p>
+<p>CHAIN Strategy profile => Nash equilibrium</p>
+<p>${'An equilibrium is where nobody wants to move on their own. '.repeat(12)}</p></article></body></html>`;
+
+describe('adding a link', () => {
+  it('fetches a web page once, keeps a copy and reads it like a file', async () => {
+    const { db, service, dir } = setup();
+    const site = fakeSite({ 'https://example.org/notes/equilibrium': { body: ARTICLE } });
+    const deps = { ingestion: service, fetcher: site.fetcher, userAgent: 'Frontier/test' };
+    const result = await addLink(deps, 'example.org/notes/equilibrium#intro');
+    if (result.state !== 'added') throw new Error('expected a source');
+    expect(result.existed).toBe(false);
+    const source = getSource(db, result.sourceId);
+    expect(source).toMatchObject({ kind: 'html', title: 'Equilibrium, explained', origin: 'https://example.org/notes/equilibrium' });
+    expect(source?.path).toMatch(/-example\.org-equilibrium\.html$/);
+    expect(existsSync(join(dir, 'sources', source?.path ?? ''))).toBe(true);
+    // the site is told who asks
+    expect(site.requests).toEqual([{ url: 'https://example.org/notes/equilibrium', userAgent: 'Frontier/test' }]);
+    await vi.waitFor(() => expect(getSource(db, result.sourceId)?.status).toBe('done'));
+    expect(listNodes(db).map((n) => n.name)).toContain('Nash equilibrium');
+    // the same address again is the same source, without asking the site again
+    expect(await addLink(deps, 'https://example.org/notes/equilibrium')).toEqual({ state: 'added', sourceId: result.sourceId, existed: true });
+    expect(site.requests).toHaveLength(1);
+  });
+
+  it('reads Markdown and plain text by their address, and says plainly when a link cannot be read', async () => {
+    const { db, service } = setup();
+    const site = fakeSite({
+      'https://example.org/lecture.md': { type: 'text/plain', body: LECTURE_A },
+      'https://example.org/app': { body: '<html><body><div id="root"></div><script>render()</script></body></html>' },
+      'https://example.org/private': { status: 403, body: 'no' },
+      'https://example.org/gone': { status: 404, body: 'no' },
+      'https://example.org/song.mp3': { type: 'audio/mpeg', body: 'x' },
+    });
+    const deps = { ingestion: service, fetcher: site.fetcher, userAgent: 'Frontier/test' };
+    const result = await addLink(deps, 'https://example.org/lecture.md');
+    if (result.state !== 'added') throw new Error('expected a source');
+    expect(getSource(db, result.sourceId)).toMatchObject({ kind: 'markdown', title: 'Lecture 2: Equilibrium' });
+
+    await expect(addLink(deps, 'https://example.org/app')).rejects.toThrow(/almost no text/);
+    await expect(addLink(deps, 'https://example.org/private')).rejects.toThrow(/did not let Frontier read/);
+    await expect(addLink(deps, 'https://example.org/gone')).rejects.toThrow(/no page at that address/);
+    await expect(addLink(deps, 'https://example.org/song.mp3')).rejects.toThrow(/not a web page, a PDF or a text file/);
+    await expect(addLink(deps, 'https://unreachable.example/x')).rejects.toThrow(/could not be reached/);
+    await expect(addLink(deps, 'not an address')).rejects.toThrow(/does not look like a web address/);
+    expect(listSources(db)).toHaveLength(1);
+  });
+
+  it('asks for a video\'s transcript instead of fetching it, and keeps the pasted one by the minute with its link', async () => {
+    const { db, service } = setup();
+    const video = 'https://www.youtube.com/watch?v=aircAruvnKk';
+    const site = fakeSite({ [`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(video)}`]: { type: 'application/json', body: JSON.stringify({ title: 'But what is a neural network?', author_name: 'Someone' }) } });
+    const deps = { ingestion: service, fetcher: site.fetcher, userAgent: 'Frontier/test' };
+    expect(await addLink(deps, 'youtu.be/aircAruvnKk?t=30')).toEqual({ state: 'needs-transcript', url: video, title: 'But what is a neural network?' });
+    // only the title was asked for: the video's own page is never fetched
+    expect(site.requests.map((r) => new URL(r.url).pathname)).toEqual(['/oembed']);
+    // a video the site says nothing about still gets its transcript step, without a title
+    expect(await addLink({ ...deps, fetcher: fakeSite({}).fetcher }, video)).toEqual({ state: 'needs-transcript', url: video, title: '' });
+
+    const transcript = ['0:00', 'NODE[term] Strategy profile: One strategy for each player.', '0:40', 'and then some more about it', '1:10', 'NODE[term] Nash equilibrium: A strategy profile in which no player can gain by changing only their own strategy.', '2:30', 'CHAIN Strategy profile => Nash equilibrium'].join('\n');
+    const { source } = await addPastedText(service, { title: 'But what is a neural network?', text: transcript, origin: 'https://youtu.be/aircAruvnKk' });
+    expect(source).toMatchObject({ kind: 'text', title: 'But what is a neural network?', origin: video });
+    expect(listChunks(db, source.id).map((c) => c.locator).join(' ')).toMatch(/^0:00/);
+    await vi.waitFor(() => expect(getSource(db, source.id)?.status).toBe('done'));
+    // the link now leads to the source that was pasted for it
+    expect(await addLink(deps, video)).toEqual({ state: 'added', sourceId: source.id, existed: true });
   });
 });
 

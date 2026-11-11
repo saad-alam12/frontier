@@ -2,7 +2,7 @@ import { ASIDE_MODES } from '../agents/tutor';
 import { activeSession } from '../store/sessions';
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
-import { app, dialog, ipcMain, shell } from 'electron';
+import { app, dialog, ipcMain, net, shell } from 'electron';
 import { join } from 'node:path';
 import { exportGoalNotes } from '../services/notes';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate } from './contract';
@@ -11,7 +11,7 @@ import type { AppContext } from '../context';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
+import { addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
 import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, setGoalStatus, updateGoalFromForm, useFreedTime } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -110,6 +110,8 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const { source, existed } = await addPastedText(ctx.ingestion(), input);
       return { sourceId: source.id, existed };
     },
+    // the system's own network stack, so a proxy set on the computer applies
+    'library.addLink': ({ url }) => addLink({ ingestion: ctx.ingestion(), fetcher: (address, init) => net.fetch(address, init), userAgent: `Frontier/${ctx.version}` }, z.string().max(2000).parse(url)),
     'library.addFiles': async () => {
       const result = await dialog.showOpenDialog({
         properties: ['openFile', 'multiSelections'],

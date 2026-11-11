@@ -5,7 +5,7 @@
  * a failing part writes nothing and is retried on the next run.
  */
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { runExtractor } from '../agents/extractor';
 import type { DigestEntry } from '../agents/extractor';
@@ -16,7 +16,7 @@ import type { KnowledgeNode, Source, SourceKind } from '../core/types';
 import { blocksFromParts, chunkBlocks, collapseBuildPages, PART_TOKENS } from '../ingest/chunker';
 import { textHash } from '../ingest/embedder';
 import type { Embedder } from '../ingest/embedder';
-import { hasNoText, readBytes, readSourceFile } from '../ingest/readers';
+import { hasNoText, kindForFile, readBytes, readSourceFile } from '../ingest/readers';
 import { nameSimilarity, topK } from '../ingest/similarity';
 import type { TextBlock } from '../ingest/types';
 import type { LlmProvider } from '../llm/provider';
@@ -84,31 +84,45 @@ export class IngestionService {
 
   /** Copy a file into the data folder, read and chunk it. Same content twice is a no-op. */
   async addFile(path: string): Promise<{ source: Source; existed: boolean }> {
-    const { kind, bytes, result } = await readSourceFile(path);
-    if (hasNoText(result)) throw new Error(kind === 'pdf' ? `${basename(path)} has no text to read: it looks like a scan or pictures of pages. Frontier reads text only for now.` : `${basename(path)} has no text to read.`);
+    const kind = kindForFile(path);
+    if (!kind) throw new Error(`Unsupported file type: ${basename(path)}`);
+    return this.addDocument({ kind, name: basename(path), bytes: await readFile(path) });
+  }
+
+  /**
+   * Keep a document in the data folder, read and chunk it: a file from disk, or a page or a PDF
+   * fetched from `origin`. Same content twice is a no-op.
+   */
+  async addDocument(input: { kind: SourceKind; name: string; bytes: Buffer; origin?: string | null }): Promise<{ source: Source; existed: boolean }> {
+    const { kind, name, bytes } = input;
+    const result = await readBytes(kind, bytes, basename(name, extname(name)));
+    if (hasNoText(result)) throw new Error(kind === 'pdf' ? `${name} has no text to read: it looks like a scan or pictures of pages. Frontier reads text only for now.` : `${name} has no text to read.`);
     const hash = sha256(bytes);
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
     await mkdir(this.options.sourcesDir, { recursive: true });
-    const stored = `${hash.slice(0, 12)}-${basename(path)}`;
-    await copyFile(path, join(this.options.sourcesDir, stored));
-    const title = result.title || basename(path, extname(path));
-    return { source: this.createFromBlocks(kind, title, stored, hash, result.blocks), existed: false };
+    const stored = `${hash.slice(0, 12)}-${name}`;
+    await writeFile(join(this.options.sourcesDir, stored), bytes);
+    const title = result.title || basename(name, extname(name));
+    return { source: this.createFromBlocks(kind, title, stored, hash, result.blocks, input.origin), existed: false };
   }
 
-  /** Add text that is not a file (a session transcript, pasted notes). */
-  async addText(input: { kind: SourceKind; title: string; text: string }): Promise<{ source: Source; existed: boolean }> {
+  /**
+   * Add text that is not a file (a session transcript, pasted notes). With `blocks` the text already
+   * comes in parts that say where they are from (a video transcript by the minute).
+   */
+  async addText(input: { kind: SourceKind; title: string; text: string; blocks?: TextBlock[]; origin?: string | null }): Promise<{ source: Source; existed: boolean }> {
     const bytes = Buffer.from(input.text, 'utf8');
     const hash = sha256(bytes);
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
-    const result = await readBytes(input.kind, bytes, input.title);
-    if (hasNoText(result)) throw new Error('There is no text to read.');
-    return { source: this.createFromBlocks(input.kind, input.title, null, hash, result.blocks), existed: false };
+    const blocks = input.blocks ?? (await readBytes(input.kind, bytes, input.title)).blocks;
+    if (hasNoText({ title: input.title, blocks })) throw new Error('There is no text to read.');
+    return { source: this.createFromBlocks(input.kind, input.title, null, hash, blocks, input.origin), existed: false };
   }
 
-  private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[]): Source {
-    return createSource(this.db, { kind, title, path, hash }, this.parts(kind, blocks));
+  private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[], origin?: string | null): Source {
+    return createSource(this.db, { kind, title, path, hash, origin }, this.parts(kind, blocks));
   }
 
   private parts(kind: SourceKind, blocks: TextBlock[]) {

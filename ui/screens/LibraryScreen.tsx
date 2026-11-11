@@ -43,6 +43,7 @@ export function LibraryScreen() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [reread, setReread] = useState<{ sourceId: string; text: string; error: boolean } | null>(null);
   const [pasting, setPasting] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   const refresh = useCallback(async () => {
     const list = await call('library.list');
@@ -98,6 +99,9 @@ export function LibraryScreen() {
   const current = sources.find((s) => s.id === selected) ?? null;
   const addButton = (
     <div className="button-row">
+      <Button onClick={() => setLinking(true)} disabled={busy}>
+        Add a link
+      </Button>
       <Button onClick={() => setPasting(true)} disabled={busy}>
         Paste text
       </Button>
@@ -106,16 +110,27 @@ export function LibraryScreen() {
       </Button>
     </div>
   );
-  const pasteSheet = pasting && (
-    <PasteSheet
-      onClose={() => setPasting(false)}
-      onAdded={async (sourceId, existed) => {
-        setPasting(false);
-        setNotice(existed ? 'That text is already in the library.' : null);
-        await refresh();
-        setSelected(sourceId);
-      }}
-    />
+  const added = async (sourceId: string, existed: boolean) => {
+    setPasting(false);
+    setLinking(false);
+    setNotice(existed ? 'That is already in the library.' : null);
+    await refresh();
+    setSelected(sourceId);
+  };
+  const pasteSheet = (
+    <>
+      {pasting && <PasteSheet onClose={() => setPasting(false)} onAdded={added} />}
+      {linking && (
+        <LinkSheet
+          onClose={() => setLinking(false)}
+          onAdded={added}
+          onPasteInstead={() => {
+            setLinking(false);
+            setPasting(true);
+          }}
+        />
+      )}
+    </>
   );
 
   if (sources.length === 0) {
@@ -126,7 +141,7 @@ export function LibraryScreen() {
           <p className="t-lead m-0">The material your maps are built from.</p>
         </div>
         {notice && <Notice error>{notice}</Notice>}
-        <Empty action={addButton}>Add a lecture PDF, notes or a web page, or paste text. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+        <Empty action={addButton}>Add a lecture PDF or notes, a web page by its link, or paste text. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
         {pasteSheet}
       </Screen>
     );
@@ -163,6 +178,11 @@ export function LibraryScreen() {
         <>
           <div className="flex flex-col gap-[14px]">
             <h1 className="t-display">{current.title}</h1>
+            {current.origin && (
+              <a className="t-small text-secondary" href={current.origin} target="_blank" rel="noreferrer">
+                From {hostOf(current.origin)}
+              </a>
+            )}
             {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
             {!current.readsIdeas && <p className="t-lead m-0">Kept as {current.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')} for your goals: used for style, scope and practice, not read into ideas.</p>}
             {current.error && <Notice error>{current.error}</Notice>}
@@ -270,6 +290,120 @@ function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; hig
       )}
       <span className={`t-small ${CLASS_TONE[item.cls]}`}>{CLASS_LABEL[item.cls]}</span>
     </li>
+  );
+}
+
+/** "en.wikipedia.org" for the line that says where a source came from. */
+function hostOf(address: string): string {
+  try {
+    return new URL(address).hostname.replace(/^www\./, '');
+  } catch {
+    return address;
+  }
+}
+
+/**
+ * Add a source by its web address. A page or a PDF is fetched and read like a file. A video is not
+ * fetched: the sheet asks for its transcript, copied from the video's page, and keeps the link with it.
+ */
+function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void>; onPasteInstead: () => void }) {
+  const [url, setUrl] = useState('');
+  const [video, setVideo] = useState<{ url: string } | null>(null);
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const fetchLink = () =>
+    run(async () => {
+      const result = await call('library.addLink', { url });
+      if (result.state === 'added') await onAdded(result.sourceId, result.existed);
+      else {
+        setVideo({ url: result.url });
+        setTitle(result.title);
+      }
+    });
+  const addTranscript = () =>
+    run(async () => {
+      if (!video) return;
+      const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text, origin: video.url });
+      await onAdded(sourceId, existed);
+    });
+  if (video) {
+    return (
+      <Dialog
+        open
+        onClose={onClose}
+        title="Paste the video's transcript"
+        width={620}
+        actions={
+          <>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button kind="primary" onClick={() => void addTranscript()} disabled={busy || text.trim().length === 0}>
+              {busy ? 'Adding…' : 'Add to library'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-[12px]">
+          <p className="m-0">
+            Frontier cannot fetch a video's transcript by itself. On{' '}
+            <a href={video.url} target="_blank" rel="noreferrer">
+              the video's page
+            </a>
+            , open the description, choose "Show transcript", select the whole transcript and copy it. Paste it here with its time stamps: ideas then say where in the video they come from.
+          </p>
+          <input className="input" aria-label="Title" placeholder="Title of the video" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <textarea className="input" aria-label="Transcript" rows={12} placeholder="Paste the transcript here" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
+          {error && <Notice error>{error}</Notice>}
+        </div>
+      </Dialog>
+    );
+  }
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a link"
+      width={560}
+      actions={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="primary" onClick={() => void fetchLink()} disabled={busy || url.trim().length === 0}>
+            {busy ? 'Fetching…' : 'Add to library'}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-[12px]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && url.trim()) void fetchLink();
+        }}
+      >
+        <p className="m-0">An article, a page of notes or a PDF by its web address, or a video on YouTube. A page is fetched once and read like a file. For a video you paste its transcript.</p>
+        <input className="input" aria-label="Web address" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} data-autofocus />
+        {error && (
+          <>
+            <Notice error>{error}</Notice>
+            <button type="button" className="link-button self-start" onClick={onPasteInstead}>
+              Paste the text instead
+            </button>
+          </>
+        )}
+      </form>
+    </Dialog>
   );
 }
 

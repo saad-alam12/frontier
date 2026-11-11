@@ -417,6 +417,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       UPDATE goals SET rhythm_at = approved_at;
     `,
   },
+  {
+    version: 15,
+    // The web address a source came from (a page or a document added by its link, a video's transcript).
+    sql: `
+      ALTER TABLE sources ADD COLUMN origin TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {
