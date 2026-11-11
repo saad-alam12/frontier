@@ -2,6 +2,18 @@
 
 Status: 2026-11-11, cloud session. **Nothing here is built.** Approve items by their ID (for example "D1 to D8, A2, B1") and a later session builds only those.
 
+## Approved so far (owner, 2026-11-11)
+
+Still not built: the owner has not yet said which other items to build, or when to start.
+
+- **D2:** yes. One review per idea per sitting, built from its graded steps, with the prediction left out.
+- **D12:** yes. Keep only the first tidying rule (drop a chain when another chain to the same idea needs fewer of the same ideas). Update `docs/design.md` §2.1 in the same commit.
+- **D13:** yes, the middle way. One failure only lowers freshness; two clear failures on different days drop the idea one level, so it is taught again. Update `docs/design.md` §3.4.
+- **B4:** yes, for sources and pages that are mostly images or have little text. The tutor should refer to the figures and show them in the session.
+- **B14:** keep it general and simple (see the row).
+- **D16:** yes to the check on the Mac.
+- **B19:** wanted ("runnable code is a great idea"). How the code is run is still open, see Decisions.
+
 ## How this list was made
 
 - Ran the baseline: 309 tests pass, typecheck and lint are clean.
@@ -51,7 +63,7 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | B1 | **Ask the tutor a question during a session.** An "Ask" on every card gives a short answer that is not graded and is kept in the trail. On explanations: "Explain it differently", "Simpler", "Show an example". | Today the only thing you can send is an answer. Explanation cards offer only Continue and an effort rating. | M | Yes |
 | B2 | **Hints.** "Give me a hint" on a question, up to two. Each hint lowers how much the answer counts, so it is not recorded as unaided. | Today the choices are a full answer or "I have no idea". | M | Yes |
 | B3 | **Add from a link.** A web article by its address, and a YouTube video by its transcript. | The design lists both. Today only local files and pasted text work, though the reader for web pages exists. YouTube has no official transcript service, so this part can break; pasting stays as the fallback. | M | Yes |
-| B4 | **Read slides and scans properly.** Send image-heavy and scanned pages to the model as images. | PDFs are read as text only. Figures and formulas drawn as images are lost, and a scanned PDF ends as "done, 0 ideas" with no message. Uses more of your plan, so it needs a setting. | L | Yes |
+| B4 | **Read slides and scans properly.** Send pages that are mostly images or have little text to the model as images; text pages stay as now. Keep each such page as a picture, so the tutor can refer to a figure and show it in the session. | PDFs are read as text only. Figures and formulas drawn as images are lost, and a scanned PDF ends as "done, 0 ideas" with no message. Uses more of your plan, once per source. Approved 2026-11-11. | L | Yes |
 | B5 | **Source viewer.** Open the PDF at the cited page from any "p 12". Select text to explain it, make a flashcard, or learn it now. | Citations are text only. You cannot see the original. | L | — |
 | B6 | **Practice on demand, and a mistakes list.** "Practice this skill now" at a chosen difficulty. Problems you got wrong come back later as variants. | Practice starts only when the scheduler finds fading ideas, or as a mock exam. | M | Yes |
 | B7 | **Exam mode.** A timed mock exam from the exam profile, no feedback until the end, then a report per skill that feeds the next sessions. | Mock exams are five problems in the last four weeks, graded one by one. | M | — |
@@ -66,7 +78,7 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | B16 | **Conflicts between sources.** Show them and resolve each in a short investigation. | The design describes it. Today a conflict is stored but never shown, and a single-part source can never report one. | M | — |
 | B17 | **Weekly review.** One page a week: what you learned, what faded, where you were too sure, and one suggested change to the plan. | Stats has the numbers but no summary over time. | M | — |
 | B18 | **Tell the story of a trail.** "How did I get from linear algebra to attention?" | An open question in `docs/progress.md`. One model call over a trail. | S | — |
-| B19 | **Code practice.** A code answer field with highlighting, and running the code. | Goals can ask for "practical application, including code", but answers are plain text. Running Python in the app needs a library under MPL-2.0, which is not on your licence list. | L | Ask |
+| B19 | **Code practice.** A code answer field with highlighting, and running the code. | Goals can ask for "practical application, including code", but answers are plain text. The owner wants it (2026-11-11). Open: run it with the Python already on the Mac (no licence question, every installed library, not sandboxed) or inside the app with Pyodide (sandboxed and self-contained, MPL-2.0, fewer libraries). | L | Yes |
 
 ---
 
@@ -110,8 +122,8 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | D9 | **Time and speed bookkeeping.** (a) Finishing or pausing one goal makes every other plan up to 2.5 times more expensive. (b) Logged time is split again whenever goals change, so a new goal starts with time "spent" and a "slow" verdict. (c) What the probe finds counts as fast learning, so plans then hold about 1.7 times too much. (d) Stats shows a different speed than the planner uses. (`backend/services/budget.ts`) | Reviewer reproduced | M | Yes |
 | D10 | **Session logic.** (a) An idea planned at "transfer" always ends marked simplified and caps the ideas built on it, because a session can certify at most "apply". (b) After a failed test-out the session loops explain, check, explain, check until the time is up, with no worked example. (c) The planner can pick an idea without the prerequisites you lack. (d) "End session" while an answer is judged does not stop the work. | (a) (c) (d) reviewer reproduced; (b) simulated, I read it | M | Yes |
 | D11 | **Reading sources.** (a) Two sources read at the same time create duplicate ideas. (b) Sources get stuck in "running" after a failure or a quit. (c) Changing the search model silently turns off matching by meaning. (d) Scanned or empty PDFs end as "done, 0 ideas" with no message. (e) "Remove from library" skips the clean-up: dead citations and an orphaned file. (`backend/services/ingestion.ts`, `backend/api/handlers.ts:119`) | (a) to (d) reviewer reproduced; (e) read | M | Yes |
-| D12 | **Map integrity.** (a) Tidying chains can delete an argument that is not redundant, and an idea drops off your edge. The rule in the design is too loose. (b) Two sources that state a link in opposite directions make both ideas unlearnable for good. (`backend/core/chains.ts`) | Reviewer reproduced, I read (a) | M | Decide |
-| D13 | **Review credit.** (a) "Implicit credit" also passes failures to prerequisites, once per idea in the problem: one "No idea" on a three-idea problem cut a prerequisite from 75 days to 11. (b) Opening an idea in Lookup makes a faded idea count as owned again. (c) Practice is dated when it was graded, not when it was answered. (d) Depth never drops after a clear failure, though the design says it does. | (a) (b) reviewer reproduced; (c) (d) read | M | Decide |
+| D12 | **Map integrity.** (a) Tidying chains can delete an argument that is not redundant, and an idea drops off your edge. The rule in the design is too loose. (b) Two sources that state a link in opposite directions make both ideas unlearnable for good. (`backend/core/chains.ts`) | Reviewer reproduced, I read (a) | M | Yes |
+| D13 | **Review credit.** (a) "Implicit credit" also passes failures to prerequisites, once per idea in the problem: one "No idea" on a three-idea problem cut a prerequisite from 75 days to 11. (b) Opening an idea in Lookup makes a faded idea count as owned again. (c) Practice is dated when it was graded, not when it was answered. (d) Depth never drops after a clear failure, though the design says it does. | (a) (b) reviewer reproduced; (c) (d) read | M | Yes |
 | D14 | **Goal edge cases.** A 10-hour goal with its exam in three days shows "70 hours this week". A new time is "behind" at once, because the clock starts at the first approval. A goal with only an exam or syllabus is never mapped and the wizard waits forever. "Map more ideas" during background work writes skills twice. Deleting a goal removes its time from Stats. A waiting "new map" breaks after "Read again". | Reviewer reproduced most | M to L | Yes |
 | D15 | **Stats dates are wrong in Germany.** Weeks are labelled with Sunday's date, and one day disappears from the calendar and the streak each spring. (`backend/services/stats.ts`) | Reviewer reproduced | S | Yes |
 | D16 | **Model layer safety.** Pin model calls to the app's own tools, so connectors on your Claude account are never visible to calls that read source text. Add a time limit to stuck calls. Store the API key in the system keychain, not in plain text. A settings file with one bad field is silently replaced by defaults. | First point suspected, rest read | M | Yes |
@@ -135,10 +147,10 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 
 ## Decisions I need from you
 
-1. **D2, how a sitting counts.** My proposal: one review per idea per sitting, built from its graded steps, with the prediction left out. Agree?
-2. **D13d, failing a known idea.** The design says its depth drops. The code only lowers its freshness. Which do you want?
-3. **D12a, tidying chains.** Keep an argument unless another one needs strictly fewer of the same ideas. This changes a rule in `docs/design.md`.
+1. **D2, how a sitting counts.** Answered 2026-11-11: yes. One review per idea per sitting, built from its graded steps, with the prediction left out.
+2. **D13d, failing a known idea.** Answered 2026-11-11: the middle way. One failure only lowers freshness; two clear failures on different days drop the idea one level.
+3. **D12a, tidying chains.** Answered 2026-11-11: yes. Keep an argument unless another one needs strictly fewer of the same ideas. This changes a rule in `docs/design.md`.
 4. **B14.** Answered 2026-11-11: the material is in German and English. Keep it general, no language setting, English for the app and explanations.
-5. **B4.** Reading pages as images uses more of your plan. Acceptable as an option?
-6. **B19.** Running Python needs an MPL-2.0 library. Allow it, or leave code running out?
+5. **B4.** Answered 2026-11-11: yes, for sources and pages that are mostly images or have little text; the tutor refers to the figures and shows them in the session.
+6. **B19.** Open. The owner wants runnable code. Choose how: the Python on the Mac, Pyodide inside the app (needs MPL-2.0 allowed in `CLAUDE.md` as a named exception), or the first now and the second later.
 7. **D16.** Answered 2026-11-11: yes. The session that builds D16 adds a small script that prints which tools a model call can see; the next local session on the Mac runs it once with the Claude login.
