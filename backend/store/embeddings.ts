@@ -15,9 +15,10 @@ export function upsertEmbedding(db: Database, e: StoredEmbedding): void {
   ).run(e.nodeId, e.model, e.vector.length, bytes, e.textHash);
 }
 
-export function getEmbeddingHash(db: Database, nodeId: string): string | undefined {
-  const row = db.prepare('SELECT text_hash FROM node_embeddings WHERE node_id = ?').get(nodeId) as { text_hash: string } | undefined;
-  return row?.text_hash;
+/** The text hash of each idea's embedding made with this model; an embedding from another model does not count. */
+export function embeddingHashes(db: Database, model: string): Map<string, string> {
+  const rows = db.prepare('SELECT node_id, text_hash FROM node_embeddings WHERE model = ?').all(model) as { node_id: string; text_hash: string }[];
+  return new Map(rows.map((r) => [r.node_id, r.text_hash]));
 }
 
 export function listEmbeddings(db: Database, model: string): StoredEmbedding[] {

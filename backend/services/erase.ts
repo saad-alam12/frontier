@@ -11,7 +11,7 @@ import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { deleteEmbeddings } from '../store/embeddings';
 import { nodesWithEvidence } from '../store/evidence';
-import { deleteCapabilities, listCapabilities, listGoals, listTargets, removeMaterialsOf, removeTargetsOf, resetGoalMap, saveRemap } from '../store/goals';
+import { deleteCapabilities, forgetCompiledSource, listCapabilities, listGoals, listTargets, removeMaterialsOf, removeTargetsOf, resetGoalMap, saveRemap } from '../store/goals';
 import { closePracticeSet, openSetsWith } from '../store/practice';
 import { activeSession } from '../store/sessions';
 import { coveredNodeIds, coveredOutside, deleteSource, getSource, listSources } from '../store/sources';
@@ -168,4 +168,27 @@ export function eraseFromMap(deps: EraseDeps, request: EraseRequest): EraseResul
     }
   }
   return { ...countsOf(plan), goalsToMap };
+}
+
+/**
+ * Take a source out of the Library and keep what was read from it ("Remove from library"). Its
+ * ideas and links stay on the map and only stop citing it; goals that used it as material no longer
+ * list it; its stored copy is deleted. To erase the ideas too, use "Erase from your map".
+ */
+export function removeSource(deps: EraseDeps, sourceId: string): void {
+  const { db } = deps;
+  const source = getSource(db, sourceId);
+  if (!source) return;
+  if (deps.isReading?.(sourceId)) throw new Error('This source is being read right now. Wait until it finishes, then remove it.');
+  transaction(db, () => {
+    dropSourceRefs(db, sourceId);
+    for (const goal of listGoals(db)) forgetCompiledSource(db, goal.id, sourceId);
+    deleteSource(db, sourceId); // its parts, its coverage and its place in goals' material go with it
+  });
+  if (!source.path) return;
+  try {
+    rmSync(join(deps.sourcesDir, source.path), { force: true });
+  } catch {
+    // The source is gone from the Library; a stored copy that cannot be removed is unused and harmless.
+  }
 }

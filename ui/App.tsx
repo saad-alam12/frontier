@@ -1,3 +1,4 @@
+import { Toasts } from './components/Toasts';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
@@ -194,6 +195,7 @@ export function App() {
           }}
         />
       )}
+      <Toasts />
     </div>
   );
 }

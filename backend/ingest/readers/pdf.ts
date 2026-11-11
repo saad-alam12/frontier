@@ -27,7 +27,12 @@ async function loadPdfJs(): Promise<PdfJs> {
 export async function readPdf(data: Uint8Array, fallbackTitle: string): Promise<ReadResult> {
   const pdfjs = await loadPdfJs();
   const task = pdfjs.getDocument({ data, useSystemFonts: true, verbosity: 0 });
-  const doc = await task.promise;
+  const doc = await task.promise.catch((error: unknown) => {
+    // pdfjs names the error; its own message ("No password given") is not one a learner should have to read
+    if (error instanceof Error && error.name === 'PasswordException') throw new Error('This PDF is locked with a password. Save a copy without the password and add that.');
+    if (error instanceof Error && error.name === 'InvalidPDFException') throw new Error('This file is not a readable PDF. It may be damaged.');
+    throw error;
+  });
   const blocks: TextBlock[] = [];
   let title = fallbackTitle;
   try {

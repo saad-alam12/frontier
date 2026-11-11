@@ -7,9 +7,13 @@ import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { FakeEmbedder } from '../ingest/embedder';
 import { openDatabase } from '../store/db';
-import { getSource, listChunks, listSources } from '../store/sources';
+import { existsSync } from 'node:fs';
+import { getSource, listChunks, listSources, releaseInterruptedSources, updateSourceStatus } from '../store/sources';
 import { countNodes, getNode, listChains, listExamplesForNode, listNodes } from '../store/world';
-import { countEmbeddings } from '../store/embeddings';
+import { countEmbeddings, listEmbeddings } from '../store/embeddings';
+import { decodeText } from '../ingest/readers';
+import type { Embedder } from '../ingest/embedder';
+import { removeSource } from './erase';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
 import { addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain } from './library';
@@ -351,5 +355,111 @@ describe('pasted text', () => {
     expect(long.length).toBeLessThanOrEqual(61);
     expect(long.endsWith('…')).toBe(true);
     expect(long).not.toMatch(/\s…$/);
+  });
+});
+
+describe('reading sources safely', () => {
+  it('two sources read at the same time do not create the same idea twice', async () => {
+    const { db, provider, service } = setup();
+    // both extractions are held until both sources are in flight, then finish a moment apart
+    let waiting = 0;
+    let release: () => void = () => undefined;
+    const bothStarted = new Promise<void>((resolve) => (release = resolve));
+    provider.script('extractor', async (req: CompleteRequest<unknown>) => {
+      waiting += 1;
+      if (waiting === 2) release();
+      await bothStarted;
+      return extractorFromFixture(req);
+    });
+    const a = await service.addText({ kind: 'markdown', title: 'Slides', text: LECTURE_A });
+    const b = await service.addText({ kind: 'markdown', title: 'Script', text: LECTURE_B });
+    await Promise.all([service.runSource(a.source.id), service.runSource(b.source.id)]);
+    const names = listNodes(db).map((n) => n.name);
+    expect(names.filter((n) => n === 'Nash equilibrium')).toHaveLength(1);
+    expect(names.filter((n) => n === 'Best response')).toHaveLength(1);
+    expect(new Set(names).size).toBe(names.length);
+    expect(getSource(db, a.source.id)?.status).toBe('done');
+    expect(getSource(db, b.source.id)?.status).toBe('done');
+  });
+
+  it('when the model for matching by meaning cannot be loaded, the source is still read, by name', async () => {
+    const db = openDatabase(':memory:');
+    const provider = new FakeProvider({ extractor: extractorFromFixture, matcher: matcherByName });
+    const broken: Embedder = { model: 'unavailable', dims: 64, embed: () => Promise.reject(new Error('fetch failed')) };
+    const events: IngestProgress[] = [];
+    const dir = mkdtempSync(join(tmpdir(), 'frontier-ingest-'));
+    const service = new IngestionService({ db, provider, embedder: broken, sourcesDir: join(dir, 'sources'), onProgress: (p) => events.push(p) });
+    const a = await service.addText({ kind: 'markdown', title: 'Slides', text: LECTURE_A });
+    const b = await service.addText({ kind: 'markdown', title: 'Script', text: LECTURE_B });
+    expect((await service.runSource(a.source.id)).status).toBe('done'); // not stuck as "being read"
+    expect((await service.runSource(b.source.id)).status).toBe('done');
+    expect(listNodes(db).filter((n) => n.name === 'Nash equilibrium')).toHaveLength(1); // same name: matched without the model
+    expect(events.some((e) => e.message?.includes('matched by name only'))).toBe(true);
+    expect(countEmbeddings(db)).toBe(0);
+  });
+
+  it('a changed model embeds every idea again instead of silently matching nothing', async () => {
+    const { db, service } = setup();
+    const { source } = await service.addText({ kind: 'markdown', title: 'Slides', text: LECTURE_A });
+    await service.runSource(source.id);
+    const ideas = countNodes(db);
+    const other = new FakeEmbedder();
+    Object.defineProperty(other, 'model', { value: 'another-model' });
+    const again = new IngestionService({ db, provider: new FakeProvider(), embedder: other, sourcesDir: '/unused' });
+    expect(await again.ensureEmbeddings()).toBe(ideas);
+    expect(listEmbeddings(db, 'another-model')).toHaveLength(ideas);
+    expect(await again.ensureEmbeddings()).toBe(0);
+  });
+
+  it('refuses a source with nothing to read, with a plain reason', async () => {
+    const { db, service, dir } = setup();
+    await expect(service.addText({ kind: 'markdown', title: 'Empty', text: '   \n\n ' })).rejects.toThrow('There is no text to read.');
+    const file = join(dir, 'blank.md');
+    writeFileSync(file, '\n\n');
+    await expect(service.addFile(file)).rejects.toThrow('blank.md has no text to read.');
+    expect(listSources(db)).toHaveLength(0);
+  });
+
+  it('reads text files as people have them', () => {
+    expect(decodeText(new Uint8Array([0xef, 0xbb, 0xbf, ...Buffer.from('# Nash')]))).toBe('# Nash'); // the mark would hide the heading
+    expect(decodeText(new Uint8Array([0xff, 0xfe, ...Buffer.from('Größe', 'utf16le')]))).toBe('Größe');
+    expect(decodeText(Buffer.from('Größe', 'latin1'))).toBe('Größe');
+    expect(decodeText(Buffer.from('Größe: ∑', 'utf8'))).toBe('Größe: ∑');
+  });
+
+  it('a source cut off by a quit can be run again', async () => {
+    const { db, service } = setup();
+    const { source } = await service.addText({ kind: 'markdown', title: 'Slides', text: LECTURE_A });
+    updateSourceStatus(db, source.id, { status: 'running' });
+    db.prepare("UPDATE source_chunks SET status = 'running' WHERE source_id = ?").run(source.id);
+    expect(releaseInterruptedSources(db)).toBe(1);
+    expect(getSource(db, source.id)).toMatchObject({ status: 'failed', error: 'Reading stopped when the app closed. Run it again to finish.' });
+    expect(listChunks(db, source.id).every((c) => c.status === 'pending')).toBe(true);
+    expect((await service.runSource(source.id)).status).toBe('done');
+    expect(releaseInterruptedSources(db)).toBe(0);
+  });
+
+  it('removing a source keeps its ideas, which stop citing it, and deletes its stored copy', async () => {
+    const { db, service, dir } = setup();
+    const file = join(dir, 'lecture.md');
+    writeFileSync(file, LECTURE_A);
+    const { source } = await service.addFile(file);
+    await service.runSource(source.id);
+    const stored = join(dir, 'sources', getSource(db, source.id)?.path ?? '');
+    expect(existsSync(stored)).toBe(true);
+    const goal = createGoal(db, 'Learn equilibrium');
+    setMaterials(db, goal.id, [{ sourceId: source.id, role: 'teaching' }]);
+    markCompiled(db, goal.id, null, [source.id]);
+    const ideas = countNodes(db);
+    const deps = { db, sourcesDir: join(dir, 'sources'), isReading: (id: string) => service.isRunning(id) };
+
+    removeSource(deps, source.id);
+    expect(getSource(db, source.id)).toBeUndefined();
+    expect(countNodes(db)).toBe(ideas);
+    expect(listNodes(db).every((n) => n.sources.every((ref) => ref.sourceId !== source.id))).toBe(true);
+    expect(listChains(db).every((c) => c.sources.every((ref) => ref.sourceId !== source.id))).toBe(true);
+    expect(getGoal(db, goal.id)?.compiledSources).toEqual([]);
+    expect(existsSync(stored)).toBe(false);
+    removeSource(deps, source.id); // already gone: nothing to do
   });
 });

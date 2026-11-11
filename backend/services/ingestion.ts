@@ -16,7 +16,7 @@ import type { KnowledgeNode, Source, SourceKind } from '../core/types';
 import { blocksFromParts, chunkBlocks, collapseBuildPages, PART_TOKENS } from '../ingest/chunker';
 import { textHash } from '../ingest/embedder';
 import type { Embedder } from '../ingest/embedder';
-import { readBytes, readSourceFile } from '../ingest/readers';
+import { hasNoText, readBytes, readSourceFile } from '../ingest/readers';
 import { nameSimilarity, topK } from '../ingest/similarity';
 import type { TextBlock } from '../ingest/types';
 import type { LlmProvider } from '../llm/provider';
@@ -24,7 +24,7 @@ import { Semaphore } from '../llm/queue';
 import { nodesWithCards } from '../store/cards';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
-import { getEmbeddingHash, listEmbeddings, upsertEmbedding } from '../store/embeddings';
+import { embeddingHashes, listEmbeddings, upsertEmbedding } from '../store/embeddings';
 import { newId } from '../store/ids';
 import { nodesWithEvidence } from '../store/evidence';
 import { nodesInOpenSets } from '../store/practice';
@@ -62,6 +62,12 @@ const MIN_NAME_SIMILARITY = 0.5;
 export class IngestionService {
   private readonly sources: Semaphore;
   private readonly running = new Set<string>();
+  /**
+   * Matching and merging run one source at a time. Sources are read in parallel, and a source that
+   * looked for existing ideas before another one merged would not find them, so both would create
+   * the same idea (lecture slides and the script of the same lecture, added together).
+   */
+  private readonly merging = new Semaphore(1);
 
   constructor(private readonly options: IngestionOptions) {
     this.sources = new Semaphore(options.concurrency ?? 3);
@@ -79,6 +85,7 @@ export class IngestionService {
   /** Copy a file into the data folder, read and chunk it. Same content twice is a no-op. */
   async addFile(path: string): Promise<{ source: Source; existed: boolean }> {
     const { kind, bytes, result } = await readSourceFile(path);
+    if (hasNoText(result)) throw new Error(kind === 'pdf' ? `${basename(path)} has no text to read: it looks like a scan or pictures of pages. Frontier reads text only for now.` : `${basename(path)} has no text to read.`);
     const hash = sha256(bytes);
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
@@ -96,6 +103,7 @@ export class IngestionService {
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
     const result = await readBytes(input.kind, bytes, input.title);
+    if (hasNoText(result)) throw new Error('There is no text to read.');
     return { source: this.createFromBlocks(input.kind, input.title, null, hash, result.blocks), existed: false };
   }
 
@@ -151,7 +159,9 @@ export class IngestionService {
     if (!source) throw new Error(`unknown source ${sourceId}`);
     updateSourceStatus(this.db, sourceId, { status: 'running', error: null });
     this.emit(sourceId);
-    await this.ensureEmbeddings();
+    // ideas without an embedding for this model (a goal's own ideas, a changed model) get one first;
+    // when the model cannot be loaded, reading goes on and ideas are matched by name only
+    await this.ensureEmbeddings().catch((error: unknown) => this.emit(sourceId, { message: byNameOnly(error) }));
     let failures = 0;
     for (const chunk of listChunks(this.db, sourceId)) {
       if (chunk.status === 'done') continue;
@@ -190,34 +200,36 @@ export class IngestionService {
       digest,
     });
 
-    const queries = await this.candidatesFor(extraction.nodes);
-    const decisions = await runMatcher(this.options.provider, queries);
-    const identities = new Map<string, string>();
-    for (const d of decisions) if (d.match) identities.set(d.tempId, d.match);
+    await this.merging.run(async () => {
+      const queries = await this.candidatesFor(extraction.nodes);
+      const decisions = await runMatcher(this.options.provider, queries);
+      const identities = new Map<string, string>();
+      for (const d of decisions) if (d.match) identities.set(d.tempId, d.match);
 
-    const existingNodes = new Map(listNodes(this.db).map((n) => [n.id, n]));
-    const plan = planMerge({
-      sourceId: source.id,
-      extractedNodes: extraction.nodes.map((n) => ({ ...n, locator: n.locator ?? chunk.locator })),
-      extractedChains: extraction.chains.map((c) => ({ ...c, locator: c.locator ?? chunk.locator })),
-      extractedExamples: extraction.examples.map((e) => ({ ...e, locator: e.locator ?? chunk.locator })),
-      identities,
-      existingNodes,
-      existingChains: listChains(this.db),
-      newId: (prefix) => newId(prefix),
-    });
-
-    const vectors = await this.options.embedder.embed(plan.newNodes.map(embeddingText));
-    transaction(this.db, () => {
-      applyMergePlan(this.db, plan);
-      addCoverage(this.db, source.id, plan.coveredNodeIds);
-      plan.newNodes.forEach((n, i) => {
-        const vector = vectors[i];
-        if (vector) upsertEmbedding(this.db, { nodeId: n.id, model: this.options.embedder.model, vector, textHash: textHash(embeddingText(n)) });
+      const existingNodes = new Map(listNodes(this.db).map((n) => [n.id, n]));
+      const plan = planMerge({
+        sourceId: source.id,
+        extractedNodes: extraction.nodes.map((n) => ({ ...n, locator: n.locator ?? chunk.locator })),
+        extractedChains: extraction.chains.map((c) => ({ ...c, locator: c.locator ?? chunk.locator })),
+        extractedExamples: extraction.examples.map((e) => ({ ...e, locator: e.locator ?? chunk.locator })),
+        identities,
+        existingNodes,
+        existingChains: listChains(this.db),
+        newId: (prefix) => newId(prefix),
       });
-      updateChunk(this.db, chunk.id, { status: 'done', error: null, nodeIds: plan.coveredNodeIds, conflicts: extraction.conflicts });
-      const done = listChunks(this.db, source.id).filter((c) => c.status === 'done').length;
-      updateSourceStatus(this.db, source.id, { chunksDone: done });
+
+      const vectors = await this.embed(plan.newNodes.map(embeddingText));
+      transaction(this.db, () => {
+        applyMergePlan(this.db, plan);
+        addCoverage(this.db, source.id, plan.coveredNodeIds);
+        plan.newNodes.forEach((n, i) => {
+          const vector = vectors[i];
+          if (vector) upsertEmbedding(this.db, { nodeId: n.id, model: this.options.embedder.model, vector, textHash: textHash(embeddingText(n)) });
+        });
+        updateChunk(this.db, chunk.id, { status: 'done', error: null, nodeIds: plan.coveredNodeIds, conflicts: extraction.conflicts });
+        const done = listChunks(this.db, source.id).filter((c) => c.status === 'done').length;
+        updateSourceStatus(this.db, source.id, { chunksDone: done });
+      });
     });
     this.emit(source.id);
   }
@@ -232,7 +244,7 @@ export class IngestionService {
     const world = listNodes(this.db);
     const byId = new Map(world.map((n) => [n.id, n]));
     const embeddings = listEmbeddings(this.db, this.options.embedder.model).map((e) => ({ id: e.nodeId, vector: e.vector }));
-    const vectors = await this.options.embedder.embed(nodes.map(embeddingText));
+    const vectors = await this.embed(nodes.map(embeddingText));
     return nodes.map((n, i) => {
       const scores = new Map<string, number>();
       const vector = vectors[i];
@@ -254,7 +266,8 @@ export class IngestionService {
 
   /** Embed nodes that have no embedding for the current model (seeded or unverified nodes, model changes). */
   async ensureEmbeddings(): Promise<number> {
-    const missing = listNodes(this.db).filter((n) => getEmbeddingHash(this.db, n.id) !== textHash(embeddingText(n)));
+    const have = embeddingHashes(this.db, this.options.embedder.model);
+    const missing = listNodes(this.db).filter((n) => have.get(n.id) !== textHash(embeddingText(n)));
     if (missing.length === 0) return 0;
     const vectors = await this.options.embedder.embed(missing.map(embeddingText));
     transaction(this.db, () => {
@@ -266,11 +279,29 @@ export class IngestionService {
     return missing.length;
   }
 
+  /**
+   * Embeddings for matching by meaning. When the model cannot be loaded (no network on the first run,
+   * a broken download) reading must not stop: no vectors come back, ideas are matched by name, and
+   * the missing embeddings are made the next time a source is read with the model available.
+   */
+  private async embed(texts: string[]): Promise<(Float32Array | undefined)[]> {
+    if (texts.length === 0) return [];
+    try {
+      return await this.options.embedder.embed(texts);
+    } catch {
+      return [];
+    }
+  }
+
   private emit(sourceId: string, extra: { message?: string } = {}): void {
     const s = getSource(this.db, sourceId);
     if (!s) return;
     this.options.onProgress?.({ sourceId, status: s.status, chunkCount: s.chunkCount, chunksDone: s.chunksDone, ...extra });
   }
+}
+
+function byNameOnly(error: unknown): string {
+  return `The model for matching by meaning could not be loaded, so ideas are matched by name only for now. (${error instanceof Error ? error.message : String(error)})`;
 }
 
 export function embeddingText(node: Pick<KnowledgeNode, 'name' | 'statement'>): string {

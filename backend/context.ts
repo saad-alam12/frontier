@@ -17,6 +17,7 @@ import { listGoals } from './store/goals';
 import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';
+import { releaseInterruptedSources } from './store/sources';
 import type { Database } from './store/db';
 
 /** Everything the IPC handlers need. Built once in main.ts; pieces are rebuilt when settings change. */
@@ -59,6 +60,8 @@ export class AppContext {
     if (!this.cachedDb) {
       this.cachedDb = openDatabase(this.paths().db);
       upgradeDerivedStates(this.cachedDb);
+      // nothing is reading yet when a database opens, so a source still marked as being read was cut off by a quit
+      releaseInterruptedSources(this.cachedDb);
     }
     return this.cachedDb;
   }

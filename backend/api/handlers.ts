@@ -22,11 +22,10 @@ import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer, endPracticeSet, resumeGrading } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
-import { EraseRequestSchema, eraseFromMap, previewErase } from '../services/erase';
+import { EraseRequestSchema, eraseFromMap, previewErase, removeSource } from '../services/erase';
 import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, requestRemap, startUnverified } from '../store/goals';
-import { deleteSource } from '../store/sources';
 import { getProbeSet } from '../store/probes';
 import { getSession } from '../store/sessions';
 import { approveRemap, dismissRemap, remapView } from '../services/remap';
@@ -64,11 +63,19 @@ export function buildHandlers(ctx: AppContext): Handlers {
   /** Add files to the library unread and guess what each is for; reading starts once a goal uses them. */
   const addMaterials = async (paths: string[]): Promise<MaterialCandidate[]> => {
     const out: MaterialCandidate[] = [];
+    const failed: string[] = [];
     for (const path of paths) {
-      const { source, existed } = await ctx.ingestion().addFile(path);
-      const guess = await guessRole(ctx.db(), ctx.provider(), source.id).catch(() => ({ role: 'teaching' as const, reason: 'Could not tell; assumed teaching material.' }));
-      out.push({ sourceId: source.id, title: source.title, role: guess.role, reason: guess.reason, existed });
+      try {
+        const { source, existed } = await ctx.ingestion().addFile(path);
+        const guess = await guessRole(ctx.db(), ctx.provider(), source.id).catch(() => ({ role: 'teaching' as const, reason: 'Could not tell; assumed teaching material.' }));
+        out.push({ sourceId: source.id, title: source.title, role: guess.role, reason: guess.reason, existed });
+      } catch (error) {
+        // one file that cannot be read must not cost the learner the others
+        failed.push(error instanceof Error ? error.message : String(error));
+      }
     }
+    if (failed.length && out.length === 0) throw new Error(failed.join(' '));
+    if (failed.length) ctx.emit('app.toast', { kind: 'error', message: failed.join(' ') });
     return out;
   };
   return {
@@ -119,7 +126,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'library.reread': ({ sourceId }) => readSourceAgain(ctx.db(), ctx.ingestion(), sourceId),
     'library.remove': ({ sourceId }) => {
-      deleteSource(ctx.db(), sourceId);
+      removeSource({ db: ctx.db(), sourcesDir: ctx.paths().sources, isReading: (id) => ctx.ingestion().isRunning(id) }, sourceId);
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),

@@ -161,6 +161,17 @@ export function updateSourceStatus(db: Database, id: string, patch: Partial<Pick
   db.prepare('UPDATE sources SET status = ?, chunks_done = ?, error = ? WHERE id = ?').run(next.status, next.chunksDone, next.error, id);
 }
 
+/**
+ * Sources left "being read" by a quit or a crash: nothing is reading them any more. They are marked
+ * failed with a plain reason, so the Library offers "Run again" (a source still marked as being read
+ * has no such button), and their unfinished parts wait to be read. Returns how many were found.
+ */
+export function releaseInterruptedSources(db: Database): number {
+  db.prepare("UPDATE source_chunks SET status = 'pending' WHERE status = 'running'").run();
+  const result = db.prepare("UPDATE sources SET status = 'failed', error = ? WHERE status = 'running'").run('Reading stopped when the app closed. Run it again to finish.');
+  return Number(result.changes);
+}
+
 export function addCoverage(db: Database, sourceId: string, nodeIds: Iterable<string>): void {
   const stmt = db.prepare('INSERT OR IGNORE INTO source_coverage (source_id, node_id) VALUES (?, ?)');
   for (const n of nodeIds) stmt.run(sourceId, n);
