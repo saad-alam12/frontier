@@ -178,6 +178,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] C5 (part) a misconception ends after two clean answers about its idea, one of them at least half a day later; seen again, it is open again. Still open: recognising a repeat by meaning, a Misconceptions view, contrast problems scheduled because of one
 - [x] A5 flashcard review: undo the last rating (⌘Z), "Card 3 of 12", one summary line at the end
 - [x] A6 Stats tidy-up: end labels of lines never overlap or leave the chart, confidence rows with no answers are hidden, a chart with too little data is one quiet line
+- [x] A10 Library: drop files anywhere on the window, "Stop reading" with about how long is left, "Open original"; part errors in plain words
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -307,6 +308,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 A10): Library. (1) Files dropped anywhere on the window are added to the Library and read (`ui/lib/fileDrop.ts`, `library.addPaths`); a hint covers the window while files are dragged over it; a goal's material step keeps the files dropped on it; what could not be added is said in a notice wherever the learner is. (2) "Stop reading" (`IngestionService.stop`): the model call in flight is dropped through its abort signal, parts already read stay, the dropped part goes back to waiting with no attempt counted, and the source is marked like one cut off by a quit (status failed, "You stopped the reading. Run it again to read the rest."), so goals that wait for it move on; the Library calls it "Stopped", not failed. A source stopped while it waits its turn is not read at all. (3) Time left (`secondsLeft`): the length of the unread parts times a pace that starts at one second per 1,000 characters (at least 15 s a part) and follows what parts actually took in this run; the Library asks again every four seconds while something is read and says "About 40 seconds left", "a minute", or that it is taking longer than usual. It is a guess, not a promise. (4) "Open original" opens the stored copy in its usual app. Also: a failed part's reason is shown in plain words (it was the raw answer of the model service and made the page scroll sideways), and the three add buttons sit on one row under "Sources". Checked in the running app.
 
 - 2026-11-11 (R7 A1, fix): The plan list could read differently each time. `roadmap` broke ties between ideas of the same weight by their ids, which are random, so two ideas could swap places from one look to the next (and a test failed now and then: the commit "R7 A6" went out with that test red). Ties now go by the order the ideas are given in (planned depth, then the goal's depth, then name). The whole suite passed three runs in a row afterwards.
 

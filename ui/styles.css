@@ -1513,6 +1513,19 @@ button.map-label:hover {
   border-radius: 18px;
   transition: box-shadow 150ms ease-out;
 }
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  box-shadow: inset 0 0 0 3px var(--accent-halo);
+  color: var(--text);
+  font-size: 17px;
+  pointer-events: none;
+}
 .drop-zone.is-dragging {
   box-shadow: 0 0 0 2px var(--accent-halo);
 }

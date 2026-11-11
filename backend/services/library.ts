@@ -27,6 +27,12 @@ export interface SourceSummary extends Source {
   readsIdeas: boolean;
   /** Read with the old extraction (many small ideas); reading it again gives lesson-sized ones. */
   readOld: boolean;
+  /** While it is being read: about how many seconds are left (0 when it takes longer than expected). Null otherwise, also while it waits its turn. */
+  secondsLeft: number | null;
+  /** Waiting to be read, or being read: it can be stopped. */
+  queued: boolean;
+  /** The learner stopped the reading, or the app closed during it: nothing failed, the rest waits for "Run again". */
+  stopped: boolean;
 }
 
 /**
@@ -42,12 +48,15 @@ export async function readSourceAgain(db: Database, ingestion: IngestionService,
   return { retired: retired.length };
 }
 
-export function listSourceSummaries(db: Database): SourceSummary[] {
+export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionService, 'secondsLeft' | 'isRunning'>): SourceSummary[] {
   return listSources(db).map((s) => {
     const chunks = listChunks(db, s.id);
     const roles = [...new Set(rolesOfSource(db, s.id).map((r) => r.role))];
     return {
       ...s,
+      secondsLeft: ingestion?.secondsLeft(s.id) ?? null,
+      queued: ingestion?.isRunning(s.id) ?? false,
+      stopped: s.status === 'failed' && !chunks.some((c) => c.status === 'failed'),
       roles,
       readsIdeas: roles.length === 0 || roles.some((r) => EXTRACTED_ROLES.includes(r)),
       readOld: s.extraction < EXTRACTION && s.chunksDone > 0,

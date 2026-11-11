@@ -379,6 +379,70 @@ const ARTICLE = `<html><head><title>Equilibrium, explained</title></head><body><
 <p>CHAIN Strategy profile => Nash equilibrium</p>
 <p>${'An equilibrium is where nobody wants to move on their own. '.repeat(12)}</p></article></body></html>`;
 
+describe('stopping a read', () => {
+  it('drops the call in flight, keeps what was read, and reads the rest on "Run again"', async () => {
+    const { db, provider, service, dir } = setup({ partTokens: 700 });
+    const path = join(dir, 'book.md');
+    writeFileSync(path, LECTURE_C);
+    const { source } = await service.addFile(path);
+    expect(listChunks(db, source.id).length).toBeGreaterThan(1);
+    // the first part is read; the second is held until the learner stops it
+    let calls = 0;
+    let stopNow: () => void = () => undefined;
+    const second = new Promise<void>((resolve) => (stopNow = resolve));
+    provider.script('extractor', async (req: CompleteRequest<unknown>) => {
+      calls += 1;
+      if (calls === 2) {
+        stopNow();
+        await new Promise((_resolve, reject) => req.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }));
+      }
+      return extractorFromFixture(req);
+    });
+    const done: string[] = [];
+    const watched = new IngestionService({ db, provider, embedder: new FakeEmbedder(), sourcesDir: join(dir, 'sources'), partTokens: 700, onSourceDone: (id) => done.push(id) });
+    watched.start(source.id);
+    await second;
+    expect(watched.secondsLeft(source.id)).toBeGreaterThan(0);
+    watched.stop(source.id);
+    await vi.waitFor(() => expect(watched.isRunning(source.id)).toBe(false));
+
+    const stopped = listSourceSummaries(db, watched).find((x) => x.id === source.id);
+    expect(stopped).toMatchObject({ status: 'failed', stopped: true, queued: false, secondsLeft: null, chunksDone: 1 });
+    expect(stopped?.error).toMatch(/You stopped the reading/);
+    // the part that was dropped did not fail: it waits, with no attempt counted against it
+    expect(listChunks(db, source.id).map((c) => c.status)).toEqual(expect.arrayContaining(['done', 'pending']));
+    expect(listChunks(db, source.id).some((c) => c.status === 'failed')).toBe(false);
+    expect(done).toEqual([source.id]); // goals that wait for it move on
+
+    provider.script('extractor', extractorFromFixture);
+    watched.start(source.id);
+    await vi.waitFor(() => expect(getSource(db, source.id)?.status).toBe('done'));
+    expect(listSourceSummaries(db, watched).find((x) => x.id === source.id)).toMatchObject({ stopped: false, error: null });
+  });
+
+  it('a source stopped while it waits its turn is not read at all', async () => {
+    const { db, provider, dir } = setup();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    provider.script('extractor', async (req: CompleteRequest<unknown>) => {
+      await held;
+      return extractorFromFixture(req);
+    });
+    const service = new IngestionService({ db, provider, embedder: new FakeEmbedder(), sourcesDir: join(dir, 'sources'), concurrency: 1 });
+    const first = await service.addText({ kind: 'markdown', title: 'First', text: LECTURE_A });
+    const second = await service.addText({ kind: 'markdown', title: 'Second', text: LECTURE_C });
+    service.start(first.source.id);
+    service.start(second.source.id);
+    expect(listSourceSummaries(db, service).find((x) => x.id === second.source.id)).toMatchObject({ queued: true, secondsLeft: null });
+    service.stop(second.source.id);
+    await vi.waitFor(() => expect(service.isRunning(second.source.id)).toBe(false));
+    expect(getSource(db, second.source.id)).toMatchObject({ status: 'failed', chunksDone: 0 });
+    release();
+    await vi.waitFor(() => expect(getSource(db, first.source.id)?.status).toBe('done'));
+    expect(provider.calls.filter((c) => c.role === 'extractor')).toHaveLength(1);
+  });
+});
+
 describe('adding a link', () => {
   it('fetches a web page once, keeps a copy and reads it like a file', async () => {
     const { db, service, dir } = setup();

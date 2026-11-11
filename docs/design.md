@@ -363,7 +363,7 @@ A desktop app (macOS first, then Windows/Linux). The rail has the five places yo
 | Stats | How you learn, filtered by time range, goal and topic (ideas clustered by chains): a few plain sentences on what stands out, then time per week by goal (free study as its own series) against the budgets' rhythm, every day for twelve weeks, what you know over time, what you keep (projected recall), how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget, with free study as its own line |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions (a chosen one with what was asked), replay |
-| Library | Add sources (files, a link to a page or a PDF, or pasted text: notes, an article, a video's transcript, read like a file), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
+| Library | Add sources (files, also dropped anywhere on the window; a link to a page or a PDF; or pasted text: notes, an article, a video's transcript, read like a file), open a source's stored original, see about how long a source being read still takes and stop it (what was read stays, the rest waits for "Run again"), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
 | Settings | Model provider and models, flashcards in sessions without a goal, data folder, backups (make one, restore one), preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.

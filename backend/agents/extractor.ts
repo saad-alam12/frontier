@@ -137,7 +137,7 @@ export function formatDigest(digest: DigestEntry[]): string {
   return digest.map((d) => `- [${d.id}] ${d.name} (${d.kind}): ${truncate(d.statement, 200)}`).join('\n');
 }
 
-export async function runExtractor(provider: LlmProvider, input: ExtractorInput): Promise<Extraction> {
+export async function runExtractor(provider: LlmProvider, input: ExtractorInput, signal?: AbortSignal): Promise<Extraction> {
   const knownIds = new Set(input.digest.map((d) => d.id));
   const range = ideaRange(input.text);
   const message = [
@@ -155,6 +155,7 @@ export async function runExtractor(provider: LlmProvider, input: ExtractorInput)
     system: loadPrompt('extractor'),
     messages: [{ role: 'user', content: message }],
     submit: { name: 'submit_extraction', description: 'Submit the ideas, chains, worked examples and conflicts found in this text.', schema: buildExtractionSchema(knownIds) },
+    signal,
   });
   return result.data;
 }

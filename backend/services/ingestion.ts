@@ -19,6 +19,7 @@ import type { Embedder } from '../ingest/embedder';
 import { hasNoText, kindForFile, readBytes, readSourceFile } from '../ingest/readers';
 import { nameSimilarity, topK } from '../ingest/similarity';
 import type { TextBlock } from '../ingest/types';
+import { isCancelled } from '../llm/provider';
 import type { LlmProvider } from '../llm/provider';
 import { Semaphore } from '../llm/queue';
 import { nodesWithCards } from '../store/cards';
@@ -58,6 +59,10 @@ export interface IngestionOptions {
 const CANDIDATES = 5;
 const MIN_COSINE = 0.55;
 const MIN_NAME_SIMILARITY = 0.5;
+/** What the learner reads on a source they stopped. Its unread parts wait; "Run again" reads them. */
+export const STOPPED_MESSAGE = 'You stopped the reading. Run it again to read the rest.';
+/** A part takes at least this long, however short (two model calls and the search model). */
+const MIN_PART_SECONDS = 15;
 
 export class IngestionService {
   private readonly sources: Semaphore;
@@ -68,6 +73,12 @@ export class IngestionService {
    * the same idea (lecture slides and the script of the same lecture, added together).
    */
   private readonly merging = new Semaphore(1);
+  /** One per source that is queued or being read: "Stop reading" aborts it. */
+  private readonly stops = new Map<string, AbortController>();
+  /** The part being read right now, per source: when it began and how long it should take. */
+  private readonly reading = new Map<string, { chunkId: string; startedAt: number }>();
+  /** Seconds a part takes per 1,000 characters; starts as a guess and follows what reading here takes. */
+  private pace = 1;
 
   constructor(private readonly options: IngestionOptions) {
     this.sources = new Semaphore(options.concurrency ?? 3);
@@ -157,10 +168,53 @@ export class IngestionService {
   start(sourceId: string): void {
     if (this.running.has(sourceId)) return;
     this.running.add(sourceId);
+    const stop = new AbortController();
+    this.stops.set(sourceId, stop);
     void this.sources
-      .run(() => this.runSource(sourceId))
-      .catch((error: unknown) => this.emit(sourceId, { message: error instanceof Error ? error.message : String(error) }))
-      .finally(() => this.running.delete(sourceId));
+      .run(() => this.runSource(sourceId, stop.signal), stop.signal)
+      .catch((error: unknown) => {
+        // stopped while it still waited its turn: nothing was read
+        if (isCancelled(error)) this.markStopped(sourceId);
+        else this.emit(sourceId, { message: error instanceof Error ? error.message : String(error) });
+      })
+      .finally(() => {
+        this.running.delete(sourceId);
+        this.stops.delete(sourceId);
+        this.reading.delete(sourceId);
+      });
+  }
+
+  /** Stop reading a source: the call in flight is dropped, parts already read stay, the rest wait for "Run again". */
+  stop(sourceId: string): void {
+    this.stops.get(sourceId)?.abort();
+  }
+
+  /**
+   * About how many seconds until a source that is being read is done; null when it is not being read
+   * (or still waits its turn). A guess from the length of its unread parts and how fast parts were
+   * read so far; 0 when the part in hand already takes longer than expected.
+   */
+  secondsLeft(sourceId: string, now = Date.now()): number | null {
+    const current = this.reading.get(sourceId);
+    if (!current) return null;
+    let seconds = 0;
+    for (const chunk of listChunks(this.db, sourceId)) {
+      if (chunk.status === 'done') continue;
+      const expected = this.expectedSeconds(chunk.text.length);
+      seconds += chunk.id === current.chunkId ? Math.max(0, expected - (now - current.startedAt) / 1000) : expected;
+    }
+    return Math.round(seconds);
+  }
+
+  private expectedSeconds(characters: number): number {
+    return Math.max(MIN_PART_SECONDS, (characters / 1000) * this.pace);
+  }
+
+  private markStopped(sourceId: string): void {
+    const done = listChunks(this.db, sourceId).filter((c) => c.status === 'done').length;
+    updateSourceStatus(this.db, sourceId, { status: 'failed', chunksDone: done, error: STOPPED_MESSAGE });
+    this.emit(sourceId);
+    this.options.onSourceDone?.(sourceId);
   }
 
   isRunning(sourceId: string): boolean {
@@ -173,7 +227,7 @@ export class IngestionService {
   }
 
   /** Process every pending or failed part of a source, in order. Safe to call again after failures. */
-  async runSource(sourceId: string): Promise<Source> {
+  async runSource(sourceId: string, signal?: AbortSignal): Promise<Source> {
     const source = getSource(this.db, sourceId);
     if (!source) throw new Error(`unknown source ${sourceId}`);
     updateSourceStatus(this.db, sourceId, { status: 'running', error: null });
@@ -184,16 +238,32 @@ export class IngestionService {
     let failures = 0;
     for (const chunk of listChunks(this.db, sourceId)) {
       if (chunk.status === 'done') continue;
+      if (signal?.aborted) break;
+      const startedAt = Date.now();
+      this.reading.set(sourceId, { chunkId: chunk.id, startedAt });
       try {
-        await this.processChunk(source, chunk);
+        await this.processChunk(source, chunk, signal);
+        // long parts say how fast reading is here; short ones are mostly waiting
+        if (chunk.text.length >= 5000) this.pace = (this.pace + (Date.now() - startedAt) / chunk.text.length) / 2;
       } catch (error) {
+        if (isCancelled(error)) {
+          // the learner stopped it: the part was not read and did not fail
+          updateChunk(this.db, chunk.id, { status: 'pending', attempts: chunk.attempts, error: null });
+          break;
+        }
         failures += 1;
         const message = error instanceof Error ? error.message : String(error);
         updateChunk(this.db, chunk.id, { status: 'failed', attempts: chunk.attempts + 1, error: message });
         this.emit(sourceId, { message: `Part ${chunk.idx + 1} failed: ${message}` });
       }
     }
+    this.reading.delete(sourceId);
     const done = listChunks(this.db, sourceId).filter((c) => c.status === 'done').length;
+    if (signal?.aborted && done < listChunks(this.db, sourceId).length) {
+      if (done > 0) refreshGoalFields(this.db);
+      this.markStopped(sourceId);
+      return getSource(this.db, sourceId) as Source;
+    }
     updateSourceStatus(this.db, sourceId, {
       status: failures === 0 ? 'done' : 'failed',
       chunksDone: done,
@@ -205,23 +275,27 @@ export class IngestionService {
     return getSource(this.db, sourceId) as Source;
   }
 
-  private async processChunk(source: Source, chunk: SourceChunk): Promise<void> {
+  private async processChunk(source: Source, chunk: SourceChunk, signal?: AbortSignal): Promise<void> {
     updateChunk(this.db, chunk.id, { status: 'running', attempts: chunk.attempts + 1, error: null });
     const chunkCount = (this.db.prepare('SELECT count(*) AS n FROM source_chunks WHERE source_id = ?').get(source.id) as { n: number }).n;
     const digest = this.digestFor(source.id);
-    const extraction = await runExtractor(this.options.provider, {
-      sourceTitle: source.title,
-      sourceKind: source.kind,
-      locator: chunk.locator,
-      chunkIndex: chunk.idx,
-      chunkCount,
-      text: chunk.text,
-      digest,
-    });
+    const extraction = await runExtractor(
+      this.options.provider,
+      {
+        sourceTitle: source.title,
+        sourceKind: source.kind,
+        locator: chunk.locator,
+        chunkIndex: chunk.idx,
+        chunkCount,
+        text: chunk.text,
+        digest,
+      },
+      signal,
+    );
 
     await this.merging.run(async () => {
       const queries = await this.candidatesFor(extraction.nodes);
-      const decisions = await runMatcher(this.options.provider, queries);
+      const decisions = await runMatcher(this.options.provider, queries, signal);
       const identities = new Map<string, string>();
       for (const d of decisions) if (d.match) identities.set(d.tempId, d.match);
 
@@ -249,7 +323,7 @@ export class IngestionService {
         const done = listChunks(this.db, source.id).filter((c) => c.status === 'done').length;
         updateSourceStatus(this.db, source.id, { chunksDone: done });
       });
-    });
+    }, signal);
     this.emit(source.id);
   }
 

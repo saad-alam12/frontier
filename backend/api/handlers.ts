@@ -3,11 +3,12 @@ import { activeSession } from '../store/sessions';
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import { app, dialog, ipcMain, net, shell } from 'electron';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { exportGoalNotes } from '../services/notes';
-import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate } from './contract';
+import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
+import { getSource } from '../store/sources';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
@@ -65,6 +66,22 @@ export function buildHandlers(ctx: AppContext): Handlers {
     if (failed.length) ctx.emit('app.toast', { kind: 'error', message: failed.join(' ') });
     return out;
   };
+  /** Files for the Library, from the dialog or dropped on the window: each is added and its reading starts. */
+  const addFiles = async (paths: string[]): Promise<{ added: SourceSummary[]; skipped: string[] }> => {
+    const added: string[] = [];
+    const skipped: string[] = [];
+    for (const path of paths) {
+      try {
+        const { source, existed } = await ctx.ingestion().addFile(path);
+        if (existed) skipped.push(`${basename(path)} is already in the library.`);
+        else added.push(source.id);
+        if (source.status !== 'done') ctx.ingestion().start(source.id);
+      } catch (error) {
+        skipped.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    return { added: listSourceSummaries(ctx.db(), ctx.ingestion()).filter((s) => added.includes(s.id)), skipped };
+  };
   return {
     'app.info': () => ({ version: ctx.version, dataFolder: ctx.settings.get().dataFolder, settingsFile: ctx.settingsFile }),
     'app.showLog': () => {
@@ -95,7 +112,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
       return result.canceled ? null : (result.filePaths[0] ?? null);
     },
-    'library.list': () => listSourceSummaries(ctx.db()),
+    'library.list': () => listSourceSummaries(ctx.db(), ctx.ingestion()),
     'library.addText': async (input) => {
       const { source, existed } = await addPastedText(ctx.ingestion(), input);
       return { sourceId: source.id, existed };
@@ -107,22 +124,25 @@ export function buildHandlers(ctx: AppContext): Handlers {
         properties: ['openFile', 'multiSelections'],
         filters: [{ name: 'Sources', extensions: SUPPORTED_EXTENSIONS }],
       });
-      const added: string[] = [];
-      const skipped: string[] = [];
-      if (!result.canceled) {
-        for (const path of result.filePaths) {
-          try {
-            const { source, existed } = await ctx.ingestion().addFile(path);
-            if (existed) skipped.push(`${path} (already in the library)`);
-            else added.push(source.id);
-            if (source.status !== 'done') ctx.ingestion().start(source.id);
-          } catch (error) {
-            skipped.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-      }
-      const summaries = listSourceSummaries(ctx.db()).filter((s) => added.includes(s.id));
-      return { added: summaries, skipped };
+      return addFiles(result.canceled ? [] : result.filePaths);
+    },
+    'library.addPaths': async ({ paths }) => {
+      const result = await addFiles(z.array(z.string()).max(200).parse(paths));
+      // dropped anywhere on the window: the Library may not be the screen that is open
+      if (result.skipped.length) ctx.emit('app.toast', { kind: 'error', message: result.skipped.join(' ') });
+      return result;
+    },
+    'library.stop': ({ sourceId }) => {
+      ctx.ingestion().stop(sourceId);
+      return undefined;
+    },
+    'library.openOriginal': async ({ sourceId }) => {
+      const stored = getSource(ctx.db(), sourceId)?.path;
+      if (!stored) throw new Error('This source has no file: it was pasted or comes from a session.');
+      // shell.openPath answers with a message when it fails, and with nothing when the file opened
+      const problem = await shell.openPath(join(ctx.paths().sources, stored));
+      if (problem) throw new Error('The stored copy of this source could not be opened.');
+      return null;
     },
     'library.run': ({ sourceId }) => {
       ctx.ingestion().start(sourceId);

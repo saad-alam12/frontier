@@ -1,4 +1,5 @@
 import { Toasts } from './components/Toasts';
+import { useWindowFileDrop } from './lib/fileDrop';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
@@ -129,6 +130,12 @@ export function App() {
     setPracticeSet(setId);
     setScreen('today');
   };
+  // files dropped anywhere on the window go to the Library and are read
+  const droppingFiles = useWindowFileDrop((paths) => {
+    void call('library.addPaths', { paths }).then((result) => {
+      if (result.added.length) navigateRef.current('library');
+    });
+  });
   const openTrail = (sessionId: string) => {
     setTrailId(sessionId);
     setScreen('trails');
@@ -199,6 +206,11 @@ export function App() {
             navigate('session');
           }}
         />
+      )}
+      {droppingFiles && (
+        <div className="drop-overlay" aria-hidden="true">
+          <span>Drop to add to your library</span>
+        </div>
       )}
       <Toasts />
     </div>

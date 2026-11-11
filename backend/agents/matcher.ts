@@ -62,7 +62,7 @@ export function formatMatchQueries(queries: MatchQuery[]): string {
 }
 
 /** Returns one decision per query; queries with no candidates are decided as new without a model call. */
-export async function runMatcher(provider: LlmProvider, queries: MatchQuery[]): Promise<MatchDecision[]> {
+export async function runMatcher(provider: LlmProvider, queries: MatchQuery[], signal?: AbortSignal): Promise<MatchDecision[]> {
   const askable = queries.filter((q) => q.candidates.length > 0);
   const decisions: MatchDecision[] = queries.filter((q) => q.candidates.length === 0).map((q) => ({ tempId: q.tempId, match: null, confidence: 1, reasoning: 'no candidates' }));
   if (askable.length === 0) return decisions;
@@ -71,6 +71,7 @@ export async function runMatcher(provider: LlmProvider, queries: MatchQuery[]): 
     system: loadPrompt('matcher'),
     messages: [{ role: 'user', content: `Decide identity for each new node.\n\n${formatMatchQueries(askable)}` }],
     submit: { name: 'submit_matches', description: 'Submit one identity decision per new node.', schema: buildMatchSchema(askable) },
+    signal,
   });
   return [...decisions, ...result.data.decisions];
 }

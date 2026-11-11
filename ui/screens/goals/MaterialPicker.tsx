@@ -45,6 +45,8 @@ export function MaterialPicker({ materials, onChange, big }: { materials: Materi
       onDragLeave={() => setDragging(false)}
       onDrop={(e) => {
         e.preventDefault();
+        // these files are material for this goal: the window's own drop (which adds to the Library) must not take them too
+        e.stopPropagation();
         setDragging(false);
         const paths = [...e.dataTransfer.files].map((f) => window.frontier.pathForFile(f)).filter(Boolean);
         if (paths.length) void add(() => call('materials.addPaths', { paths }));

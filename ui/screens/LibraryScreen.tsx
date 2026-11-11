@@ -55,9 +55,18 @@ export function LibraryScreen() {
     void refresh();
     return onEvent('library.progress', (p) => {
       void refresh();
-      if (p.message) setNotice(p.message);
+      // "Part 2 failed: <what the model service said>": the part stays, the reason is put in plain words
+      if (p.message) setNotice(p.message.replace(/^(Part \d+ failed): ([\s\S]*)$/, (_all, part: string, why: string) => `${part}. ${plainError(why)}`));
     });
   }, [refresh]);
+
+  // the time left on a source being read is a guess that runs down: ask again while one is read
+  const reading = sources.some((s) => s.queued);
+  useEffect(() => {
+    if (!reading) return;
+    const timer = window.setInterval(() => void refresh(), 4000);
+    return () => window.clearInterval(timer);
+  }, [reading, refresh]);
 
   useEffect(() => {
     if (!selected) {
@@ -149,10 +158,8 @@ export function LibraryScreen() {
 
   const aside = (
     <>
-      <div className="section-head">
-        <h2 className="t-title">Sources</h2>
-        {addButton}
-      </div>
+      <h2 className="t-title">Sources</h2>
+      {addButton}
       {notice && <Notice error>{notice}</Notice>}
       <ul className="list-card">
         {sources.map((s) => (
@@ -160,7 +167,7 @@ export function LibraryScreen() {
             <button type="button" className="row" onClick={() => setSelected(s.id)} aria-current={s.id === selected ? 'true' : undefined}>
               <span className="flex min-w-0 flex-col">
                 <span className={'truncate ' + (s.id === selected ? 'font-medium text-text' : 'text-soft')}>{s.title}</span>
-                <span className="t-small text-muted">{s.readsIdeas ? `${s.nodeCount} ideas · ${STATUS_LABEL[s.status]}` : `Kept as ${s.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}</span>
+                <span className="t-small text-muted">{s.readsIdeas ? `${s.nodeCount} ideas · ${s.stopped ? 'Stopped' : STATUS_LABEL[s.status]}` : `Kept as ${s.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}</span>
               </span>
               {s.readsIdeas && s.chunkCount > 0 && <Meter value={s.chunksDone / s.chunkCount} accent={s.status === 'running'} />}
             </button>
@@ -185,16 +192,35 @@ export function LibraryScreen() {
             )}
             {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
             {!current.readsIdeas && <p className="t-lead m-0">Kept as {current.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')} for your goals: used for style, scope and practice, not read into ideas.</p>}
-            {current.error && <Notice error>{current.error}</Notice>}
+            {current.readsIdeas && current.queued && (
+              <p className="t-small m-0 text-secondary" role="status">
+                {readingLine(current)}
+              </p>
+            )}
+            {current.error && (current.stopped ? <Notice>{current.error}</Notice> : <Notice error>{current.error}</Notice>)}
             {current.readsIdeas && current.readOld && current.status !== 'running' && (
               <Notice>Read the old way, into many small ideas. Read it again to get a few lesson-sized ones: ideas you have studied stay, and goals that use it are mapped again.</Notice>
             )}
             {reread?.sourceId === current.id && (reread.error ? <Notice error>{reread.text}</Notice> : current.status !== 'done' && <p className="t-small m-0 text-secondary">{reread.text}</p>)}
             <div className="button-row">
-              {current.readsIdeas && current.status !== 'running' && current.chunksDone < current.chunkCount && <Button onClick={() => void call('library.run', { sourceId: current.id })}>Run again</Button>}
+              {current.queued && (
+                <Button onClick={() => void call('library.stop', { sourceId: current.id }).then(refresh)} title="What was read so far stays. The rest waits until you run it again.">
+                  Stop reading
+                </Button>
+              )}
+              {current.readsIdeas && !current.queued && current.status !== 'running' && current.chunksDone < current.chunkCount && (
+                <Button kind={current.stopped ? 'primary' : 'secondary'} onClick={() => void call('library.run', { sourceId: current.id }).then(refresh)}>
+                  Run again
+                </Button>
+              )}
               {current.readsIdeas && current.chunkCount > 0 && current.status !== 'running' && current.status !== 'pending' && (
                 <Button kind={current.readOld ? 'primary' : 'quiet'} onClick={() => void readAgain(current.id)}>
                   Read again
+                </Button>
+              )}
+              {current.path && (
+                <Button kind="quiet" onClick={() => void call('library.openOriginal', { sourceId: current.id }).catch((e: unknown) => setNotice(plainError(e instanceof Error ? e.message : String(e))))}>
+                  Open original
                 </Button>
               )}
               <Button kind="quiet" onClick={() => void remove(current.id)}>
@@ -226,9 +252,13 @@ export function LibraryScreen() {
                 {current.chunks.map((c) => (
                   <li key={c.idx} className="row">
                     <span className="truncate text-soft">{c.locator || `Part ${c.idx + 1}`}</span>
-                    <span className="t-small shrink-0 text-muted">
-                      {c.status === 'done' ? `${c.nodeCount} ideas` : STATUS_LABEL[c.status]}
-                      {c.error && <span className="block text-danger">{c.error}</span>}
+                    <span className="t-small min-w-0 text-right text-muted">
+                      {c.status === 'done' ? `${c.nodeCount} ideas` : c.status === 'failed' ? 'Failed' : STATUS_LABEL[c.status]}
+                      {c.error && (
+                        <span className="block text-danger" title={c.error}>
+                          {plainError(c.error)}
+                        </span>
+                      )}
                     </span>
                   </li>
                 ))}
@@ -291,6 +321,15 @@ function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; hig
       <span className={`t-small ${CLASS_TONE[item.cls]}`}>{CLASS_LABEL[item.cls]}</span>
     </li>
   );
+}
+
+/** What a source being read says about itself: its turn, its part and about how long it still takes. */
+function readingLine(source: SourceSummary): string {
+  if (source.secondsLeft === null) return 'Waiting its turn: other sources are being read first.';
+  const part = source.chunkCount > 1 ? ` Part ${Math.min(source.chunkCount, source.chunksDone + 1)} of ${source.chunkCount}.` : '';
+  const left = source.secondsLeft;
+  if (left <= 0) return `Reading.${part} It is taking longer than usual.`;
+  return `Reading.${part} About ${left < 50 ? `${Math.max(10, Math.round(left / 10) * 10)} seconds` : left < 100 ? 'a minute' : `${Math.round(left / 60)} minutes`} left.`;
 }
 
 /** "en.wikipedia.org" for the line that says where a source came from. */
