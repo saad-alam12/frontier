@@ -34,7 +34,8 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   grader: { model: 'claude-sonnet-5-5', effort: 'high' },
   extractor: { model: 'claude-haiku-5-5', effort: 'medium' },
   matcher: { model: 'claude-haiku-5-5', effort: 'max' },
-  planner: { model: 'claude-haiku-5-5', effort: 'max' },
+  // the learner waits on the plan when they press Start session; max was many times slower for the same pick
+  planner: { model: 'claude-haiku-5-5', effort: 'medium' },
   librarian: { model: 'claude-haiku-5-5', effort: 'medium' },
   // The learner waits on both: a session they described, a flashcard drafted from a selection.
   sessionPlanner: { model: 'claude-opus-5-5', effort: 'medium' },
@@ -42,23 +43,42 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   connectionTest: { model: 'claude-haiku-5-5', effort: 'medium' },
 };
 
-export const SettingsSchema = z.object({
-  provider: z.enum(['agentSdk', 'anthropicApi']).default('agentSdk'),
-  apiKey: z.string().default(''),
+/** One definition per field; `SettingsSchema` adds the defaults, a patch has none. */
+const FIELDS = {
+  provider: z.enum(['agentSdk', 'anthropicApi']),
+  apiKey: z.string(),
   /** Per-role model overrides; absent or empty means the default. */
-  models: z.partialRecord(z.enum(ROLES), z.string()).default({}),
+  models: z.partialRecord(z.enum(ROLES), z.string()),
   /** Per-role effort overrides; absent means the default. */
-  efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS)).default({}),
+  efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS)),
   /** Absolute path of the data folder (database, sources, exports). Empty means the default. */
-  dataFolder: z.string().default(''),
-  concurrency: z.number().int().min(1).max(8).default(3),
+  dataFolder: z.string(),
+  concurrency: z.number().int().min(1).max(8),
+};
+
+export const SettingsSchema = z.object({
+  provider: FIELDS.provider.default('agentSdk'),
+  apiKey: FIELDS.apiKey.default(''),
+  models: FIELDS.models.default({}),
+  efforts: FIELDS.efforts.default({}),
+  dataFolder: FIELDS.dataFolder.default(''),
+  concurrency: FIELDS.concurrency.default(3),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
-/** A patch; `null` for a role's effort goes back to the default. */
-export const SettingsPatchSchema = SettingsSchema.partial().extend({
+/**
+ * A patch holds only the fields that change; `null` for a role's effort goes back to the default. It
+ * is built without the defaults on purpose: a patch that filled in defaults would reset every field
+ * it does not name (the provider, the key and the data folder with any other change).
+ */
+export const SettingsPatchSchema = z.strictObject({
+  provider: FIELDS.provider.optional(),
+  apiKey: FIELDS.apiKey.optional(),
+  models: FIELDS.models.optional(),
   efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS).nullable()).optional(),
+  dataFolder: FIELDS.dataFolder.optional(),
+  concurrency: FIELDS.concurrency.optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
@@ -84,4 +104,24 @@ export function modelChoice(settings: Settings, role: Role): ModelChoice {
   const wanted = settings.efforts[role] ?? (model === fallback.model ? fallback.effort : (KNOWN_MODELS.find((m) => m.id === model)?.defaultEffort ?? 'high'));
   const allowed = effortsFor(model);
   return { model, effort: allowed.includes(wanted) ? wanted : (allowed[allowed.length - 1] ?? 'high') };
+}
+
+/**
+ * Read settings from a parsed file that does not pass as a whole: every field (and every role entry)
+ * that is valid is kept, the rest fall back to their defaults. One stale entry must never cost the
+ * learner their provider, key and data folder.
+ */
+export function salvageSettings(raw: unknown): Settings {
+  const input = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+  const kept: Record<string, unknown> = {};
+  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency'] as const) {
+    const parsed = FIELDS[key].safeParse(input[key]);
+    if (parsed.success) kept[key] = parsed.data;
+  }
+  const entries = (value: unknown, valid: (role: string, v: unknown) => boolean) =>
+    Object.fromEntries(Object.entries(typeof value === 'object' && value !== null ? value : {}).filter(([role, v]) => valid(role, v)));
+  const isRole = (role: string) => (ROLES as readonly string[]).includes(role);
+  kept['models'] = entries(input['models'], (role, v) => isRole(role) && typeof v === 'string');
+  kept['efforts'] = entries(input['efforts'], (role, v) => isRole(role) && (EFFORTS as readonly unknown[]).includes(v));
+  return SettingsSchema.parse(kept);
 }
