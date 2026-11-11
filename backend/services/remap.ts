@@ -75,6 +75,7 @@ export async function proposeRemap(options: CompileOptions, goalId: string): Pro
     capabilities: result.capabilities,
     newNodes: result.newNodes,
     backgroundGoal: request.kind === 'simplify' ? result.backgroundGoal : null,
+    sources: goal.compiledSources,
   };
   const answered = new Set(fresh.map((g) => key(g.name)));
   transaction(db, () => {
@@ -181,7 +182,8 @@ function applyProposal(db: Database, goal: Goal, proposal: RemapProposal): void 
     db,
     goal,
     { title: proposal.title, level: proposal.level, scope: proposal.scope, coverage: undefined, capabilities: proposal.capabilities, extend: [], retire: [], newNodes: proposal.newNodes },
-    goal.compiledSources,
+    // only what the proposal saw: a lecture compiled since it was drawn is compiled again, onto the new map
+    proposal.sources ?? goal.compiledSources,
     { replace: true },
   );
 }

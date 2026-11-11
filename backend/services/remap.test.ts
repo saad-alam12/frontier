@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
 import { openDatabase } from '../store/db';
-import { addCapabilities, getGoal, listCapabilities, listTargets, markCompiled, requestRemap } from '../store/goals';
+import { addCapabilities, getGoal, listCapabilities, listTargets, markCompiled, requestRemap, setMaterials } from '../store/goals';
+import { createSource, updateSourceStatus } from '../store/sources';
+import { retireNodes } from '../store/world';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { approveGoalPlan, createGoalFromForm } from './goals';
 import { nextGoalStep } from './goalWorker';
@@ -106,5 +108,58 @@ describe('re-map proposals', () => {
     requestRemap(db, goal.id);
     expect(nextGoalStep(db, goal.id)).toBe('remap');
     refreshGoalFields(db);
+  });
+});
+
+describe('a proposal that waited while the goal moved on', () => {
+  /** A read source the goal uses as teaching material. */
+  function lecture(db: ReturnType<typeof openDatabase>, goalId: string, title: string, others: string[] = []) {
+    const source = createSource(db, { kind: 'markdown', title, path: null, hash: title }, [{ text: 'text', locator: 'start' }]);
+    updateSourceStatus(db, source.id, { status: 'done' });
+    setMaterials(db, goalId, [...others, source.id].map((sourceId) => ({ sourceId, role: 'teaching' as const })));
+    return source.id;
+  }
+
+  it('material compiled after the proposal was drawn is compiled again onto the new map, not lost', async () => {
+    const { db, id, goal } = setup();
+    const lecture4 = lecture(db, goal.id, 'Lecture 4');
+    markCompiled(db, goal.id, null, [lecture4]);
+    requestRemap(db, goal.id);
+    const compiler = remapCompiler(id);
+    await proposeRemap({ db, provider: new FakeProvider({ goalCompiler: (req: CompleteRequest<unknown>) => ({ ...compiler(req), coverage: 'complete' }) }) }, goal.id);
+
+    // lecture 5 arrives while the proposal waits and is compiled into the old map
+    const lecture5 = lecture(db, goal.id, 'Lecture 5', [lecture4]);
+    addCapabilities(db, goal.id, [{ statement: 'Can solve sequential games', targets: [{ nodeId: id('backwardInduction'), depth: 3 }] }]);
+    markCompiled(db, goal.id, null, [lecture4, lecture5]);
+    expect(nextGoalStep(db, goal.id)).toBeNull();
+
+    approveRemap(db, goal.id);
+    expect(getGoal(db, goal.id)?.compiledSources).toEqual([lecture4]); // the proposal never saw lecture 5
+    expect(nextGoalStep(db, goal.id)).toBe('compile'); // so it is compiled again, onto the new map
+  });
+
+  it('still applies when one of its ideas is gone, and a skill left with no idea is skipped', async () => {
+    const { db, id, goal } = setup();
+    requestRemap(db, goal.id);
+    await proposeRemap(
+      { db, provider: new FakeProvider({ goalCompiler: () => ({
+        title: 'Games',
+        level: 'intuition',
+        scope: 'The big picture.',
+        capabilities: [
+          { statement: 'Can explain a stable pair of choices', targets: [{ ref: id('nash'), depth: 2, core: true }, { ref: id('dominant'), depth: 2, core: false }] },
+          { statement: 'Can remove dominated strategies', targets: [{ ref: id('iesds'), depth: 2, core: false }] },
+        ],
+        newNodes: [],
+        backgroundGoal: null,
+      }) }) },
+      goal.id,
+    );
+    retireNodes(db, [id('dominant'), id('iesds')]); // their source was read again and no longer gives them
+    expect(() => remapView(db, goal.id)).not.toThrow();
+    approveRemap(db, goal.id);
+    expect(listCapabilities(db, goal.id).map((c) => c.statement)).toEqual(['Can explain a stable pair of choices']);
+    expect(listTargets(db, goal.id, { all: true }).map((t) => t.nodeId)).toEqual([id('nash')]);
   });
 });

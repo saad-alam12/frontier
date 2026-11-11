@@ -211,6 +211,13 @@ export interface RemapProposal {
   newNodes: { tempId: string; kind: NodeKind; name: string; statement: string }[];
   /** A separate goal for a missing foundation the time cannot cover. */
   backgroundGoal: { text: string; hours: number } | null;
+  /**
+   * The sources the goal had compiled when this map was drawn. Material that arrives while the
+   * proposal waits is compiled into the old map; approving replaces that map, so only these sources
+   * count as compiled afterwards and the newer material is compiled again, onto the new map.
+   * Absent on proposals stored before this was recorded.
+   */
+  sources?: string[];
 }
 
 /** What the learner changed that asks for a new map: the context, or how deep they want to go (or a time instead). */

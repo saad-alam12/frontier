@@ -404,7 +404,10 @@ export function applyCompile(db: Database, goal: Goal, result: CompileOutput, so
     return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
   });
   if (created.length) createUnverifiedNodes(db, created);
-  const resolve = (targets: { ref: string; depth: number; core: boolean }[]) => dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })));
+  // an idea named by a map that waited (a proposal) may be gone since: erased, or retired when its source was read again
+  const present = getNodes(db, [...result.capabilities, ...result.extend].flatMap((c) => c.targets.map((t) => tempToId.get(t.ref) ?? t.ref)));
+  const resolve = (targets: { ref: string; depth: number; core: boolean }[]) =>
+    dedupeTargets(targets.map((t) => ({ nodeId: tempToId.get(t.ref) ?? t.ref, depth: t.depth as Depth, core: t.core })).filter((t) => present.has(t.nodeId)));
   // a new map keeps what the learner asked to add: a capability on an idea they asked for carries
   // their words (and so the weight) over from the capability it replaces
   const askedFor = new Map<string, string>();
@@ -421,6 +424,7 @@ export function applyCompile(db: Database, goal: Goal, result: CompileOutput, so
   for (const e of result.extend) if (!result.retire.includes(e.capabilityId)) addTargets(db, e.capabilityId, resolve(e.targets));
   for (const c of result.capabilities) {
     const targets = resolve(c.targets);
+    if (targets.length === 0) continue; // every idea it named is gone
     const request = targets.map((t) => askedFor.get(t.nodeId)).find((r) => r !== undefined) ?? null;
     addCapabilities(db, goalId, [{ statement: c.statement, targets }], request);
   }
