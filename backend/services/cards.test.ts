@@ -10,7 +10,7 @@ import { openDatabase } from '../store/db';
 import { addCapabilities, createGoal } from '../store/goals';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { createSession, endSession } from '../store/sessions';
-import { cardQueue, cardSummary, creditRecalledCards, listCardViews, queueIdeaCards, reviewCard, saveCard, settleCardWriting, suspendCard, writeCardsForIdea } from './cards';
+import { cardQueue, cardSummary, creditRecalledCards, listCardViews, queueIdeaCards, reviewCard, saveCard, settleCardWriting, suspendCard, undoReview, writeCardsForIdea } from './cards';
 import { eraseFromMap, previewErase } from './erase';
 
 function setup() {
@@ -92,6 +92,37 @@ describe('flashcards', () => {
     expect(done.card).toBeNull();
     expect(done.nextDue).not.toBeNull();
     expect(done.total).toBe(2);
+  });
+
+  it('takes back the rating just given: the card is as it was and is shown again', () => {
+    const { db, id } = setup();
+    const a = saveCard(db, { front: 'What does BR stand for?', back: 'Best response', nodeIds: [id('bestResponse')] });
+    const b = saveCard(db, { front: 'What does NE stand for?', back: 'Nash equilibrium', nodeIds: [id('nash')] });
+    const before = cardQueue(db, null, noon(2));
+    const first = before.card?.id as string;
+    const other = first === a.id ? b.id : a.id;
+    reviewCard(db, first, 4, noon(2)); // meant to press Again
+    expect(cardQueue(db, null, noon(2, 1)).card?.id).toBe(other);
+    undoReview(db, first, noon(2, 1));
+    const back = cardQueue(db, null, noon(2, 1), first);
+    expect(back.card?.id).toBe(first);
+    expect(back.card).toMatchObject({ phase: 'new', reps: 0 });
+    expect(back.left).toEqual(before.left);
+    expect(reviewsByCard(db).get(first) ?? []).toEqual([]);
+    // nothing more to take back; and a rating is only taken back for a while
+    expect(() => undoReview(db, first, noon(2, 1))).toThrow(/no longer/);
+    reviewCard(db, first, 3, noon(2, 2));
+    expect(() => undoReview(db, first, noon(2, 30))).toThrow(/no longer/);
+    expect(reviewsByCard(db).get(first)).toHaveLength(1);
+  });
+
+  it('never takes back a review a session gave', () => {
+    const { db, id } = setup();
+    const a = saveCard(db, { front: 'What does BR stand for?', back: 'Best response', nodeIds: [id('bestResponse')] });
+    reviewCard(db, a.id, 3, noon(1));
+    creditRecalledCards(db, [a.id], { source: 'session', sessionId: null }, noon(2));
+    expect(() => undoReview(db, a.id, noon(2, 1))).toThrow(/no longer/);
+    expect(reviewsByCard(db).get(a.id)).toHaveLength(2);
   });
 
   it('filters by goal, idea and words', () => {

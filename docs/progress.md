@@ -176,6 +176,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] B3 add from a link: a web page, a PDF or a text file by its address. A video link asks for its transcript, pasted from the video's page, and keeps it by the minute. Fetching video transcripts automatically is not built (see Open questions)
 - [x] D26 a log file for errors of calls and background work, with "Show log" in Settings
 - [x] C5 (part) a misconception ends after two clean answers about its idea, one of them at least half a day later; seen again, it is open again. Still open: recognising a repeat by meaning, a Misconceptions view, contrast problems scheduled because of one
+- [x] A5 flashcard review: undo the last rating (⌘Z), "Card 3 of 12", one summary line at the end
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -305,6 +306,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 A5): Flashcard review comfort. `cards.undoReview` removes a card's latest review when it is a Cards-screen rating from the last ten minutes (`removeLatestScreenReview`); a review a session or practice gave is never removed. This is the one place a review is deleted: a mis-pressed key is not something the learner did, and a card's schedule is the replay of its reviews, so removing the row is the whole undo. The queue then shows that card first, with its answer showing. The position counts this sitting's ratings ("Card 3 of 12"; a card rated Again comes back and is counted again). The end line counts each card once, by its last rating. Checked in the running app. Design §2.6 and §10 updated.
 
 - 2026-11-11 (R7 C5, first part): Misconceptions end. `core/bugs.ts` `hasEnded`: two direct passing answers about the idea (`reviewRole` direct, score at or above the pass mark) after the misconception was last seen, at least one of them 12 hours or more after. `services/bugs.ts` `afterAnswer` is now the one writer of the bugs table and replaces three copies of "seen before? mark it, else record it" (session, practice, probe): an answer that shows a misconception records or re-opens it, dated when the learner answered; an answer that shows none closes the idea's misconceptions that have ended. Until now `resolveBug` was never called, so the lists only grew. Matching is still by the exact sentence (recognising a repeat by meaning is for the next session). Design §5.2 updated.
 

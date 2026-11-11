@@ -13,23 +13,7 @@ import type { CardOrigin, CardPhase, CardRating, CardReview, IdeaFinished, Revie
 import type { Goal } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { listActivity } from '../store/activity';
-import {
-  cardsForNodes,
-  cardsWithoutGoal,
-  countAutoCards,
-  createCard,
-  deleteCard,
-  getCard,
-  getGoalCardSettings,
-  insertReview,
-  listCards,
-  listReviewsSince,
-  reviewsByCard,
-  saveGoalCardSettings,
-  setCardsWithoutGoal,
-  setSuspended,
-  updateCard,
-} from '../store/cards';
+import { cardsForNodes, cardsWithoutGoal, countAutoCards, createCard, deleteCard, getCard, getGoalCardSettings, insertReview, listCards, listReviewsSince, reviewsByCard, saveGoalCardSettings, setCardsWithoutGoal, setSuspended, updateCard, removeLatestScreenReview } from '../store/cards';
 import type { CardRecord, GoalCardSettings } from '../store/cards';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
@@ -142,13 +126,16 @@ function firstReviewsOnScreen(all: Scheduled[]): (string | null)[] {
   return all.map((s) => (s.reviews[0]?.source === 'review' ? s.reviews[0].at : null));
 }
 
-/** The review queue for all goals or one: the card to show now and what is left. */
-export function cardQueue(db: Database, goalId: string | null, now = new Date()): CardQueueView {
+/**
+ * The review queue for all goals or one: the card to show now and what is left. With `firstId` that
+ * card is shown now if it is in the queue (a rating that was just taken back).
+ */
+export function cardQueue(db: Database, goalId: string | null, now = new Date(), firstId?: string): CardQueueView {
   const all = scheduled(db);
   const inView = all.filter((s) => goalId === null || s.record.goalId === goalId);
   const active = inView.filter((s) => s.record.suspendedAt === null);
   const queue = reviewQueue(active, now, introducedSince(firstReviewsOnScreen(all), dayStart(now)));
-  const first = queue.cards[0];
+  const first = queue.cards.find((c) => c.id === firstId) ?? queue.cards[0];
   const { names, goals } = lookups(db, first ? [first.record] : []);
   const start = dayStart(now).toISOString();
   return {
@@ -180,6 +167,14 @@ export function reviewCard(db: Database, cardId: string, rating: CardRating, now
   if (!card) throw new Error('That card no longer exists.');
   if (card.suspendedAt) throw new Error('That card is suspended.');
   insertReview(db, cardId, { rating, source: 'review' }, now.toISOString());
+}
+
+/** How long a rating on the Cards screen can be taken back. */
+export const UNDO_REVIEW_MS = 10 * 60_000;
+
+/** Take back the rating just given to a card (a mis-pressed key): the card is as it was before it. */
+export function undoReview(db: Database, cardId: string, now = new Date()): void {
+  if (!removeLatestScreenReview(db, cardId, new Date(now.getTime() - UNDO_REVIEW_MS).toISOString())) throw new Error('That rating can no longer be taken back.');
 }
 
 /**

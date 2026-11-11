@@ -99,6 +99,8 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** This sitting: the ratings given so far, newest last. The last one can be taken back. */
+  const [rated, setRated] = useState<{ cardId: string; rating: CardRating }[]>([]);
 
   const load = useCallback(async () => {
     setQueue(await call('cards.queue', { goalId }));
@@ -120,6 +122,7 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
       setError(null);
       try {
         setQueue(await call('cards.review', { cardId: card.id, rating, goalId }));
+        setRated((all) => [...all, { cardId: card.id, rating }]);
         setShown(false);
       } catch (e) {
         setError(plainError(e instanceof Error ? e.message : String(e)));
@@ -129,6 +132,37 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
     },
     [card, busy, goalId],
   );
+
+  const last = rated[rated.length - 1] ?? null;
+  /** Take back the last rating (a mis-pressed key): its card comes back with the answer showing. */
+  const undo = useCallback(async () => {
+    if (!last || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setQueue(await call('cards.undoReview', { cardId: last.cardId, goalId }));
+      setRated((all) => all.slice(0, -1));
+      setShown(true);
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  }, [last, busy, goalId]);
+
+  useEffect(() => {
+    if (!last) return;
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof Element && e.target.closest('input, textarea, select, dialog') !== null;
+      if (typing || document.querySelector('dialog[open]') !== null) return;
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        void undo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [last, undo]);
 
   useEffect(() => {
     if (!card) return;
@@ -159,13 +193,13 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
       </Empty>
     );
   }
-  if (!card) return <Finished queue={queue} onBrowse={onBrowse} onWrite={onWrite} />;
+  if (!card) return <Finished queue={queue} rated={rated} error={error} onUndo={last ? () => void undo() : null} onBrowse={onBrowse} onWrite={onWrite} />;
 
   const now = Date.now();
   return (
     <div className="review">
       <div className="t-small text-muted" aria-live="polite">
-        {[queue.left.due ? `${queue.left.due} to review` : null, queue.left.new ? `${queue.left.new} new` : null].filter(Boolean).join(' · ')}
+        {[`Card ${rated.length + 1} of ${rated.length + queue.left.due + queue.left.new}`, queue.left.new ? `${queue.left.new} new` : null].filter(Boolean).join(' · ')}
       </div>
       <article className="review-card" key={card.id} aria-label="Flashcard">
         <div className="review-meta">
@@ -211,19 +245,51 @@ function Review({ goalId, onWrite, onBrowse, onEdit }: { goalId: string | null; 
       {error && <Notice error>{error}</Notice>}
       <div className="review-foot">
         <span>{shown ? 'How well did you know it? Each button says when the card comes back.' : 'Answer it in your head first, then look.'}</span>
-        <button type="button" className="link-button" onClick={() => onEdit(card)}>
-          Edit card
-        </button>
+        <span className="flex shrink-0 items-center gap-[14px]">
+          {last && (
+            <button type="button" className="link-button" disabled={busy} title="Take back the last rating (⌘Z)" onClick={() => void undo()}>
+              Undo last rating
+            </button>
+          )}
+          <button type="button" className="link-button" onClick={() => onEdit(card)}>
+            Edit card
+          </button>
+        </span>
       </div>
     </div>
   );
 }
 
+/** What this sitting came to, in one line: "12 cards reviewed: 9 known, 3 to see again." */
+function sittingLine(rated: { cardId: string; rating: CardRating }[]): string | null {
+  if (rated.length === 0) return null;
+  // a card rated Again comes back in the same sitting: it counts once, by its last rating
+  const lastRating = new Map(rated.map((r) => [r.cardId, r.rating]));
+  const again = [...lastRating.values()].filter((r) => r === 1).length;
+  const known = lastRating.size - again;
+  return `${plural(lastRating.size, 'card')} reviewed${again ? `: ${known} known, ${again} to see again` : ''}.`;
+}
+
 /** The queue is empty: what was done, and when the next card comes. */
-function Finished({ queue, onBrowse, onWrite }: { queue: CardQueueView; onBrowse: () => void; onWrite: () => void }) {
+function Finished({
+  queue,
+  rated,
+  error,
+  onUndo,
+  onBrowse,
+  onWrite,
+}: {
+  queue: CardQueueView;
+  rated: { cardId: string; rating: CardRating }[];
+  error: string | null;
+  /** Take back the last rating of this sitting, when there is one. */
+  onUndo: (() => void) | null;
+  onBrowse: () => void;
+  onWrite: () => void;
+}) {
   const next = queue.nextDue ? new Date(queue.nextDue).getTime() - Date.now() : null;
   const lines = [
-    queue.reviewedToday ? `You reviewed ${plural(queue.reviewedToday, 'card')} today.` : null,
+    sittingLine(rated) ?? (queue.reviewedToday ? `You reviewed ${plural(queue.reviewedToday, 'card')} today.` : null),
     next !== null ? `The next one comes back in ${formatInterval(next)}.` : null,
     queue.newWaiting ? `${plural(queue.newWaiting, 'new card')} wait${queue.newWaiting === 1 ? 's' : ''} for tomorrow.` : null,
   ].filter(Boolean);
@@ -236,7 +302,13 @@ function Finished({ queue, onBrowse, onWrite }: { queue: CardQueueView; onBrowse
         <h2 className="t-heading">{queue.reviewedToday ? 'Done for now' : 'Nothing to review right now'}</h2>
         {lines.length > 0 && <p className="text-secondary">{lines.join(' ')}</p>}
       </div>
+      {error && <Notice error>{error}</Notice>}
       <div className="button-row">
+        {onUndo && (
+          <Button onClick={onUndo} title="Take back the last rating (⌘Z)">
+            Undo last rating
+          </Button>
+        )}
         <Button onClick={onBrowse}>See all cards</Button>
         <Button kind="quiet" onClick={onWrite}>
           Write a card

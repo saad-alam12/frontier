@@ -218,6 +218,8 @@ export interface ApiMethods {
   'cards.queue': { input: { goalId: string | null }; output: CardQueueView };
   /** Rate a card on the Cards screen; returns the queue after it. */
   'cards.review': { input: { cardId: string; rating: CardRating; goalId: string | null }; output: CardQueueView };
+  /** Take back the rating just given to this card; it is shown again. */
+  'cards.undoReview': { input: { cardId: string; goalId: string | null }; output: CardQueueView };
   /** Every card, newest first, filtered by goal, idea and words (All cards, an idea's card on the map). */
   'cards.list': { input: CardListFilter; output: CardListView };
   /** Create a card the learner wrote or adjusted, or save an edit. */

@@ -147,6 +147,17 @@ export function insertReview(db: Database, cardId: string, review: { rating: Car
   db.prepare('INSERT INTO card_reviews (id, card_id, at, rating, source, session_id) VALUES (?, ?, ?, ?, ?, ?)').run(newId('rev'), cardId, at, review.rating, review.source, review.sessionId ?? null);
 }
 
+/**
+ * Take back a card's latest review, when it was a rating on the Cards screen given at or after
+ * `since`. A review a session or practice gave, or an older one, stays. True when one was removed.
+ */
+export function removeLatestScreenReview(db: Database, cardId: string, since: string): boolean {
+  const last = db.prepare('SELECT id, at, source FROM card_reviews WHERE card_id = ? ORDER BY at DESC, rowid DESC LIMIT 1').get(cardId) as { id: string; at: string; source: ReviewSource } | undefined;
+  if (!last || last.source !== 'review' || last.at < since) return false;
+  db.prepare('DELETE FROM card_reviews WHERE id = ?').run(last.id);
+  return true;
+}
+
 /** Every card's reviews, oldest first. */
 export function reviewsByCard(db: Database): Map<string, CardReview[]> {
   const rows = db.prepare('SELECT card_id, at, rating, source FROM card_reviews ORDER BY at, rowid').all() as { card_id: string; at: string; rating: CardRating; source: ReviewSource }[];

@@ -35,23 +35,7 @@ import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
-import {
-  ReviewInputSchema,
-  cardPreferences,
-  cardQueue,
-  cardStats,
-  cardSummary,
-  draftFor,
-  findIdeas,
-  goalCardSettings,
-  listCardViews,
-  removeCard,
-  reviewCard,
-  saveCard,
-  saveCardPreferences,
-  saveGoalCards,
-  suspendCard,
-} from '../services/cards';
+import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
@@ -326,6 +310,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
       reviewCard(ctx.db(), cardId, rating);
       cardsChanged(null);
       return cardQueue(ctx.db(), input.goalId);
+    },
+    'cards.undoReview': ({ cardId, goalId }) => {
+      undoReview(ctx.db(), z.string().parse(cardId));
+      cardsChanged(null);
+      return cardQueue(ctx.db(), goalId, new Date(), cardId);
     },
     'cards.list': (filter) => listCardViews(ctx.db(), filter),
     'cards.save': (input) => {
