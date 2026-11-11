@@ -6,6 +6,7 @@
  */
 import { allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from '../core/budget';
 import type { Allocation, GoalPlan, Pace, PlanGoal, PlanNode, PlanTarget } from '../core/budget';
+import { addDays, localDate } from '../core/dates';
 import { indexChains } from '../core/graph';
 import { centrality } from '../core/leverage';
 import { EXTRACTED_ROLES, OWNED_DEPTH } from '../core/types';
@@ -173,7 +174,9 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
     const goalId = capability?.goalId;
     if (!goalId || !goalIds.has(goalId) || !nodes.has(t.nodeId)) continue;
     const covered = coverCount.get(goalId)?.get(t.nodeId) ?? 0;
-    const cap = goalId === options.uncapped ? null : t.approvedDepth;
+    // previewing a new time lifts what the old time trimmed, but an idea that was simplified stays as it
+    // was learned until the learner goes deeper on it: the preview must show what saving will give
+    const cap = goalId === options.uncapped && !t.simplified ? null : t.approvedDepth;
     targets.push({
       goalId,
       capabilityId: t.capabilityId,
@@ -187,12 +190,17 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
   const targeted = new Set(targets.map((t) => t.nodeId));
   const depthOf = (id: string) => states.get(id)?.depth ?? 0;
   const planNodes = new Map<string, PlanNode>();
-  for (const id of targeted) {
+  // A premise outside every plan that still has to be owned first costs its time once, however many
+  // planned ideas rest on it: it is charged to the first idea that needs it (the most central first,
+  // since those are planned first), along the chain that adds the fewest premises not yet charged.
+  const centralityOf = new Map([...targeted].map((id) => [id, centrality(id, index)]));
+  const charged = new Set<string>();
+  for (const id of [...targeted].sort((a, b) => (centralityOf.get(b) ?? 0) - (centralityOf.get(a) ?? 0) || a.localeCompare(b))) {
     const node = nodes.get(id) as KnowledgeNode;
-    // premises outside every plan that still have to be owned first, along the cheapest chain in
-    const chains = index.into.get(id) ?? [];
-    const missing = chains.length ? Math.min(...chains.map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH).length)) : 0;
-    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centrality(id, index), premiseMinutes: missing * ideaMinutes('claim', 0, OWNED_DEPTH) });
+    const options = (index.into.get(id) ?? []).map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH && !charged.has(p)));
+    const fresh = options.sort((a, b) => a.length - b.length)[0] ?? [];
+    for (const p of fresh) charged.add(p);
+    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centralityOf.get(id) ?? 0, premiseMinutes: fresh.length * ideaMinutes('claim', 0, OWNED_DEPTH) });
   }
 
   const spent = spentByGoal(attributeTime(db));
@@ -318,6 +326,18 @@ export interface GoalProgress {
   speed: number;
 }
 
+/**
+ * The goal's rhythm: when it began, the minutes that were left of the budget then, and the minutes a
+ * week it asks for from there (null without a rhythm, and once the goal's date has passed).
+ */
+export function goalRhythm(db: Database, goal: Goal, shares = attributeTime(db).filter((s) => s.goalId === goal.id)): { start: string; left: number | null; weeklyTarget: number | null } {
+  const start = goal.rhythmAt ?? goal.approvedAt ?? goal.createdAt;
+  const total = goalBudgetMinutes(db, goal);
+  const spentBefore = shares.filter((s) => s.span.endedAt < start).reduce((s, x) => s + x.minutes, 0);
+  const left = total === null ? null : Math.max(0, total - spentBefore);
+  return { start, left, weeklyTarget: weeklyMinutes(goal.budget, left, start, goal.date) };
+}
+
 /** Where a goal stands against its budget and plan. */
 export function goalProgress(db: Database, goalId: string, now = new Date()): GoalProgress | null {
   const goal = getGoal(db, goalId);
@@ -331,13 +351,14 @@ export function goalProgress(db: Database, goalId: string, now = new Date()): Go
   const monday = startOfWeek(now).toISOString();
   const weekMinutes = shares.filter((s) => s.span.endedAt >= monday).reduce((s, x) => s + x.minutes, 0);
   const total = goalBudgetMinutes(db, goal);
-  const start = goal.approvedAt ?? goal.createdAt;
-  const weeklyTarget = weeklyMinutes(goal.budget, total, start, goal.date);
+  // the rhythm counts from when it began (approval, a new time, being taken up again), with the time that was left then
+  const { start, left, weeklyTarget } = goalRhythm(db, goal, shares);
+  const spentSinceStart = shares.filter((s) => s.span.endedAt >= start).reduce((s, x) => s + x.minutes, 0);
   const daysIn = Math.max(0, (now.getTime() - new Date(start).getTime()) / DAY_MS);
-  const expectedByNow = weeklyTarget !== null ? Math.min(total ?? Infinity, (weeklyTarget * daysIn) / 7) : null;
+  const expectedByNow = weeklyTarget !== null ? Math.min(left ?? Infinity, (weeklyTarget * daysIn) / 7) : null;
   const span = budgetSpanDays(goal.budget);
-  const endsOn = span !== null ? new Date(new Date(start).getTime() + span * DAY_MS).toISOString().slice(0, 10) : goal.date;
-  const pace = paceOf({ budgetMinutes: total, spentMinutes, learnedMinutes: learnedMinutes(goal, inputs.targets, inputs.nodes, inputs.states), expectedByNow, daysIn });
+  const endsOn = span !== null ? localDate(addDays(new Date(start), span)) : goal.date;
+  const pace = paceOf({ budgetMinutes: total, spentMinutes, spentSinceStart, learnedMinutes: learnedMinutes(goal, inputs.targets, inputs.nodes, inputs.states), expectedByNow, daysIn });
 
   // per resource: time on an idea is split between the goal's sources that cover it
   const teaching = listMaterials(db, goalId).filter((m) => EXTRACTED_ROLES.includes(m.role));

@@ -21,6 +21,7 @@ interface GoalRow {
   status: Goal['status'];
   created_at: string;
   approved_at: string | null;
+  rhythm_at: string | null;
   compiled_at: string | null;
   compiled_sources: string;
   exam_profile: string | null;
@@ -71,6 +72,7 @@ const toGoal = (r: GoalRow): Goal => ({
   status: r.status,
   createdAt: r.created_at,
   approvedAt: r.approved_at,
+  rhythmAt: r.rhythm_at,
   compiledAt: r.compiled_at,
   compiledSources: parseJson<string[]>(r.compiled_sources, []),
   examProfile: parseJson<ExamProfile | null>(r.exam_profile, null),
@@ -181,7 +183,18 @@ export function updateGoal(db: Database, id: string, patch: Partial<GoalInput> &
 
 /** The learner approved the plan: the draft becomes active and its clock starts. */
 export function approveGoal(db: Database, id: string): void {
-  db.prepare("UPDATE goals SET status = 'active', approved_at = COALESCE(approved_at, ?) WHERE id = ?").run(nowIso(), id);
+  const now = nowIso();
+  db.prepare("UPDATE goals SET status = 'active', approved_at = COALESCE(approved_at, ?), rhythm_at = COALESCE(rhythm_at, ?) WHERE id = ?").run(now, now, id);
+}
+
+/** The goal's rhythm starts again from now: it got a new time, or was taken up again after a pause. */
+export function restartRhythm(db: Database, id: string): void {
+  db.prepare('UPDATE goals SET rhythm_at = ? WHERE id = ?').run(nowIso(), id);
+}
+
+/** A new time replaces the time as given before, including the minutes that going deeper had added to it. */
+export function resetExtraMinutes(db: Database, id: string): void {
+  db.prepare('UPDATE goals SET extra_minutes = 0 WHERE id = ?').run(id);
 }
 
 export function saveCoverage(db: Database, id: string, coverage: Coverage): void {

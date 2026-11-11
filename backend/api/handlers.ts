@@ -1,3 +1,4 @@
+import { activeSession } from '../store/sessions';
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import { app, dialog, ipcMain, shell } from 'electron';
@@ -170,6 +171,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return detail(goalId);
     },
     'goals.remove': ({ goalId }) => {
+      if (activeSession(ctx.db())?.goalId === goalId) throw new Error('A session on this goal is open. End or finish it first, then remove the goal.');
       deleteGoal(ctx.db(), goalId);
       refreshGoalFields(ctx.db());
       return undefined;

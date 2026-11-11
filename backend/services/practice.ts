@@ -7,7 +7,6 @@ import { generateProblems } from '../agents/problemGenerator';
 import type { GeneratorSpec } from '../agents/problemGenerator';
 import { gradePractice } from '../agents/grader';
 import { ancestors } from '../core/graph';
-import { weeklyMinutes } from '../core/budget';
 import { leverageOf } from '../core/leverage';
 import { chooseMode, dailyMinutes, daysUntil, dueForecast, dueNodes, groupForPractice, mockExamSpecs, mockExamsOpen, specifyProblem } from '../core/scheduler';
 import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, ScheduleInput } from '../core/scheduler';
@@ -21,7 +20,7 @@ import { getGoal, listMaterials, listTargets } from '../store/goals';
 import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
 import type { AnswerRecord, PracticeKind } from '../store/practice';
 import { getSource, listChunks } from '../store/sources';
-import { goalBudgetMinutes } from './budget';
+import { goalRhythm } from './budget';
 import { cardsToJudge, creditRecalledCards } from './cards';
 import { normalizeGrade, recordEvidence } from './evidence';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
@@ -123,7 +122,7 @@ export function goalSchedule(db: Database, goalId: string, now = new Date()): Go
     mode: choice.mode,
     modeReason,
     modeValues: choice.value,
-    dailyMinutes: dailyMinutes(weeklyMinutes(goal.budget, goalBudgetMinutes(db, goal), goal.approvedAt ?? goal.createdAt, goal.date)),
+    dailyMinutes: dailyMinutes(goalRhythm(db, goal).weeklyTarget),
     daysToExam,
     mockOpen: mockExamsOpen(goal.assessment, examDate, now),
   };

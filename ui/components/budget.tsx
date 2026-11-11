@@ -374,7 +374,11 @@ export function paceSentence(progress: GoalProgress): { text: string; tone: 'cal
   // with no time limit there is no time to be behind or ahead of: the estimate simply follows the learner
   if (progress.noLimit) return null;
   if (pace.kind === 'behind_time') return { text: `You have put in ${formatHours(progress.spentMinutes)} of the ${formatHours(progress.expectedByNow ?? 0)} your rhythm planned by now. Less time means a smaller plan: find a slot this week, or change the time.`, tone: 'warn' };
-  if (pace.kind === 'slow') return { text: `Ideas are taking about ${(pace.ratio ?? 2).toFixed(1)}× the planned time. The plan has shrunk to fit; give the goal more time to keep its depth.`, tone: 'warn' };
+  if (pace.kind === 'slow') {
+    // with nothing learned yet there is no ratio to state
+    const how = pace.ratio === null ? `No idea has reached its planned depth in the ${formatHours(progress.spentMinutes)} so far.` : `Ideas are taking about ${pace.ratio.toFixed(1)}× the planned time.`;
+    return { text: `${how} The plan has shrunk to fit; give the goal more time to keep its depth.`, tone: 'warn' };
+  }
   if (pace.kind === 'fast') return { text: 'You are learning faster than planned, so the goal will finish early. To use the time, change it and the plan will go deeper.', tone: 'good' };
   if (pace.kind === 'on_track') return { text: 'On track.', tone: 'calm' };
   return null;

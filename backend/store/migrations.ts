@@ -408,6 +408,15 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 14,
+    // When the goal's current rhythm began: its approval, a new time, or being taken up again after a
+    // pause. "Behind" and the weekly target count from here, not from the first approval for good.
+    sql: `
+      ALTER TABLE goals ADD COLUMN rhythm_at TEXT;
+      UPDATE goals SET rhythm_at = approved_at;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

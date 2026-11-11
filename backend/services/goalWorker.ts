@@ -24,7 +24,10 @@ export function nextGoalStep(db: Database, goalId: string): 'read' | 'profile' |
   const profileSet = materials.filter((m) => m.role === 'assessment' || m.role === 'scope').map((m) => m.sourceId);
   if (!sameSet(profileSet, goal.profileSources)) return 'profile';
   const readable = extracted.filter((s) => getSource(db, s)?.status === 'done');
-  if (goal.compiledAt === null) return materials.length === 0 || readable.length > 0 ? 'compile' : null;
+  // Nothing is being read any more (see above). A goal never mapped is mapped now, also when it has
+  // no teaching material to read (only an exam or a syllabus) or its only file could not be read:
+  // waiting for material that may never come left the new-goal flow on "Mapping your goal" for good.
+  if (goal.compiledAt === null) return 'compile';
   if (readable.some((s) => !goal.compiledSources.includes(s))) return 'compile';
   // a draft changed after it was mapped: nothing is approved yet, so it is mapped again
   if (goal.status === 'draft' && goal.remap?.state === 'requested') return 'redraw';
@@ -99,7 +102,18 @@ export class GoalWorker {
 
   /** Recompile now even if nothing new arrived (the learner asked). */
   async compileNow(goalId: string): Promise<void> {
-    await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId));
+    // one run per goal: a compile beside a run in flight wrote the same skills twice
+    if (this.running.has(goalId)) {
+      this.again.add(goalId);
+      return;
+    }
+    this.running.add(goalId);
+    try {
+      await this.step(goalId, 'compiling', 'Mapping the skills your goal needs', () => compileGoal({ db: this.deps.db(), provider: this.deps.provider() }, goalId));
+    } finally {
+      this.running.delete(goalId);
+      if (this.again.delete(goalId)) this.refresh(goalId);
+    }
   }
 
   private async run(goalId: string): Promise<void> {

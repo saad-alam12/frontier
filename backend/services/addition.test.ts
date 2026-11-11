@@ -179,7 +179,8 @@ describe('adding to a goal', () => {
     await proposeAddition({ db, provider: new FakeProvider({ goalCompiler: sequentialAddition(id) }) }, goal.id);
     const view = additionView(db, goal.id);
     expect(view?.totalMinutes).toBe(270);
-    expect(view?.changes).toEqual({ overview: ['Find pure Nash equilibria in a matrix'], leftOut: ['Best response'], shallower: [], missed: [] });
+    // room is made among the goal's other ideas; which ones follows from the costs (a missing premise is charged once)
+    expect(view?.changes).toEqual({ overview: [], leftOut: ['Best response', 'Find pure Nash equilibria in a matrix'], shallower: [], missed: [] });
     expect(view?.ideas.map((i) => [i.name, i.plannedDepth])).toEqual([
       ['Backward induction', 3],
       ['Commitment changes the game', 2],

@@ -213,3 +213,24 @@ describe('pace', () => {
     expect(learnerSpeed(100, 1000)).toBe(2.5);
   });
 });
+
+describe('the weekly rhythm near and past the date', () => {
+  const total = { mode: 'total', hours: 10 } as const;
+  it('never asks for more in a week than is left', () => {
+    expect(weeklyMinutes(total, 600, '2026-11-01T09:00:00', '2026-11-29')).toBe(147); // four weeks: about 2.4 hours a week
+    expect(weeklyMinutes(total, 600, '2026-11-01T09:00:00', '2026-11-03')).toBe(600); // three days: all of it, not seventy hours
+    expect(weeklyMinutes(total, 600, '2026-11-01T09:00:00', '2026-11-01')).toBe(600); // the exam is today
+    expect(weeklyMinutes(total, 240, '2026-11-01T09:00:00', '2026-11-03')).toBe(240); // what is left, when some is spent
+  });
+  it('has no rhythm once the date has passed, or without a readable date', () => {
+    expect(weeklyMinutes(total, 600, '2026-11-10T09:00:00', '2026-11-03')).toBeNull();
+    expect(weeklyMinutes(total, 600, '2026-11-10T09:00:00', 'soon')).toBeNull();
+  });
+  it('judges "behind" from where the rhythm began', () => {
+    const base = { budgetMinutes: 2400, learnedMinutes: 300, expectedByNow: 600, daysIn: 20 };
+    expect(paceOf({ ...base, spentMinutes: 200 }).kind).toBe('behind_time');
+    // 900 minutes in all, 500 of them since a new time began three weeks ago: not behind
+    expect(paceOf({ ...base, spentMinutes: 900, spentSinceStart: 500 }).kind).not.toBe('behind_time');
+  });
+});
+

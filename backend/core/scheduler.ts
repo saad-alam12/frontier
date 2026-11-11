@@ -201,7 +201,8 @@ const MINUTES_PER_DEEPEN = 6;
 export function chooseMode(input: ModeInput): ModeChoice {
   const problems = Math.ceil(input.due.length / 2.5);
   const protect = input.due.reduce((s, d) => s + (1 - d.recall) * input.depthOf(d.nodeId), 0);
-  const examBoost = input.daysToExam !== null && input.daysToExam <= 7 ? 1.5 : 1;
+  // the last week before the exam; once it has passed there is nothing left to protect for it
+  const examBoost = input.daysToExam !== null && input.daysToExam >= 0 && input.daysToExam <= 7 ? 1.5 : 1;
   const consolidate = problems ? (protect * examBoost) / (problems * MINUTES_PER_PROBLEM) : 0;
   const top = input.fringeLeverage.slice(0, 4);
   const best = top[0] ?? 0;

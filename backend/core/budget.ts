@@ -31,13 +31,19 @@ export function budgetSpanDays(budget: GoalBudget | null): number | null {
   return Math.round(budget.length * LENGTH_DAYS[budget.lengthUnit]);
 }
 
-/** Minutes per week the budget asks for, when it has a rhythm: a rate, or a total spread to a date. */
-export function weeklyMinutes(budget: GoalBudget | null, total: number | null, startIso: string, date: string | null): number | null {
-  if (!budget || total === null) return null;
+/**
+ * Minutes per week the budget asks for, when it has a rhythm: a rate, or what was left of a total
+ * when the rhythm began (`left`), spread from then to the goal's date. Never more than what is left
+ * (ten hours with the exam in three days is ten hours this week, not seventy), and nothing once the
+ * date has passed: there is no rhythm to be behind any more.
+ */
+export function weeklyMinutes(budget: GoalBudget | null, left: number | null, startIso: string, date: string | null): number | null {
+  if (!budget || left === null) return null;
   if (budget.mode === 'rate') return Math.round(budget.hours * 60 * (budget.per === 'day' ? 7 : 1));
   if (!date) return null;
-  const days = Math.max(1, (new Date(`${date}T23:59:59`).getTime() - new Date(startIso).getTime()) / DAY_MS);
-  return Math.round((total / days) * 7);
+  const days = (new Date(`${date}T23:59:59`).getTime() - new Date(startIso).getTime()) / DAY_MS;
+  if (!(days > 0)) return null; // also a date that cannot be read
+  return Math.min(Math.round(left), Math.round((left / Math.max(1, days)) * 7));
 }
 
 /** "240 hours" plus how it was entered, for labels. */
@@ -329,6 +335,8 @@ export interface PaceInput {
   expectedByNow: number | null;
   /** Days since the goal started. */
   daysIn: number;
+  /** Minutes spent since the rhythm began, when that is later than the goal's start; defaults to all of them. */
+  spentSinceStart?: number;
 }
 
 export interface Pace {
@@ -344,7 +352,9 @@ export interface Pace {
  */
 export function paceOf(input: PaceInput): Pace {
   const ratio = input.learnedMinutes > 0 ? input.spentMinutes / input.learnedMinutes : null;
-  if (input.expectedByNow !== null && input.daysIn >= 14 && input.expectedByNow >= 120 && input.spentMinutes < input.expectedByNow * 0.5) return { kind: 'behind_time', ratio };
+  // behind is judged since the rhythm began: a new time or a pause starts the count again
+  const since = input.spentSinceStart ?? input.spentMinutes;
+  if (input.expectedByNow !== null && input.daysIn >= 14 && input.expectedByNow >= 120 && since < input.expectedByNow * 0.5) return { kind: 'behind_time', ratio };
   const enough = input.spentMinutes >= 60 && (input.budgetMinutes === null || input.spentMinutes >= input.budgetMinutes * 0.2);
   if (!enough) return { kind: 'unknown', ratio };
   if (ratio === null || ratio > 2) return { kind: 'slow', ratio };

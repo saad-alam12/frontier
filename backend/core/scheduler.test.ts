@@ -103,3 +103,15 @@ describe('scheduler', () => {
     expect(dailyMinutes(42 * 60)).toBe(360); // cramming: six hours a day, seven days
   });
 });
+
+describe('the exam window', () => {
+  it('weighs practice up in the last week before the exam, not after it', () => {
+    const input = { due: [{ nodeId: 'a', recall: 0.5, recallAtExam: null, reason: 'fading' as const }], depthOf: () => 3, fringeLeverage: [], deepenGaps: [] };
+    const before = chooseMode({ ...input, daysToExam: 3 }).value.consolidate;
+    const after = chooseMode({ ...input, daysToExam: -30 }).value.consolidate;
+    const none = chooseMode({ ...input, daysToExam: null }).value.consolidate;
+    expect(before).toBeGreaterThan(none);
+    expect(after).toBe(none);
+  });
+});
+

@@ -41,6 +41,8 @@ import {
   saveProfile,
   setMaterials,
   updateGoal,
+  resetExtraMinutes,
+  restartRhythm,
 } from '../store/goals';
 import type { GoalInput, NewTarget } from '../store/goals';
 import { logEvent } from '../store/activity';
@@ -183,6 +185,9 @@ export function updateGoalFromForm(db: Database, goalId: string, form: Partial<G
       logEvent(db, 'budget.changed', { goalId }, { from: before?.budget ?? null, to: after?.budget ?? null, ...(after?.wantedLevel !== before?.wantedLevel ? { fromLevel: before?.wantedLevel ?? null, toLevel: after?.wantedLevel ?? null } : {}) });
       // a new time is a new plan to approve: it re-plans from the ideal depths
       clearApprovedDepths(db, goalId);
+      // it replaces the time as it was, including minutes that going deeper had added, and its rhythm starts now
+      resetExtraMinutes(db, goalId);
+      if (before?.status !== 'draft') restartRhythm(db, goalId);
     }
   });
   refreshGoalFields(db);
@@ -201,6 +206,8 @@ export function setGoalStatus(db: Database, goalId: string, status: 'active' | '
   if (goal.status === status) return;
   transaction(db, () => {
     updateGoal(db, goalId, { status });
+    // taken up again: the weeks it rested do not count as weeks it fell behind
+    if (status === 'active') restartRhythm(db, goalId);
     logEvent(db, 'goal.status', { goalId }, { from: goal.status, to: status });
   });
   refreshGoalFields(db);

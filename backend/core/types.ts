@@ -160,6 +160,8 @@ export interface Goal {
   priority: number;
   /** A draft is being set up and previewed; it becomes active when the learner approves its plan. */
   status: 'draft' | 'active' | 'paused' | 'done';
+  /** When the goal's current rhythm began: its approval, a new time, or being taken up again. Null for a draft. */
+  rhythmAt: string | null;
   createdAt: string;
   approvedAt: string | null;
   compiledAt: string | null;

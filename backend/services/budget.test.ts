@@ -11,7 +11,9 @@ import { tick } from './activity';
 import { attributeTime, freezeTimeOwners, goalProgress, learnerSpeedNow, previewPlan, spentByGoal, timeOwners } from './budget';
 import { recordEvidence } from './evidence';
 import { approveGoalPlan, compileGoal, createGoalFromForm, goalDetail, setGoalStatus, updateGoalFromForm } from './goals';
-import { deleteGoal } from '../store/goals';
+import { addExtraMinutes, capTargets, deleteGoal, setMaterials } from '../store/goals';
+import { createSource, updateSourceStatus } from '../store/sources';
+import { GoalWorker, nextGoalStep } from './goalWorker';
 import { submitProbe } from './probe';
 import { refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
@@ -351,5 +353,94 @@ describe('time stays where it was spent, and speed is one number', () => {
     expect(freezeTimeOwners(db)).toBe(0);
     pricing(db, id);
     expect(spent(db, first.id)).toBe(60);
+  });
+});
+
+describe('goal edge cases (R7 D14)', () => {
+  const t0 = new Date('2026-03-02T10:00:00Z');
+
+  it('a new time starts the rhythm again and drops the minutes that going deeper had added', () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 40);
+    approveGoalPlan(db, goal.id);
+    // approved ten weeks ago, studied little
+    db.prepare('UPDATE goals SET approved_at = ?, rhythm_at = ? WHERE id = ?').run(new Date(Date.now() - 70 * DAY).toISOString(), new Date(Date.now() - 70 * DAY).toISOString(), goal.id);
+    addExtraMinutes(db, goal.id, 15);
+    updateGoalFromForm(db, goal.id, { budget: { mode: 'rate', hours: 6, per: 'day', length: 2, lengthUnit: 'weeks' } });
+    const progress = goalProgress(db, goal.id);
+    expect(progress?.totalMinutes).toBe(6 * 60 * 14); // the new time, with nothing left over from the old one
+    expect(progress?.pace.kind).not.toBe('behind_time'); // two weeks from today, not two months ago
+    expect(new Date(`${progress?.endsOn}T12:00:00`).getTime()).toBeGreaterThan(Date.now());
+    // and a goal taken up again after a rest is not behind for the weeks it rested
+    db.prepare('UPDATE goals SET rhythm_at = ? WHERE id = ?').run(new Date(Date.now() - 70 * DAY).toISOString(), goal.id);
+    setGoalStatus(db, goal.id, 'paused');
+    setGoalStatus(db, goal.id, 'active');
+    expect(goalProgress(db, goal.id)?.pace.kind).not.toBe('behind_time');
+  });
+
+  it('shows no weekly target once the date of the goal has passed', () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 10);
+    approveGoalPlan(db, goal.id);
+    updateGoalFromForm(db, goal.id, { date: '2020-01-01' });
+    expect(goalProgress(db, goal.id)?.weeklyTarget).toBeNull();
+    updateGoalFromForm(db, goal.id, { date: new Date(Date.now() + 2 * DAY).toISOString().slice(0, 10) });
+    expect(goalProgress(db, goal.id)?.weeklyTarget).toBeLessThanOrEqual(600);
+  });
+
+  it('a premise outside the plan is charged once, however many ideas rest on it', () => {
+    const { db, id } = setup();
+    // three ideas that all rest on strategy and payoff, which no plan holds and the learner does not own
+    const goal = createGoalFromForm(db, { text: 'Understand dominance', budget: { mode: 'total', hours: 4 }, materials: [] });
+    addCapabilities(db, goal.id, [{ statement: 'Can use dominance', targets: ['bestResponse', 'dominant', 'dominated'].map((k) => ({ nodeId: id(k), depth: 2 as const })) }]);
+    refreshGoalFields(db);
+    const plan = goalProgress(db, goal.id)?.plan;
+    // three terms at 12.5 minutes each, plus strategy and payoff once (50): 88, not 188 with the two charged three times
+    expect(plan?.ideas.cut).toBe(0);
+    expect(plan?.plannedMinutes).toBe(88);
+  });
+
+  it('previewing a new time keeps simplified ideas as they were learned, as saving does', () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 20);
+    approveGoalPlan(db, goal.id);
+    capTargets(db, goal.id, id('nash'), 1, 'It was taking too long');
+    refreshGoalFields(db);
+    const preview = previewPlan(db, goal.id, { mode: 'total', hours: 30 });
+    expect(preview?.ideas.find((i) => i.nodeId === id('nash'))?.plannedDepth).toBe(1);
+    updateGoalFromForm(db, goal.id, { budget: { mode: 'total', hours: 30 } });
+    expect(Math.max(...listTargets(db, goal.id).filter((t) => t.nodeId === id('nash')).map((t) => t.depth))).toBe(1);
+  });
+
+  it('a goal with only an exam or a syllabus as material is mapped from the goal itself', () => {
+    const { db } = setup();
+    const goal = createGoalFromForm(db, { text: 'Pass statistics', kind: 'course', assessment: 'written_exam', budget: { mode: 'total', hours: 20 }, materials: [] }, { draft: true });
+    const exam = createSource(db, { kind: 'pdf', title: 'Past exam', path: null, hash: 'exam' }, [{ text: 'Question 1', locator: 'p1' }]);
+    updateSourceStatus(db, exam.id, { status: 'done' });
+    setMaterials(db, goal.id, [{ sourceId: exam.id, role: 'assessment' }]);
+    db.prepare('UPDATE goals SET profile_sources = ? WHERE id = ?').run(JSON.stringify([exam.id]), goal.id); // the exam is already profiled
+    expect(nextGoalStep(db, goal.id)).toBe('compile');
+  });
+
+  it('"Map more ideas" beside a run in flight does not compile twice', async () => {
+    const { db } = setup();
+    const goal = createGoalFromForm(db, { text: 'Learn it', budget: { mode: 'total', hours: 2 }, materials: [] }, { draft: true });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let compiles = 0;
+    const provider = new FakeProvider({
+      goalCompiler: async () => {
+        compiles += 1;
+        await held;
+        return { title: 'It', level: 'working', scope: 'Learn it.', capabilities: [{ statement: 'Can do it', targets: [{ ref: 'n1', depth: 2, core: true }] }], newNodes: [{ tempId: 'n1', kind: 'claim', name: 'The idea', statement: 'It holds.' }] };
+      },
+    });
+    const worker = new GoalWorker({ db: () => db, provider: () => provider, ingestion: () => { throw new Error('no reading in this test'); }, embedder: () => { throw new Error('no embedding in this test'); }, onChange: () => undefined });
+    worker.refresh(goal.id);
+    await Promise.resolve();
+    await worker.compileNow(goal.id); // the learner presses the button while the first map is drawn
+    expect(compiles).toBe(1);
+    release();
+    void t0;
   });
 });
