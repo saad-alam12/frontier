@@ -61,7 +61,7 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 | B11 | **Anki import and export.** Review your cards on the phone, and bring in decks you already have. | Cards live only in Frontier. | M | — |
 | B12 | **Reminders.** A quiet system notification when reviews are due or at a study time you choose, and the count on the dock icon. | The app says nothing when it is closed or in the background. | S | Yes |
 | B13 | **Week plan.** Which days and how long, days off, days to the exam, calendar export. | The weekly rhythm is split over five days with no say from you. | M | — |
-| B14 | **Teaching language and non-English material.** A setting for the language of explanations, and a multilingual model for "search by meaning". | The search model is English only, so matching and Lookup are weak on German lectures. The prompts never state a language. | M | Ask |
+| B14 | **German and English material.** Replace the English-only model for "search by meaning" with a multilingual one of the same size, so a German source matches as well as an English one. The app and all explanations stay in English. No language setting. | The search model is English only, so matching and Lookup are weak on German lectures. The owner's material is in both languages (answered 2026-11-11: keep it general and simple). The new model's licence must be checked first. | S to M | Yes |
 | B15 | **Edit your map.** Rename an idea, merge duplicates, correct a statement, and "I know this: test me" from the map or the goal page. | The only edit today is erase. | M | — |
 | B16 | **Conflicts between sources.** Show them and resolve each in a short investigation. | The design describes it. Today a conflict is stored but never shown, and a single-part source can never report one. | M | — |
 | B17 | **Weekly review.** One page a week: what you learned, what faded, where you were too sure, and one suggested change to the plan. | Stats has the numbers but no summary over time. | M | — |
@@ -138,7 +138,7 @@ Sizes: **S** an hour or two, **M** about half a day, **L** a round of its own.
 1. **D2, how a sitting counts.** My proposal: one review per idea per sitting, built from its graded steps, with the prediction left out. Agree?
 2. **D13d, failing a known idea.** The design says its depth drops. The code only lowers its freshness. Which do you want?
 3. **D12a, tidying chains.** Keep an argument unless another one needs strictly fewer of the same ideas. This changes a rule in `docs/design.md`.
-4. **B14.** Is your course material in German?
+4. **B14.** Answered 2026-11-11: the material is in German and English. Keep it general, no language setting, English for the app and explanations.
 5. **B4.** Reading pages as images uses more of your plan. Acceptable as an option?
 6. **B19.** Running Python needs an MPL-2.0 library. Allow it, or leave code running out?
-7. **D16.** One check on your Mac: which tools a model call can see with your Claude login.
+7. **D16.** Answered 2026-11-11: yes. The session that builds D16 adds a small script that prints which tools a model call can see; the next local session on the Mac runs it once with the Claude login.
