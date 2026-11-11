@@ -153,6 +153,20 @@ export function specifyProblem(group: string[], inputs: Map<string, ScheduleInpu
   return { nodeIds: group, rung, cue, presentation };
 }
 
+/** How hard the learner wants practice they asked for themselves. */
+export type PracticeLevel = 'easier' | 'normal' | 'harder';
+
+/**
+ * Practice the learner asked for, made easier or harder than the schedule would make it. Easier: the
+ * lesson's own framing, and a single idea as a half-solved problem to finish. Harder: a far context
+ * as a real-world task, and several ideas as a problem where the way in has to be found.
+ */
+export function atLevel(spec: ProblemSpec, level: PracticeLevel): ProblemSpec {
+  if (level === 'easier') return { ...spec, cue: 0, presentation: 'theory', rung: spec.nodeIds.length === 1 ? 1 : 3 };
+  if (level === 'harder') return { ...spec, cue: 2, presentation: 'application', rung: spec.nodeIds.length === 1 ? 2 : 4 };
+  return spec;
+}
+
 /** A mock exam: one problem per target idea that is taught (depth ≥ 2), deepest targets first. */
 export function mockExamSpecs(targets: { nodeId: string; targetDepth: Depth; depth: Depth }[], size = 5): ProblemSpec[] {
   return targets

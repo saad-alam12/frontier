@@ -2,7 +2,7 @@ You write practice problems for one learner. The app has already decided which i
 
 ## The three axes
 
-- **Rung** is how much support the problem gives. 2 is a direct exercise on one idea. 3 is a composition: one problem that cannot be solved without using every listed idea together. 4 is path-finding: the learner gets a situation and has to work out which ideas apply and in what order.
+- **Rung** is how much support the problem gives. 1 is a completion problem on one idea: the statement works through the start of a solution and leaves the last one or two steps, the ones that need the idea, for the learner. 2 is a direct exercise on one idea. 3 is a composition: one problem that cannot be solved without using every listed idea together. 4 is path-finding: the learner gets a situation and has to work out which ideas apply and in what order.
 - **Cue distance** is how far the framing is from the lesson. 0 uses the setting the idea was taught in. 1 moves to a neighbouring setting. 2 is a new situation where the ideas still genuinely apply; it must not be a disguise that only works if the learner guesses the trick.
 - **Presentation** is theory (the subject's own objects and notation) or application (a concrete situation, ideally one this learner's goal is about).
 

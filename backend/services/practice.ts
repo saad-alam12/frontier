@@ -8,9 +8,11 @@ import type { GeneratorSpec } from '../agents/problemGenerator';
 import { gradePractice } from '../agents/grader';
 import { ancestors } from '../core/graph';
 import { leverageOf } from '../core/leverage';
-import { chooseMode, dailyMinutes, daysUntil, dueForecast, dueNodes, groupForPractice, mockExamSpecs, mockExamsOpen, specifyProblem } from '../core/scheduler';
-import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, ScheduleInput } from '../core/scheduler';
+import { chooseMode, dailyMinutes, daysUntil, dueForecast, dueNodes, groupForPractice, mockExamSpecs, mockExamsOpen, specifyProblem, atLevel } from '../core/scheduler';
+import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, ScheduleInput, PracticeLevel } from '../core/scheduler';
+import { OWNED_DEPTH, PASS_SCORE } from '../core/types';
 import type { Depth } from '../core/types';
+import { listEvidenceForNode } from '../store/evidence';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
@@ -198,6 +200,8 @@ export interface StartPracticeOptions {
   maxProblems?: number;
   /** Ideas not to practise now (e.g. the ones just taught in this session). */
   exclude?: string[];
+  /** The learner chose what to practise: these ideas now, whether or not they are fading, at this level. */
+  focus?: { nodeIds: string[]; level?: PracticeLevel };
   now?: Date;
 }
 
@@ -220,6 +224,12 @@ export async function startPractice(deps: PracticeDeps, goalId: string, options:
       .filter((t) => view.nodes.has(t.nodeId) && !seen.has(t.nodeId) && seen.add(t.nodeId))
       .map((t) => ({ nodeId: t.nodeId, targetDepth: t.depth as Depth, depth: view.states.get(t.nodeId)?.depth ?? 0 }));
     specs = mockExamSpecs(targets, options.maxProblems ?? 5);
+  } else if (options.focus) {
+    // practice is retrieval: only ideas the learner has learned can be practised, the rest are for a session
+    const learned = [...new Set(options.focus.nodeIds)].filter((id) => view.nodes.has(id) && (view.states.get(id)?.depth ?? 0) >= OWNED_DEPTH);
+    const byId = new Map(scheduleInputs(db, view, new Set(learned)).map((n) => [n.nodeId, n]));
+    const level = options.focus.level ?? 'normal';
+    specs = groupForPractice(learned, view.index, options.maxProblems).map((g, i) => atLevel(specifyProblem(g, byId, goal.assessment, i), level));
   } else {
     const inputs = scheduleInputs(db, view, goalScope(db, goalId, view));
     const due = dueNodes(inputs, now, examDateOf(goal.date)).filter((d) => !exclude.has(d.nodeId));
@@ -269,6 +279,24 @@ export async function startPractice(deps: PracticeDeps, goalId: string, options:
 const pending = new Set<Promise<void>>();
 /** Answers whose grade is being written right now, so a retry never grades one twice. */
 const grading = new Set<string>();
+
+/**
+ * The goal's ideas whose last practice went wrong: the latest practice answer about each scored below
+ * the pass mark. They are worth practising again, on a new problem (the generator is shown the old
+ * ones so it does not repeat them); a later pass takes an idea off the list.
+ */
+export function missedInPractice(db: Database, goalId: string): { nodeId: string; name: string }[] {
+  const view = loadKnowledge(db);
+  const missed: { nodeId: string; name: string }[] = [];
+  for (const nodeId of goalScope(db, goalId, view)) {
+    const last = listEvidenceForNode(db, nodeId)
+      .filter((e) => e.kind === 'practice' && !e.context.implicit)
+      .at(-1);
+    // an idea that fell below "learned" is taught again in a session, not practised
+    if (last && last.score < PASS_SCORE && (view.states.get(nodeId)?.depth ?? 0) >= OWNED_DEPTH) missed.push({ nodeId, name: view.nodes.get(nodeId)?.name ?? nodeId });
+  }
+  return missed.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** Resolves when every grade started so far has landed (for tests and orderly shutdown). */
 export async function settleGrading(): Promise<void> {

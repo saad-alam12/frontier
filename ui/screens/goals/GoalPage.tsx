@@ -1,10 +1,12 @@
 import { dueIn } from '../../lib/dueIn';
 import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
 import { call, isCancelled } from '../../api';
-import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
+import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, PracticeLevel, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
 import { MAX_FREE_IDEAS } from '../../../backend/core/freeSession';
+import { OWNED_DEPTH } from '../../../backend/core/types';
 import { BudgetBar, IdeaField, estimateLine, paceSentence, planSummary, trimSentence } from '../../components/budget';
 import { TimeChoice } from '../../components/TimeChoice';
 import { useSurface } from '../../lib/activity';
@@ -38,6 +40,7 @@ export function GoalPage({
   onChanged,
   onNewGoal,
   onReviewCards,
+  onOpenPractice,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -51,6 +54,8 @@ export function GoalPage({
   /** Start the new-goal flow with this sentence (an addition that reads like a goal of its own). */
   onNewGoal: (text: string) => void;
   onReviewCards: () => void;
+  /** Open a practice set that was just written. */
+  onOpenPractice: (setId: string) => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -94,6 +99,14 @@ export function GoalPage({
       setBusy(null);
     }
   };
+
+  /** Practice the learner asked for: new problems on these ideas, at the level they chose. */
+  const practise = (nodeIds: string[], level: PracticeLevel) =>
+    run('practise', async () => {
+      const set = await call('practice.start', { goalId: goal.id, kind: 'compound', nodeIds, level });
+      if (set) onOpenPractice(set.id);
+      else setError('Nothing to practise here yet. Practice is for ideas you have learned. A session teaches the rest.');
+    });
 
   const setStatus = (status: 'active' | 'paused' | 'done') =>
     run('status', async () => {
@@ -330,6 +343,17 @@ export function GoalPage({
       )}
 
       <GoalCardsLine goalId={goal.id} onReview={onReviewCards} />
+      {goal.status === 'active' && detail.missed.length > 0 && (
+        <div className="cards-line" title={detail.missed.map((m) => m.name).join(', ')}>
+          <RotateCcw size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span>
+            <strong>{plural(detail.missed.length, 'idea')}</strong> from problems you missed
+          </span>
+          <Button disabled={busy !== null} onClick={() => void practise(detail.missed.map((m) => m.nodeId), 'normal')}>
+            {busy === 'practise' ? 'Writing problems…' : 'Practise again'}
+          </Button>
+        </div>
+      )}
 
       {compiled && (
         <Section title="Check where you stand" meta={probe ? 'Answers are kept until you submit' : undefined}>
@@ -382,7 +406,7 @@ export function GoalPage({
         >
           <ul className="list-card skill-list">
             {skills.map((c) => (
-              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} onLearn={onLearn} />
+              <SkillRow key={c.id} skill={c} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} deeper={deeper} onGoDeeper={(id) => void run('deeper', () => onGoDeeper([id]))} onLearn={onLearn} onPractise={goal.status === 'active' ? practise : undefined} writing={busy === 'practise'} />
             ))}
           </ul>
           {leftOut.length > 0 && (
@@ -607,6 +631,8 @@ function SkillRow({
   deeper,
   onGoDeeper,
   onLearn,
+  onPractise,
+  writing = false,
 }: {
   skill: GoalDetail['capabilities'][number];
   open: boolean;
@@ -615,8 +641,14 @@ function SkillRow({
   onGoDeeper: (nodeId: string) => void;
   /** Planned skills only: choose a session on the ideas not yet at their planned depth. */
   onLearn?: (nodeIds: string[]) => void;
+  /** Planned skills only: new problems on the ideas already learned, at a chosen level. */
+  onPractise?: (nodeIds: string[], level: PracticeLevel) => void;
+  /** Problems are being written. */
+  writing?: boolean;
 }) {
+  const [level, setLevel] = useState<PracticeLevel>('normal');
   const toLearn = skill.targets.filter((t) => t.depth > 0 && t.currentDepth < t.depth).map((t) => t.nodeId);
+  const learned = skill.targets.filter((t) => t.currentDepth >= OWNED_DEPTH).map((t) => t.nodeId);
   return (
     <li className="flex flex-col gap-[12px]">
       <button type="button" className="row skill-head" aria-expanded={open} onClick={onToggle}>
@@ -662,12 +694,28 @@ function SkillRow({
             <span>
               <i className="pip is-ideal" /> the goal asks, beyond your time
             </span>
-            {onLearn && toLearn.length > 0 && (
-              <button type="button" className="link-button ml-auto" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS))}>
-                Learn these now
-              </button>
-            )}
           </div>
+          {((onLearn && toLearn.length > 0) || (onPractise && learned.length > 0)) && (
+            <div className="skill-actions">
+              {onPractise && learned.length > 0 && (
+                <>
+                  <button type="button" className="link-button" disabled={writing} onClick={() => onPractise(learned, level)}>
+                    {writing ? 'Writing problems…' : learned.length === skill.targets.length ? 'Practise this skill now' : 'Practise what you have learned'}
+                  </button>
+                  <select className="select-quiet" aria-label="How hard the problems are" value={level} disabled={writing} onChange={(e) => setLevel(e.target.value as PracticeLevel)}>
+                    <option value="easier">Easier</option>
+                    <option value="normal">As planned</option>
+                    <option value="harder">Harder</option>
+                  </select>
+                </>
+              )}
+              {onLearn && toLearn.length > 0 && (
+                <button type="button" className="link-button ml-auto" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS))}>
+                  Learn these now
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </li>

@@ -10,7 +10,7 @@ import { getPracticeSet, listProblems } from '../store/practice';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { recordEvidence } from './evidence';
 import { refreshGoalFields } from './knowledge';
-import { currentPractice, endPracticeSet, goalSchedule, resumeGrading, settleGrading, startPractice, submitPracticeAnswer } from './practice';
+import { currentPractice, endPracticeSet, goalSchedule, missedInPractice, resumeGrading, settleGrading, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps } from './practice';
 import { todayView } from './today';
 import { reviewsByCard } from '../store/cards';
@@ -227,6 +227,51 @@ describe('practice', () => {
     await settleGrading();
     expect(provider.calls.filter((c) => c.role === 'grader').length).toBe(gradesBefore + 1);
     expect(listProblems(db, set.id).flatMap((p) => p.nodeIds).some((nodeId) => listEvidenceForNode(db, nodeId).some((e) => e.kind === 'practice' && !e.context.implicit))).toBe(true);
+  });
+
+  it('writes problems on the ideas the learner picks, fading or not, at the level they ask for', async () => {
+    const { db, id, goal, provider, deps } = setup();
+    // fresh again: the schedule has nothing to practise, the learner still can
+    for (const key of ['strategy', 'payoff', 'profile', 'bestResponse', 'nash', 'nashMutualBr', 'dominant']) recordEvidence(db, { nodeId: id(key), kind: 'explain', score: 0.9, reasoning: 'again' });
+    expect(await startPractice(deps, goal.id)).toBeNull();
+
+    const easier = await startPractice(deps, goal.id, { focus: { nodeIds: [id('dominant')], level: 'easier' } });
+    expect(easier?.problems).toHaveLength(1);
+    expect(easier?.problems[0]).toMatchObject({ rung: 1, presentation: 'theory' });
+    expect(provider.calls.at(-1)?.messages[0]?.content).toContain('Rung: 1, completion');
+
+    const harder = await startPractice(deps, goal.id, { focus: { nodeIds: [id('nash'), id('bestResponse'), id('nashMutualBr')], level: 'harder' } });
+    expect(harder?.problems.length).toBeGreaterThan(0);
+    expect(harder?.problems.every((p) => p.presentation === 'application' && p.cue === 2 && (p.rung === 4 || p.rung === 2))).toBe(true);
+    expect(harder?.problems.some((p) => p.rung === 4)).toBe(true);
+
+    // an idea not learned yet is for a session, not for practice
+    const calls = provider.calls.length;
+    expect(await startPractice(deps, goal.id, { focus: { nodeIds: [id('pdUnique')] } })).toBeNull();
+    expect(provider.calls).toHaveLength(calls);
+  });
+
+  it('lists the ideas whose last practice went wrong, until a later problem on them goes right', async () => {
+    const { db, id, goal, provider, deps } = setup(3);
+    const set = await startPractice(deps, goal.id, { focus: { nodeIds: [id('dominant')] } });
+    const problem = set?.problems[0];
+    if (!problem) throw new Error('no problem');
+    expect(missedInPractice(db, goal.id)).toEqual([]);
+    submitPracticeAnswer(deps, problem.id, 'Both cooperate, since that is best for both.', 0.8);
+    await settleGrading();
+    expect(missedInPractice(db, goal.id).map((m) => m.nodeId)).toEqual([id('dominant')]);
+
+    // practised again on a new problem and passed: off the list
+    provider.script('grader', fakeGrader(9));
+    // the app turns away a copy of the problem that went wrong, so the variant has to be a new one
+    provider.script('problemGenerator', () => ({ problems: [{ index: 0, statement: 'A bidder in a sealed auction weighs bidding 4 or 6 against each rival bid. Which bid should she choose, and why?', solution: 'Bidding 6 is at least as good against every rival bid.', rubric: ['compares the bids against each rival bid', 'chooses 6'] }] }));
+    const again = await startPractice(deps, goal.id, { focus: { nodeIds: missedInPractice(db, goal.id).map((m) => m.nodeId) } });
+    const second = again?.problems[0];
+    if (!second) throw new Error('no second problem');
+    expect(provider.calls.filter((c) => c.role === 'problemGenerator').at(-1)?.messages[0]?.content).toContain('Recent problems on these ideas');
+    submitPracticeAnswer(deps, second.id, 'Defecting is better whatever the other does, so both defect.', 0.8);
+    await settleGrading();
+    expect(missedInPractice(db, goal.id)).toEqual([]);
   });
 
   it('returns null when nothing is fading', async () => {

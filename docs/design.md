@@ -280,8 +280,10 @@ Target: under 10% of learning time feels like review.
 3. **Goal tasks double as review.** As a capability matures, its problems move toward rung 3–4, cue 2, Application: the learner's actual goal tasks.
 4. **Reconstruction warm-ups** (session start).
 5. **Bugs** get targeted contrast problems until they stop reappearing.
-6. **Flashcards for hard facts** (section 2.6): formulas, definitions, notation, constants, names and dates, written after an idea is learned, reviewed on their own (FSRS, a few minutes a day) and counted as reviewed when a session or practice answer recalls them. Never understanding.
-7. **Let go deliberately.** Nodes that no active goal needs are allowed to decay to the index tier instead of being maintained.
+6. **Practice you ask for.** On a goal's page a skill offers "Practise this skill now": new problems on the ideas of that skill you have already learned, whether or not they are fading, at a level you choose. "As planned" is what the schedule would write. "Easier" keeps the lesson's own framing and gives a single idea as a half-solved problem to finish (rung 1). "Harder" moves to a far, real-world setting and makes several ideas a path-finding problem (rung 4). Ideas not learned yet are for a session.
+7. **Missed problems come back.** An idea whose latest practice answer scored below the pass mark is listed on the goal's page ("N ideas from problems you missed") with "Practise again". That writes new problems on those ideas, never the old ones again, and a pass takes the idea off the list.
+8. **Flashcards for hard facts** (section 2.6): formulas, definitions, notation, constants, names and dates, written after an idea is learned, reviewed on their own (FSRS, a few minutes a day) and counted as reviewed when a session or practice answer recalls them. Never understanding.
+9. **Let go deliberately.** Nodes that no active goal needs are allowed to decay to the index tier instead of being maintained.
 
 ---
 

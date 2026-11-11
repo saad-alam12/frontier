@@ -172,6 +172,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] C3 a missed question is asked again once in a fresh version; a missed prediction is no longer a failure
 - [x] A1 the plan as a list beside the dots: every idea by name, in learning order, with its minutes and sessions
 - [x] C8 goals use freed time ("Use the time"), ask about finishing once their date has passed, and say when their material is only an exam or a syllabus
+- [x] B6 practice on demand (a skill's learned ideas, at Easier / As planned / Harder) and a list of ideas from problems you missed, with "Practise again"
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -301,6 +302,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 B6): Practice on demand and missed problems. `practice.start` takes `nodeIds` and `level`; `startPractice` with `focus` writes problems on those ideas whether or not they are fading, but only on ideas at "explain" depth or more (practice is retrieval; the rest is taught in a session). `atLevel` (`core/scheduler.ts`) is the whole of the difficulty choice: easier = lesson framing, theory, a single idea as a completion problem (rung 1, which the generator prompt now describes); harder = far context, application, several ideas as path-finding (rung 4). Rung 1 earns less depth credit than a direct exercise, as before. `missedInPractice` lists a goal's ideas whose latest direct practice evidence is below the pass mark and that are still at "explain" depth or more (`GoalDetail.missed`); nothing is stored, so a later pass takes an idea off the list by itself. Variants are new problems: the generator already sees the recent statements and the app already rejects a repeat. A set started on the goal page opens on Today, where practice lives. Design §5.2 updated.
 
 - 2026-11-11 (R7 C8): Freed time. `GoalProgress.room` is set when an active goal with a budget has at least 25 minutes that its approved plan does not use, and a plan approved afresh (the uncapped preview for the same budget) would give some idea more depth than it has now; it counts ideas that would come back (`more`) and ideas that would go deeper (`deeper`). "Use the time" (`goals.useFreedTime`) clears the approved caps (simplified ideas keep theirs), re-plans and approves. The goal page also shows a note when an active goal's date has passed, with "Mark as finished", and a line under Material when none of it is teaching or reference material. Design §3.4 updated.
 

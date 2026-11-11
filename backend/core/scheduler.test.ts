@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyReview, emptyFsrs } from './fsrs';
 import { indexChains } from './graph';
-import { FADING_RECALL, chooseMode, dailyMinutes, dueForecast, dueNodes, groupForPractice, isMaintained, mockExamSpecs, mockExamsOpen, specifyProblem } from './scheduler';
+import { FADING_RECALL, atLevel, chooseMode, dailyMinutes, dueForecast, dueNodes, groupForPractice, isMaintained, mockExamSpecs, mockExamsOpen, specifyProblem } from './scheduler';
 import type { ScheduleInput } from './scheduler';
 import type { Chain } from './types';
 
@@ -69,6 +69,16 @@ describe('scheduler', () => {
     expect(specifyProblem(['a', 'b'], inputs, 'written_exam')).toMatchObject({ rung: 3, cue: 0 });
     expect(specifyProblem(['b', 'c'], inputs, 'written_exam')).toMatchObject({ rung: 4, cue: 2, presentation: 'application' });
     expect(specifyProblem(['a'], inputs, 'outcome').presentation).toBe('application');
+  });
+
+  it('makes practice the learner asked for easier or harder than the schedule would', () => {
+    const one = { nodeIds: ['a'], rung: 2, cue: 1, presentation: 'application' as const };
+    const several = { nodeIds: ['a', 'b'], rung: 3, cue: 0, presentation: 'theory' as const };
+    expect(atLevel(one, 'normal')).toEqual(one);
+    expect(atLevel(one, 'easier')).toEqual({ nodeIds: ['a'], rung: 1, cue: 0, presentation: 'theory' });
+    expect(atLevel(one, 'harder')).toEqual({ nodeIds: ['a'], rung: 2, cue: 2, presentation: 'application' });
+    expect(atLevel(several, 'easier')).toMatchObject({ rung: 3, cue: 0, presentation: 'theory' });
+    expect(atLevel(several, 'harder')).toMatchObject({ rung: 4, cue: 2, presentation: 'application' });
   });
 
   it('opens mock exams in the last four weeks before a written exam', () => {

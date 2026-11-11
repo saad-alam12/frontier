@@ -55,7 +55,7 @@ import type { GoalProgress } from './budget';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
 import { candidatesForGoal } from './planner';
-import { goalSchedule } from './practice';
+import { goalSchedule, missedInPractice } from './practice';
 import type { GoalSchedule } from './practice';
 
 export interface GoalForm extends GoalInput {
@@ -95,6 +95,8 @@ export interface GoalDetail {
   nextIdeas: string[];
   /** What the scheduler suggests today; null until the goal is compiled. */
   schedule: GoalSchedule | null;
+  /** Ideas whose last practice went wrong: worth a new problem. */
+  missed: { nodeId: string; name: string }[];
   /** Time against the budget, ideas against the plan, and pace; null until the goal is compiled. */
   progress: GoalProgress | null;
   work: GoalWorkState;
@@ -144,6 +146,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
     nextIdeas: candidates.filter((c) => c.onFringe).slice(0, 3).map((c) => view.nodes.get(c.nodeId)?.name ?? c.nodeId),
     simplified: deeper,
     schedule: capabilities.length && goal.status === 'active' ? goalSchedule(db, goalId) : null,
+    missed: capabilities.length && goal.status === 'active' ? missedInPractice(db, goalId) : [],
     progress: capabilities.length ? goalProgress(db, goalId) : null,
     work,
   };

@@ -124,6 +124,11 @@ export function App() {
     setGoalsView({ view, key: Date.now() });
     setScreen('goals');
   };
+  /** Practice lives on Today: a set started elsewhere opens there. */
+  const openPractice = (setId: string) => {
+    setPracticeSet(setId);
+    setScreen('today');
+  };
   const openTrail = (sessionId: string) => {
     setTrailId(sessionId);
     setScreen('trails');
@@ -173,7 +178,7 @@ export function App() {
         {screen === 'session' && <SessionScreen onNavigate={navigate} onChoose={openChoose} />}
         {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
         {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
-        {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} />}
+        {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} onOpenPractice={openPractice} />}
         {screen === 'stats' && <StatsScreen />}
         {screen === 'lookup' && <LookupScreen key={lookupQuery?.key ?? 'lookup'} initialQuery={lookupQuery?.query} onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
         {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}

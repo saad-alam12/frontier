@@ -2,6 +2,7 @@
  * The IPC contract between the renderer and the backend. The UI imports only types from here.
  * Each method has an input and an output type; handlers live in ./handlers.ts.
  */
+import type { PracticeLevel } from '../core/scheduler';
 import type { AsideMode } from '../agents/tutor';
 import type { BackupInfo } from '../store/backup';
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
@@ -65,7 +66,7 @@ export interface MaterialCandidate {
   existed: boolean;
 }
 
-export type { BackupInfo };
+export type { BackupInfo, PracticeLevel };
 
 export interface AppInfo {
   version: string;
@@ -180,7 +181,8 @@ export interface ApiMethods {
   'practice.current': { input: undefined; output: PracticeView | null };
   'practice.get': { input: { setId: string }; output: PracticeView };
   /** Generate a compound set over the goal's fading ideas, or a mock exam; null when nothing is due. */
-  'practice.start': { input: { goalId: string; kind: 'compound' | 'mock' }; output: PracticeView | null };
+  /** A set over what is fading, a mock exam, or (with `nodeIds`) practice the learner asked for on those ideas at a level. */
+  'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null }; output: PracticeView };
   /** Leave a set as it stands: answered problems count, the rest write nothing. */

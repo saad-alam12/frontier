@@ -282,7 +282,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
       endPracticeSet(ctx.db(), setId);
       return null;
     },
-    'practice.start': ({ goalId, kind }) => startPractice(ctx.practiceDeps(), goalId, { kind }),
+    'practice.start': ({ goalId, kind, nodeIds, level }) =>
+      startPractice(ctx.practiceDeps(), goalId, {
+        kind,
+        focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
+      }),
     'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
     'map.view': () => mapView(ctx.db()),
     'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),

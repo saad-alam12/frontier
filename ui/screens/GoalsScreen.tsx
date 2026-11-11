@@ -20,6 +20,7 @@ export function GoalsScreen({
   onGoDeeper,
   onChoose,
   onReviewCards,
+  onOpenPractice,
   initial,
 }: {
   onNavigate: (s: ScreenName) => void;
@@ -27,6 +28,8 @@ export function GoalsScreen({
   onChoose: (init: ChooseInit) => void;
   /** Review one goal's flashcards on the Cards screen. */
   onReviewCards: (goalId: string) => void;
+  /** Open a practice set the learner asked for on a goal's page. */
+  onOpenPractice: (setId: string) => void;
   initial?: GoalsView;
 }) {
   const [goals, setGoals] = useState<GoalDetail[] | null>(null);
@@ -93,6 +96,7 @@ export function GoalsScreen({
           onNewGoal={(text) => setView({ name: 'new', text })}
           onLearn={(nodeIds) => onChoose({ goalId: detail.goal.id, pick: nodeIds })}
           onReviewCards={() => onReviewCards(detail.goal.id)}
+          onOpenPractice={onOpenPractice}
         />
       );
     }
