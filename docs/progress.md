@@ -139,14 +139,18 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
 | R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
 | R6 Overnight extras (separate branch) | Done, to review | Command palette, place shortcuts, paste text into the Library, notes export, fewer clicks, plain errors; branch `claude/r6-overnight` |
-| R7 Fixes and improvements from the review | In progress | `docs/improvement-plan.md`, approved by the owner on 2026-11-11. Three backend code reviews and a pass over every screen on sandbox data; the UI code review stopped early at the usage limit |
+| R7 Fixes and improvements from the review | First session done; second session next | `docs/improvement-plan.md`, approved by the owner on 2026-11-11. Every item of the first session's three groups is built (list under "Next step"). The second session's items are named there too |
 | R5 Background work, goals by depth, your own sessions, flashcards | Done, checkpoint ready | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally with helper agents, finished in a cloud session (review fixes, §7); 298 tests |
 
 ## Next step
 
-**R7 in progress (branch `claude/wizardly-faraday-2jex8f`).** The owner approved every item in `docs/improvement-plan.md` on 2026-11-11 and set the order (its "Build order" section). Build in that order, one commit per item (`R7 <ID>: <title>`), and tick each item in the list below. Items not reached stay for the next session; low-impact ideas are archived in `docs/notes/archived-ideas.md`.
+**R7, first session done (branch `claude/wizardly-faraday-2jex8f`, 2026-11-11).** The owner approved every item in `docs/improvement-plan.md` and set the order (its "Build order" section). All three groups of the first session are built, one commit per item (`R7 <ID>: <title>`), 445 tests, typecheck, lint and the licence check clean.
 
-R7 items built so far (each with tests; details under Decisions):
+**For the owner, on the Mac:** `git fetch`, check out this branch, `npm install`, then the checks under "Open questions for the owner" (search model, reminders, model tools, licences), then `npm run dev` and try what is new: ask the tutor a question in a session and take a hint; the plan as a list; "Practise this skill now" on a goal page; Library "Add a link" and dropping a file on the window; Cards "Undo last rating"; Settings: Reminders, Backups, Show log.
+
+**Next cloud session** continues with the plan's second group, in this order unless the owner says otherwise: B4 (figures from image-heavy pages), B19 (run code), the rest of C1, A3, A4, B7, B8, B9, B10, B15, B17, C4, the rest of C5 (repeat by meaning, a Misconceptions view, contrast problems), C6, the rest of C9 (images and quotes in practice answers), C10, the rest of D16 (keychain, time limits), D19, D20, D21, D22, D23. After that: B5. Archived ideas stay in `docs/notes/archived-ideas.md`.
+
+R7 items built in the first session (each with tests; details under Decisions):
 - [x] D1 a settings change keeps the other settings
 - [x] D5 a settings change leaves running work alone
 - [x] C1 (part) tutor calls run beside background work; planner effort medium
