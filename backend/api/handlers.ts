@@ -74,8 +74,9 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'app.info': () => ({ version: ctx.version, dataFolder: ctx.settings.get().dataFolder, settingsFile: ctx.settingsFile }),
     'settings.get': () => ctx.settings.get(),
     'settings.update': (patch) => {
+      const previous = ctx.settings.get();
       const next = ctx.settings.update(SettingsPatchSchema.parse(patch));
-      ctx.onSettingsChanged();
+      ctx.onSettingsChanged(previous);
       return next;
     },
     'settings.modelOptions': () => modelOptions(),

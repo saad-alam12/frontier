@@ -71,6 +71,11 @@ export class IngestionService {
     return this.options.db;
   }
 
+  /** How many sources are read at once; a change applies to sources not yet started. */
+  setConcurrency(limit: number): void {
+    this.sources.setLimit(limit);
+  }
+
   /** Copy a file into the data folder, read and chunk it. Same content twice is a no-op. */
   async addFile(path: string): Promise<{ source: Source; existed: boolean }> {
     const { kind, bytes, result } = await readSourceFile(path);

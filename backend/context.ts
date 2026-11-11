@@ -2,8 +2,9 @@ import { mkdirSync } from 'node:fs';
 import type { EventSink } from './api/handlers';
 import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
-import { createProvider } from './llm';
+import { createInnerProvider, createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
+import type { ThrottledProvider } from './llm/queue';
 import type { IdeaFinished } from './core/cards';
 import { IngestionService } from './services/ingestion';
 import { queueIdeaCards } from './services/cards';
@@ -12,6 +13,7 @@ import { GoalWorker, nextGoalStep } from './services/goalWorker';
 import { SessionWork } from './services/sessionWork';
 import { SessionMaker } from './services/sessionMaker';
 import { listGoals } from './store/goals';
+import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
 import { openDatabase } from './store/db';
 import type { Database } from './store/db';
@@ -24,8 +26,10 @@ export class AppContext {
   /** "Describe it": the session maker's call and the proposal it leaves. */
   readonly sessionMaker = new SessionMaker();
   emit: EventSink = () => {};
-  private cachedProvider: LlmProvider | null = null;
+  private cachedProvider: ThrottledProvider | null = null;
   private cachedDb: Database | null = null;
+  /** Databases of data folders the learner switched away from: closed at quit, never under work that still writes to them. */
+  private readonly retiredDbs: Database[] = [];
   private cachedEmbedder: Embedder | null = null;
   private cachedIngestion: IngestionService | null = null;
   private cachedGoalWorker: GoalWorker | null = null;
@@ -117,20 +121,29 @@ export class AppContext {
     for (const goal of listGoals(this.db())) if (nextGoalStep(this.db(), goal.id) !== null) this.goalWorker().refresh(goal.id);
   }
 
-  onSettingsChanged(): void {
-    this.cachedProvider = null;
-    this.cachedIngestion = null;
+  /**
+   * Settings changed. Later model calls use the new provider, models and limit; work in flight (a
+   * source being read, an answer being judged) keeps running untouched. Only another data folder
+   * means another database, and even then the old one stays open until quit, because work in flight
+   * may still write to it.
+   */
+  onSettingsChanged(previous: Settings): void {
+    const next = this.settings.get();
+    this.cachedProvider?.reconfigure(createInnerProvider(next, this.paths().agentCwd), next.concurrency);
+    this.cachedIngestion?.setConcurrency(next.concurrency);
+    if (next.dataFolder === previous.dataFolder) return;
+    if (this.cachedDb) this.retiredDbs.push(this.cachedDb);
+    this.cachedDb = null;
     this.cachedEmbedder = null;
-    if (this.cachedDb) {
-      this.cachedDb.close();
-      this.cachedDb = null;
-    }
+    this.cachedIngestion = null;
+    this.cachedGoalWorker = null;
     this.ensureFolders();
   }
 
   close(): void {
-    this.cachedDb?.close();
+    for (const db of [this.cachedDb, ...this.retiredDbs]) db?.close();
     this.cachedDb = null;
+    this.retiredDbs.length = 0;
   }
 
   private ensureFolders(): void {
