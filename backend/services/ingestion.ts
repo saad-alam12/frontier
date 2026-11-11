@@ -153,6 +153,11 @@ export class IngestionService {
     return this.running.has(sourceId);
   }
 
+  /** True while any source is being read. */
+  isBusy(): boolean {
+    return this.running.size > 0;
+  }
+
   /** Process every pending or failed part of a source, in order. Safe to call again after failures. */
   async runSource(sourceId: string): Promise<Source> {
     const source = getSource(this.db, sourceId);

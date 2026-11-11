@@ -1,18 +1,49 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { runMigrations } from './migrations';
+import { upgradeBackup } from './backup';
+import { SCHEMA_VERSION, runMigrations } from './migrations';
 
 export type Database = DatabaseSync;
 
-/** Open (or create) the database and bring the schema up to date. `:memory:` for tests. */
-export function openDatabase(path: string): Database {
+/** The data file cannot be used as it is; the message is written for the learner. */
+export class DataFileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DataFileError';
+  }
+}
+
+/**
+ * Open (or create) the database and bring the schema up to date. `:memory:` for tests. Before
+ * anything is changed the file is checked: data written by a newer version of the app is refused
+ * (older code would misread it), and so is a damaged file. With `backupsDir`, a copy is kept of the
+ * data as it was before a schema upgrade.
+ */
+export function openDatabase(path: string, options: { backupsDir?: string } = {}): Database {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  runMigrations(db);
+  try {
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
+    db.exec('PRAGMA busy_timeout = 5000');
+    const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    if (version > SCHEMA_VERSION) {
+      throw new DataFileError('This data was last opened by a newer version of Frontier. Open it with that version (or a newer one): this one would misread it.');
+    }
+    if (version > 0) {
+      const check = (db.prepare('PRAGMA quick_check').get() as { quick_check: string } | undefined)?.quick_check;
+      if (check !== 'ok') throw new DataFileError(`The data file is damaged (${check ?? 'it could not be checked'}).`);
+      if (version < SCHEMA_VERSION && options.backupsDir) upgradeBackup(db, options.backupsDir, version);
+    }
+    runMigrations(db);
+  } catch (error) {
+    db.close();
+    // a file that is not a database at all fails on its first statement
+    if (error instanceof DataFileError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw /not a database|malformed|corrupt/i.test(message) ? new DataFileError(`The data file is damaged (${message}).`) : error;
+  }
   return db;
 }
 

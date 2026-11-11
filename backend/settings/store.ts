@@ -65,5 +65,6 @@ export function dataPaths(dataFolder: string) {
     modelsCache: join(dataFolder, 'models-cache'),
     agentCwd: join(dataFolder, 'agent'),
     attachments: join(dataFolder, 'attachments'),
+    backups: join(dataFolder, 'backups'),
   };
 }

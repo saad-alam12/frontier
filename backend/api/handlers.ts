@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
-import { app, dialog, ipcMain } from 'electron';
+import { app, dialog, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { exportGoalNotes } from '../services/notes';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate } from './contract';
@@ -80,6 +80,16 @@ export function buildHandlers(ctx: AppContext): Handlers {
   };
   return {
     'app.info': () => ({ version: ctx.version, dataFolder: ctx.settings.get().dataFolder, settingsFile: ctx.settingsFile }),
+    'backups.list': () => ctx.backups(),
+    'backups.create': () => ctx.backupNow(),
+    'backups.restore': ({ file }) => {
+      ctx.restoreBackup(z.string().parse(file));
+      return null;
+    },
+    'backups.showFolder': async () => {
+      await shell.openPath(ctx.paths().backups);
+      return null;
+    },
     'settings.get': () => ctx.settings.get(),
     'settings.update': (patch) => {
       const previous = ctx.settings.get();

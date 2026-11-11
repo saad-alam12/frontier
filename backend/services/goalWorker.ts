@@ -71,6 +71,11 @@ export class GoalWorker {
 
   constructor(private readonly deps: GoalWorkerDeps) {}
 
+  /** True while any goal is being read, profiled or mapped. */
+  isBusy(): boolean {
+    return this.running.size > 0;
+  }
+
   status(goalId: string): GoalWorkState {
     return this.states.get(goalId) ?? { state: 'idle' };
   }

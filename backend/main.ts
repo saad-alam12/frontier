@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, shell } from 'electron';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
 import { externalUrl, isAppPage } from './api/navigation';
@@ -75,17 +75,46 @@ app.commandLine.appendSwitch('lang', 'en-GB');
 const sandbox = process.env['FRONTIER_USER_DATA'];
 if (sandbox) app.setPath('userData', sandbox);
 
+// One copy of the app per data folder: two would both write to the same database and both run its
+// background work. A second start brings the first window forward instead. (Set after the sandbox
+// path above, so a development run on sandbox data does not collide with the real app.)
+const first = app.requestSingleInstanceLock();
+if (!first) app.quit();
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+});
+
+/** How often an open app checks whether today's backup exists (it may stay open for days). */
+const BACKUP_CHECK_MS = 3 * 3_600_000;
+
 void app.whenReady().then(() => {
+  if (!first) return;
   const ctx = new AppContext(
     app.getVersion(),
     join(app.getPath('userData'), 'settings.json'),
     join(app.getPath('home'), 'Frontier'),
   );
   context = ctx;
-  ctx.db();
+  try {
+    ctx.db();
+  } catch (error) {
+    // The data cannot be opened (damaged, or written by a newer version). Say so and stop: starting
+    // on a fresh database would look as if everything was gone.
+    const paths = ctx.paths();
+    dialog.showErrorBox(
+      'Frontier cannot open your data',
+      `${error instanceof Error ? error.message : String(error)}\n\nYour data: ${paths.db}\nBackups (one per day): ${paths.backups}\n\nTo go back to a backup, quit Frontier, copy a backup file over frontier.db and start again.`,
+    );
+    app.quit();
+    return;
+  }
   ctx.emit = eventSink(() => mainWindow);
   registerIpc(ctx, (url) => isAppPage(url, appUrl()));
   createWindow();
+  ctx.backupIfDue();
+  setInterval(() => ctx.backupIfDue(), BACKUP_CHECK_MS).unref();
   ctx.resumeGoalWork();
   resumeGrading(ctx.practiceDeps());
   app.on('activate', () => {

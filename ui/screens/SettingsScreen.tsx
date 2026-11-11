@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../api';
-import type { AppInfo, ConnectionTestResult, Effort, ModelOptions, Role, Settings, SettingsPatch } from '../../backend/api/contract';
+import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, Role, Settings, SettingsPatch } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
-import { Button, Section } from '../components/controls';
+import { Button, Notice, Section } from '../components/controls';
+import { ConfirmDialog } from '../components/Dialog';
+import { plainError } from '../lib/errors';
 import { EraseMap } from '../components/EraseMap';
 import { FlashcardPreferences } from '../components/CardSettings';
 
@@ -134,11 +136,105 @@ export function SettingsScreen() {
             </code>
           </div>
         </div>
+        <Backups />
         {info && <p className="m-0 text-[12px] text-muted">Frontier {info.version}. Settings file: {info.settingsFile}</p>}
       </Section>
 
       <EraseMap />
     </Screen>
+  );
+}
+
+const BACKUP_KIND: Record<BackupInfo['kind'], string> = { daily: 'Daily', manual: 'Made by you', upgrade: 'Before an upgrade', restore: 'Before a restore' };
+
+function formatBackupTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSize(bytes: number): string {
+  return bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** The copies of the learner's data: when the last one was made, one on request, and going back to one. */
+function Backups() {
+  const [backups, setBackups] = useState<BackupInfo[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const [restoring, setRestoring] = useState<BackupInfo | null>(null);
+  useEffect(() => {
+    void call('backups.list').then(setBackups);
+  }, []);
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const latest = backups?.[0];
+  const shown = all ? (backups ?? []) : (backups ?? []).slice(0, 3);
+  return (
+    <div className="settings-group">
+      <SettingRow
+        label="Backups"
+        hint={`A copy of your data is made each day you use Frontier (the last seven are kept), and before every upgrade. ${latest ? `Last copy: ${formatBackupTime(latest.at)}.` : 'No copy yet.'}`}
+      >
+        <Button disabled={busy} onClick={() => void run(async () => setBackups(await call('backups.create')))}>
+          Back up now
+        </Button>
+      </SettingRow>
+      {error && (
+        <div className="settings-path">
+          <Notice error>{error}</Notice>
+        </div>
+      )}
+      {shown.map((b) => (
+        <SettingRow key={b.file} label={formatBackupTime(b.at)} hint={`${BACKUP_KIND[b.kind]} · ${formatSize(b.bytes)}`}>
+          <Button kind="quiet" disabled={busy} onClick={() => setRestoring(b)}>
+            Restore…
+          </Button>
+        </SettingRow>
+      ))}
+      {backups && backups.length > 0 && (
+        <div className="settings-path flex items-baseline gap-[18px]">
+          {backups.length > 3 && (
+            <button type="button" className="link-button" onClick={() => setAll(!all)}>
+              {all ? 'Fewer' : `All ${backups.length} backups`}
+            </button>
+          )}
+          <button type="button" className="link-button" onClick={() => void call('backups.showFolder')}>
+            Show the folder
+          </button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={restoring !== null}
+        title="Go back to this backup?"
+        confirmLabel="Restore"
+        onCancel={() => setRestoring(null)}
+        onConfirm={() => {
+          const file = restoring?.file;
+          setRestoring(null);
+          if (!file) return;
+          void run(async () => {
+            await call('backups.restore', { file });
+            // everything on screen came from the data that was just replaced
+            window.location.reload();
+          });
+        }}
+      >
+        {restoring && (
+          <>
+            Your data goes back to how it was on {formatBackupTime(restoring.at)}. What you did since then is no longer shown. Your data as it is now is copied first, so you can come back to it from this list.
+          </>
+        )}
+      </ConfirmDialog>
+    </div>
   );
 }
 

@@ -356,7 +356,7 @@ A desktop app (macOS first, then Windows/Linux). The rail has the five places yo
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions (a chosen one with what was asked), replay |
 | Library | Add sources (files, or pasted text: notes, an article, a transcript, read like a file), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
-| Settings | Model provider and models, flashcards in sessions without a goal, data folder, preferences |
+| Settings | Model provider and models, flashcards in sessions without a goal, data folder, backups (make one, restore one), preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.
 
@@ -435,9 +435,16 @@ Rules:
 ```
 ~/Frontier/            (configurable)
   frontier.db          SQLite: world layer, you layer, evidence, sessions, goals, sources, practice, activity log
+  backups/             copies of frontier.db: one for each day the app is used (seven kept), one before
+                       every schema upgrade and every restore, and those made with "Back up now"
   sources/             original files the learner added
+  attachments/         images attached to session answers, named by their content hash
+  models-cache/        the local embedding model
+  agent/               working folder of the model process (nothing is read from it)
   exports/             optional Markdown export of nodes (Obsidian-readable)
 ```
+
+**Keeping the data safe.** Everything the learner has built lives in `frontier.db`, so: a copy is made each day the app is used and before every schema upgrade (`VACUUM INTO`, consistent while the app runs); Settings lists the copies, makes one on request and restores one (the data as it is now is copied first, so a restore can be undone); when the file opens it is checked, and data that is damaged or was written by a newer version of the app is refused with a message that names the file and the backups, instead of starting on an empty database; only one copy of the app runs per data folder.
 
 ---
 

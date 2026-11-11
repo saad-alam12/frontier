@@ -1,4 +1,5 @@
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { EventSink } from './api/handlers';
 import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
@@ -16,6 +17,8 @@ import { SessionMaker } from './services/sessionMaker';
 import { listGoals } from './store/goals';
 import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
+import { dailyBackup, isBackupName, listBackups, manualBackup, restoreBackup as saveBeforeRestore } from './store/backup';
+import type { BackupInfo } from './store/backup';
 import { openDatabase } from './store/db';
 import { releaseInterruptedSources } from './store/sources';
 import type { Database } from './store/db';
@@ -58,7 +61,7 @@ export class AppContext {
 
   db(): Database {
     if (!this.cachedDb) {
-      this.cachedDb = openDatabase(this.paths().db);
+      this.cachedDb = openDatabase(this.paths().db, { backupsDir: this.paths().backups });
       upgradeTimeOwners(this.cachedDb);
       upgradeDerivedStates(this.cachedDb);
       // nothing is reading yet when a database opens, so a source still marked as being read was cut off by a quit
@@ -125,6 +128,47 @@ export class AppContext {
     };
   }
 
+  /** Today's copy of the data, if there is none yet. A copy that cannot be written never stops the app. */
+  backupIfDue(): void {
+    try {
+      dailyBackup(this.db(), this.paths().backups);
+    } catch (error) {
+      this.emit('app.toast', { kind: 'error', message: `Today's backup could not be written. ${error instanceof Error ? error.message : String(error)}` });
+    }
+  }
+
+  backups(): BackupInfo[] {
+    return listBackups(this.paths().backups);
+  }
+
+  backupNow(): BackupInfo[] {
+    manualBackup(this.db(), this.paths().backups);
+    return this.backups();
+  }
+
+  /**
+   * Put a backup in place of the data. The data as it is now is copied first, so a restore can be
+   * undone. Refused while anything is being written (an answer judged, a source read): that work
+   * holds the database open and would write into the restored data.
+   */
+  restoreBackup(file: string): void {
+    const paths = this.paths();
+    if (!isBackupName(file) || !existsSync(join(paths.backups, file))) throw new Error('That backup is no longer there.');
+    if (this.sessionWork.current()?.status === 'running' || this.cachedIngestion?.isBusy() || this.cachedGoalWorker?.isBusy()) {
+      throw new Error('Frontier is still working on something (an answer, a source or a goal). Wait until it has finished, then restore.');
+    }
+    const db = this.db();
+    saveBeforeRestore(db, paths.backups);
+    db.close();
+    this.cachedDb = null;
+    this.cachedIngestion = null;
+    this.cachedGoalWorker = null;
+    // the write-ahead files belong to the data being replaced
+    for (const leftover of [`${paths.db}-wal`, `${paths.db}-shm`]) rmSync(leftover, { force: true });
+    copyFileSync(join(paths.backups, file), paths.db);
+    this.db();
+  }
+
   resumeGoalWork(): void {
     for (const goal of listGoals(this.db())) if (nextGoalStep(this.db(), goal.id) !== null) this.goalWorker().refresh(goal.id);
   }
@@ -156,6 +200,6 @@ export class AppContext {
 
   private ensureFolders(): void {
     const p = this.paths();
-    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd, p.attachments]) mkdirSync(dir, { recursive: true });
+    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd, p.attachments, p.backups]) mkdirSync(dir, { recursive: true });
   }
 }

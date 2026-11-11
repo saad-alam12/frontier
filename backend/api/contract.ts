@@ -2,6 +2,7 @@
  * The IPC contract between the renderer and the backend. The UI imports only types from here.
  * Each method has an input and an output type; handlers live in ./handlers.ts.
  */
+import type { BackupInfo } from '../store/backup';
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
 import type { MaterialRole } from '../core/types';
 import type { ConnectionTestResult } from '../agents/connectionTest';
@@ -63,6 +64,8 @@ export interface MaterialCandidate {
   existed: boolean;
 }
 
+export type { BackupInfo };
+
 export interface AppInfo {
   version: string;
   dataFolder: string;
@@ -71,6 +74,12 @@ export interface AppInfo {
 
 export interface ApiMethods {
   'app.info': { input: undefined; output: AppInfo };
+  /** Copies of the data: one a day, one before each upgrade and each restore, and those the learner asked for. */
+  'backups.list': { input: undefined; output: BackupInfo[] };
+  'backups.create': { input: undefined; output: BackupInfo[] };
+  /** Put a backup in place of the data (the data as it is now is copied first). The window reloads afterwards. */
+  'backups.restore': { input: { file: string }; output: null };
+  'backups.showFolder': { input: undefined; output: null };
   'settings.get': { input: undefined; output: Settings };
   'settings.update': { input: SettingsPatch; output: Settings };
   /** Known models, their efforts and the default per role, for the Settings dropdowns. */
