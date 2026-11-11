@@ -7,9 +7,37 @@ const days = (n: number) => new Date(t0.getTime() + n * 86_400_000);
 describe('fsrs wrapper', () => {
   it('maps scores to ratings', () => {
     expect(scoreToRating(0)).toBe(1);
-    expect(scoreToRating(0.5)).toBe(2);
-    expect(scoreToRating(0.7)).toBe(3);
+    expect(scoreToRating(0.5)).toBe(1); // below the pass mark is a failed recall, whatever its size
+    expect(scoreToRating(0.69)).toBe(1);
+    expect(scoreToRating(0.7)).toBe(2);
+    expect(scoreToRating(0.8)).toBe(3);
     expect(scoreToRating(0.95)).toBe(4);
+  });
+
+  it('a failed answer never lengthens the time until the idea comes back', () => {
+    const base = applyReview(emptyFsrs(), 0.9, t0);
+    for (const score of [0.1, 0.45, 0.6, 0.69]) {
+      const after = applyReview(base, score, days(20));
+      expect(after.stability, `score ${score}`).toBeLessThan(base.stability);
+      expect(after.lapses).toBe(1);
+    }
+    expect(applyReview(base, 0.7, days(20)).stability).toBeGreaterThan(base.stability);
+  });
+
+  it('counts the real time between two reviews, not calendar days', () => {
+    const minutes = (from: string, n: number) => new Date(new Date(from).getTime() + n * 60_000);
+    // twenty minutes apart, once within a day and once across midnight UTC: the same result
+    const within = applyReview(applyReview(emptyFsrs(), 0.8, new Date('2026-03-10T10:00:00Z')), 0.9, minutes('2026-03-10T10:00:00Z', 20));
+    const across = applyReview(applyReview(emptyFsrs(), 0.8, new Date('2026-03-10T23:50:00Z')), 0.9, minutes('2026-03-10T23:50:00Z', 20));
+    expect(across.stability).toBeCloseTo(within.stability, 6);
+    // and a review after a real gap grows the memory more than one right away
+    const base = applyReview(emptyFsrs(), 0.8, t0);
+    expect(applyReview(base, 0.9, days(3)).stability).toBeGreaterThan(applyReview(base, 0.9, days(0.01)).stability);
+  });
+
+  it('survives a clock that was set back', () => {
+    const base = applyReview(emptyFsrs(), 0.9, days(5));
+    expect(() => applyReview(base, 0.9, days(2))).not.toThrow();
   });
 
   it('has zero recall before any review and high recall right after', () => {

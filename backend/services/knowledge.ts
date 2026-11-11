@@ -10,11 +10,12 @@ import { computeFringe, ownedSet } from '../core/ownership';
 import type { Chain, KnowledgeNode, NodeState, Tier } from '../core/types';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
-import { listStates } from '../store/evidence';
+import { listStates, nodesWithEvidence } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listChains, listNodes } from '../store/world';
 import { replan } from './budget';
-import { setGoalFields } from './evidence';
+import { getSetting, setSetting } from '../store/settingsTable';
+import { recomputeState, setGoalFields } from './evidence';
 
 export interface KnowledgeView {
   nodes: Map<string, KnowledgeNode>;
@@ -62,4 +63,23 @@ export function refreshGoalFields(db: Database): Map<string, Tier> {
     }
   });
   return tiers;
+}
+
+/**
+ * The rules that turn evidence into depth and freshness, as a number. Stored states are derived, so
+ * when the rules change they are derived again from the evidence, once, the next time the database
+ * opens. 2: one review per sitting with the prediction left out, real elapsed time, failed answers
+ * never lengthen the interval, no review from lookups or failed tasks, depth drops after two clear
+ * failures on different days.
+ */
+export const STATE_RULES = 2;
+const STATE_RULES_KEY = 'states.rules';
+
+export function upgradeDerivedStates(db: Database): void {
+  if (Number(getSetting(db, STATE_RULES_KEY) ?? 1) >= STATE_RULES) return;
+  transaction(db, () => {
+    for (const nodeId of nodesWithEvidence(db)) recomputeState(db, nodeId);
+    setSetting(db, STATE_RULES_KEY, String(STATE_RULES));
+  });
+  refreshGoalFields(db);
 }

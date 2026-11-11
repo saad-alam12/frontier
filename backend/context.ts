@@ -10,6 +10,7 @@ import { IngestionService } from './services/ingestion';
 import { queueIdeaCards } from './services/cards';
 import type { CardWriterDeps } from './services/cards';
 import { GoalWorker, nextGoalStep } from './services/goalWorker';
+import { upgradeDerivedStates } from './services/knowledge';
 import { SessionWork } from './services/sessionWork';
 import { SessionMaker } from './services/sessionMaker';
 import { listGoals } from './store/goals';
@@ -55,7 +56,10 @@ export class AppContext {
   }
 
   db(): Database {
-    if (!this.cachedDb) this.cachedDb = openDatabase(this.paths().db);
+    if (!this.cachedDb) {
+      this.cachedDb = openDatabase(this.paths().db);
+      upgradeDerivedStates(this.cachedDb);
+    }
     return this.cachedDb;
   }
 

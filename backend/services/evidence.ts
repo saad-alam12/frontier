@@ -7,6 +7,7 @@ import { implicitCreditWeights } from '../core/implicitCredit';
 import { indexChains } from '../core/graph';
 import { deriveState } from '../core/nodeState';
 import type { Evidence, EvidenceContext, EvidenceKind, NodeState } from '../core/types';
+import { PASS_SCORE } from '../core/types';
 import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
 import { emptyState, eraseEvidence, getState, insertEvidence, listEvidenceForNode, upsertState } from '../store/evidence';
@@ -49,7 +50,8 @@ export function recordEvidence(db: Database, input: EvidenceInput): { evidence: 
     insertEvidence(db, evidence);
     const touched = new Set<string>([evidence.nodeId]);
     const implicit: Evidence[] = [];
-    if ((evidence.kind === 'use' || evidence.kind === 'practice') && !evidence.context.implicit) {
+    // a passed task used its premises; a failed one says nothing about which of them failed
+    if ((evidence.kind === 'use' || evidence.kind === 'practice') && !evidence.context.implicit && evidence.score >= PASS_SCORE) {
       const index = indexChains(collectAncestryChains(db, evidence.nodeId));
       for (const [premiseId, { weight, hops }] of implicitCreditWeights(evidence.nodeId, index)) {
         const credit: Evidence = {

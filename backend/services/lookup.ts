@@ -128,8 +128,8 @@ export function looksLikeQuestion(query: string): boolean {
 }
 
 /**
- * Open an idea's card. Looking something up is a weak retrieval signal (design §8): it records
- * `lookup` evidence at most once per idea per day.
+ * Open an idea's card. It records `lookup` evidence at most once per idea per day (design §8): a
+ * trace that the idea was needed. The card shows the answer, so a lookup never counts as a review.
  */
 export function openCard(db: Database, nodeId: string, now = new Date()): NodeCard {
   const today = now.toISOString().slice(0, 10);

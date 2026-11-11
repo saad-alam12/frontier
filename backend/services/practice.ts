@@ -324,6 +324,8 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
         confidence: answer.confidence,
         context: { rung: problem.rung, cue: problem.cue, problemId: problem.id, step: set?.kind === 'mock' ? 'mock' : 'practice' },
         sessionId: set?.sessionId ?? null,
+        // the recall happened when the learner answered, not when the grade arrived (grading can finish days later, after a restart)
+        at: answer.submittedAt,
       });
     }
     if (grade.misconception) {
