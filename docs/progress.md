@@ -171,6 +171,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] B2 hints: up to two on a question; an answer given with hints counts for less (0.85, 0.7)
 - [x] C3 a missed question is asked again once in a fresh version; a missed prediction is no longer a failure
 - [x] A1 the plan as a list beside the dots: every idea by name, in learning order, with its minutes and sessions
+- [x] C8 goals use freed time ("Use the time"), ask about finishing once their date has passed, and say when their material is only an exam or a syllabus
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -300,6 +301,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 C8): Freed time. `GoalProgress.room` is set when an active goal with a budget has at least 25 minutes that its approved plan does not use, and a plan approved afresh (the uncapped preview for the same budget) would give some idea more depth than it has now; it counts ideas that would come back (`more`) and ideas that would go deeper (`deeper`). "Use the time" (`goals.useFreedTime`) clears the approved caps (simplified ideas keep theirs), re-plans and approves. The goal page also shows a note when an active goal's date has passed, with "Mark as finished", and a line under Material when none of it is teaching or reference material. Design §3.4 updated.
 
 - 2026-11-11 (R7 A1): The plan as a list. `PlanPreview.ideas` carries `minutes` (the cost model from the current to the planned depth, with the premise surcharge, at the learner's speed), `premiseMinutes` and `sessions` (from, to). `roadmap` (`core/plan.ts`) orders the ideas still to learn so that what an idea is built on comes first (the chain with the fewest ideas still to learn; ties by centrality) and lays them end to end over 45-minute sessions, so a long idea spans several and the last number matches the plan's session count. The preview's ideas come in that order. `IdeaField` has a Dots / List switch remembered in `localStorage` (`frontier.plan.view`); it applies wherever the dots showed: the plan step, "Change the time", an addition and a new map. Checked in the running app.
 

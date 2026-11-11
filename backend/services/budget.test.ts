@@ -10,7 +10,7 @@ import { listNodes } from '../store/world';
 import { tick } from './activity';
 import { attributeTime, freezeTimeOwners, goalProgress, learnerSpeedNow, previewPlan, spentByGoal, timeOwners } from './budget';
 import { recordEvidence } from './evidence';
-import { approveGoalPlan, compileGoal, createGoalFromForm, goalDetail, setGoalStatus, updateGoalFromForm } from './goals';
+import { approveGoalPlan, compileGoal, createGoalFromForm, goalDetail, setGoalStatus, updateGoalFromForm, useFreedTime } from './goals';
 import { addExtraMinutes, capTargets, deleteGoal, setMaterials } from '../store/goals';
 import { createSource, updateSourceStatus } from '../store/sources';
 import { GoalWorker, nextGoalStep } from './goalWorker';
@@ -443,4 +443,29 @@ describe('goal edge cases (R7 D14)', () => {
     release();
     void t0;
   });
+
+  it('offers time back when the learner turns out to know part of the approved plan', () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 3);
+    approveGoalPlan(db, goal.id);
+    const before = goalProgress(db, goal.id);
+    expect(before?.plan.ideas.cut).toBeGreaterThan(0); // three hours do not hold all twelve ideas
+    expect(before?.room).toBeNull(); // and the plan uses its time
+
+    // the probe (or anything else) shows that the planned ideas are already known
+    const planned = listTargets(db, goal.id).map((t) => t.nodeId);
+    for (const nodeId of new Set(planned)) recordEvidence(db, { nodeId, kind: 'use', score: 0.95, reasoning: 'knew it' });
+    refreshGoalFields(db);
+    const freed = goalProgress(db, goal.id);
+    expect(freed?.plan.plannedMinutes).toBeLessThan(before?.plan.plannedMinutes ?? 0);
+    expect(freed?.room?.more).toBeGreaterThan(0); // the approved plan cannot use the time: left-out ideas could come back
+    expect(freed?.room?.minutes).toBeGreaterThanOrEqual(25);
+
+    useFreedTime(db, goal.id);
+    const after = goalProgress(db, goal.id);
+    expect(after?.plan.ideas.cut).toBeLessThan(before?.plan.ideas.cut ?? 0);
+    expect(after?.room).toBeNull(); // what the time holds is planned again
+    expect(listActivity(db, { kinds: ['goal.extended'] })).toHaveLength(1);
+  });
 });
+

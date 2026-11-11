@@ -1,3 +1,4 @@
+import { dueIn } from '../../lib/dueIn';
 import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
 import { call, isCancelled } from '../../api';
@@ -178,6 +179,9 @@ export function GoalPage({
         ) : (
           <p className="m-0 text-secondary">None. The map comes from your goal and what the questions show.</p>
         )}
+        {detail.materials.length > 0 && !detail.materials.some((m) => m.role === 'teaching' || m.role === 'reference') && (
+          <p className="t-small m-0 text-muted">None of this is material to learn from, so the map comes from your goal itself. Add lectures, a script or notes and the map follows them.</p>
+        )}
       </div>
     </>
   );
@@ -228,6 +232,14 @@ export function GoalPage({
         )}
       </section>
 
+      {goal.status === 'active' && dueIn(goal.date) === 'passed' && (
+        <div className="state-note" role="status">
+          <span>The date of this goal has passed ({formatDate(goal.date)}). If you are done with it, mark it as finished; if it goes on, give it a new date in Edit goal.</span>
+          <Button disabled={busy !== null} onClick={() => void setStatus('done')}>
+            Mark as finished
+          </Button>
+        </div>
+      )}
       {(goal.status === 'paused' || goal.status === 'done') && (
         <div className="state-note" role="status">
           <span>
@@ -274,6 +286,14 @@ export function GoalPage({
               <ProgressFigures progress={progress} />
               <BudgetBar progress={{ ...progress, plannedMinutes: progress.plan.plannedMinutes }} />
               <PaceNotes progress={progress} />
+              {progress.room && goal.status === 'active' && (
+                <div className="simplified-note">
+                  <p className="m-0">{roomSentence(progress.room)}</p>
+                  <button type="button" className="link-button self-start" disabled={busy !== null} onClick={() => void run('room', async () => void (await call('goals.useFreedTime', { goalId: goal.id }).then(onChanged)))}>
+                    {busy === 'room' ? 'Re-planning…' : 'Use the time'}
+                  </button>
+                </div>
+              )}
               {detail.simplified.ideas.length > 0 && (
                 <div className="simplified-note">
                   <p className="m-0 text-soft">
@@ -494,6 +514,12 @@ function PaceNotes({ progress }: { progress: GoalProgress }) {
       {trim && <p className="t-small m-0 text-secondary">{trim}</p>}
     </div>
   );
+}
+
+/** "Your time now holds 4 more ideas and 2 in more depth: about 3 hours of it are not planned." */
+function roomSentence(room: NonNullable<GoalProgress['room']>): string {
+  const parts = [room.more ? `${room.more} more ${room.more === 1 ? 'idea' : 'ideas'}` : null, room.deeper ? `${room.deeper} in more depth` : null].filter(Boolean);
+  return `Your time now holds ${parts.join(' and ')}: about ${formatHours(room.minutes)} of it are not planned, because you knew or learned some of the plan faster than expected.`;
 }
 
 /**

@@ -195,6 +195,20 @@ export function updateGoalFromForm(db: Database, goalId: string, form: Partial<G
 }
 
 /**
+ * Use time the approved plan no longer needs (design §3.4): the plan is approved again from the
+ * goal's ideal depths for the same time, so ideas it had left out or kept shallow come back as far as
+ * the time holds. Simplified ideas stay as they were learned; going deeper on them is its own choice.
+ */
+export function useFreedTime(db: Database, goalId: string): void {
+  const goal = getGoal(db, goalId);
+  if (!goal || goal.status !== 'active') throw new Error('Only a goal you are learning now can take more into its plan.');
+  clearApprovedDepths(db, goalId);
+  refreshGoalFields(db);
+  approvePlannedDepths(db, goalId);
+  logEvent(db, 'goal.extended', { goalId }, { freedTime: true });
+}
+
+/**
  * Pause, finish or take up a goal again. A paused or finished goal keeps everything (its map, its
  * time, its flashcards) but is left out of Today, of the scheduler and of the shared plan, so its
  * ideas no longer take a share of other goals' time. A draft has no plan yet, so it has no state to set.

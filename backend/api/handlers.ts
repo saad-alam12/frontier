@@ -12,7 +12,7 @@ import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
-import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, setGoalStatus, updateGoalFromForm } from '../services/goals';
+import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, setGoalStatus, updateGoalFromForm, useFreedTime } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
@@ -159,6 +159,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'goals.update': ({ goalId, form }) => {
       updateGoalFromForm(ctx.db(), goalId, form);
       ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
+    },
+    'goals.useFreedTime': ({ goalId }) => {
+      useFreedTime(ctx.db(), goalId);
+      ctx.emit('goals.changed', { goalId });
       return detail(goalId);
     },
     'goals.setStatus': ({ goalId, status }) => {

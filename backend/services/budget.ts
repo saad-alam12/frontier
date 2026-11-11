@@ -367,6 +367,11 @@ export interface GoalProgress {
   resources: ResourceTime[];
   /** Minutes the learner learns in, against the plan's estimate (1 = as planned). */
   speed: number;
+  /**
+   * Time the approved plan no longer uses (the learner knew more than planned for, or learned faster):
+   * how many more ideas, and how many deeper, the same time would hold now. Null when there is none.
+   */
+  room: { more: number; deeper: number; minutes: number } | null;
 }
 
 /**
@@ -430,7 +435,36 @@ export function goalProgress(db: Database, goalId: string, now = new Date()): Go
     pace,
     resources,
     speed: inputs.speed,
+    room: freedRoom(db, goal, plan, total, spentMinutes),
   };
+}
+
+/** Unplanned time worth offering back: at least this many minutes, about one idea. */
+const ROOM_WORTH_MINUTES = 25;
+
+/**
+ * The approved plan is a ceiling: automatic re-plans never go past it (design §3.4). When the learner
+ * turns out to know part of it, or learns faster, time is left over that the approved plan cannot
+ * use. This says what the same time would hold if the plan were approved again from the goal's
+ * ideal depths: the learner decides whether to use it.
+ */
+function freedRoom(db: Database, goal: Goal, plan: GoalPlan, total: number | null, spentMinutes: number): GoalProgress['room'] {
+  if (goal.status !== 'active' || total === null) return null;
+  const unused = total - spentMinutes - plan.plannedMinutes;
+  if (unused < ROOM_WORTH_MINUTES) return null;
+  const fresh = previewPlan(db, goal.id, goal.budget);
+  if (!fresh) return null;
+  const now = new Map<string, number>();
+  for (const t of listTargets(db, goal.id, { all: true })) now.set(t.nodeId, Math.max(now.get(t.nodeId) ?? 0, t.depth));
+  let more = 0;
+  let deeper = 0;
+  for (const idea of fresh.ideas) {
+    const planned = now.get(idea.nodeId) ?? 0;
+    if (idea.plannedDepth <= planned) continue;
+    if (planned === 0) more += 1;
+    else deeper += 1;
+  }
+  return more + deeper > 0 ? { more, deeper, minutes: Math.round(unused) } : null;
 }
 
 function startOfWeek(now: Date): Date {
