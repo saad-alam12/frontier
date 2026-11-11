@@ -8,6 +8,7 @@ import type { Surface } from '../store/activity';
 import { logTime } from '../store/activity';
 import { getPracticeSet, listProblems, answerFor } from '../store/practice';
 import { activeSession } from '../store/sessions';
+import { timeOwners } from './budget';
 import type { SessionState } from './session';
 
 export interface TickInput {
@@ -31,7 +32,8 @@ export function tick(db: Database, input: TickInput, now = new Date()): void {
     const step = state.phase === 'teach' ? state.plan.steps[state.stepIndex] : undefined;
     // a chosen session not counted toward a goal is free study: no goal's time, also not through its ideas
     const surface = state.free && session.goalId === null ? 'free' : 'session';
-    logTime(db, surface, { goalId: session.goalId, sessionId: session.id, nodeId: step?.nodeId ?? null, practiceSetId: state.practiceSetId ?? null }, seconds, now);
+    const context = { goalId: session.goalId, sessionId: session.id, nodeId: step?.nodeId ?? null, practiceSetId: state.practiceSetId ?? null };
+    logTime(db, surface, context, seconds, now, surface === 'free' ? undefined : () => timeOwners(db, context));
     return;
   }
   if (input.surface === 'practice' && input.practiceSetId) {
@@ -40,8 +42,12 @@ export function tick(db: Database, input: TickInput, now = new Date()): void {
     const open = listProblems(db, set.id).find((p) => !answerFor(db, p.id));
     // a problem drawing on one idea books the time to it; a composition books it to the goal
     const nodeId = open && open.nodeIds.length === 1 ? (open.nodeIds[0] ?? null) : null;
-    logTime(db, 'practice', { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId, nodeId }, seconds, now);
+    const context = { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId, nodeId };
+    logTime(db, 'practice', context, seconds, now, () => timeOwners(db, context));
     return;
   }
-  logTime(db, input.surface, { goalId: input.goalId ?? null }, seconds, now);
+  const context = { goalId: input.goalId ?? null };
+  // the probe and flashcard reviews are study for their goal; a screen that is not study belongs to no goal
+  const study = input.surface === 'probe' || input.surface === 'cards';
+  logTime(db, input.surface, context, seconds, now, study ? () => timeOwners(db, context) : undefined);
 }

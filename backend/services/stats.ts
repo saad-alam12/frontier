@@ -4,7 +4,7 @@
  * here is read-only arithmetic over stored data.
  */
 import { addDays, daysBetween, localDate, startOfDay, weekStart } from '../core/dates';
-import { formatHours, ideaMinutes, learnerSpeed } from '../core/budget';
+import { formatHours, ideaMinutes } from '../core/budget';
 import { topics } from '../core/clusters';
 import { recallProbability } from '../core/fsrs';
 import { indexChains } from '../core/graph';
@@ -17,7 +17,7 @@ import { listEvidenceSince, listStates } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listSessions } from '../store/sessions';
 import { listChains, listNodes } from '../store/world';
-import { attributeTime, freeStudy, goalProgress } from './budget';
+import { attributeTime, freeStudy, goalProgress, learnerSpeedNow } from './budget';
 
 const DAY_MS = 86_400_000;
 export const STATS_RANGES = ['7d', '30d', '90d', 'all'] as const;
@@ -65,6 +65,9 @@ interface BugRow {
   resolved_at: string | null;
 }
 
+/** The key under which time for goals that no longer exist is shown. */
+export const REMOVED_GOALS = 'removed';
+
 export function statsView(db: Database, filter: StatsFilter, now = new Date()): StatsView {
   const days = RANGE_DAYS[filter.range];
   const since = days === null ? null : new Date(now.getTime() - days * DAY_MS).toISOString();
@@ -96,7 +99,10 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
   // time: each goal's, and free study as a line of its own (it belongs to no goal)
   const inTopic = (s: { span: { nodeId: string | null } }) => !topicNodes || (s.span.nodeId !== null && topicNodes.has(s.span.nodeId));
   const free = filter.goalId ? [] : freeStudy(db).filter(inTopic).map((s) => ({ ...s, goalId: 'free' }));
-  const shares = [...attributeTime(db).filter((s) => (!filter.goalId || s.goalId === filter.goalId) && inTopic(s)), ...free];
+  // time spent for a goal that was removed since is still time studied: it is kept under one name
+  const known = new Set(allGoals.map((g) => g.id));
+  const attributed = attributeTime(db).map((s) => (known.has(s.goalId) ? s : { ...s, goalId: REMOVED_GOALS }));
+  const shares = [...attributed.filter((s) => (!filter.goalId || s.goalId === filter.goalId) && inTopic(s)), ...free];
   const inRange = shares.filter((s) => !since || s.span.endedAt >= since);
   const minutes = inRange.reduce((sum, s) => sum + s.minutes, 0);
 
@@ -150,9 +156,8 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
       pace: p.pace.kind,
     }));
 
-  const studied = attributeTime(db).reduce((s, x) => s + x.minutes, 0);
-  const estimated = transitions.reduce((s, t) => s + (t.to > t.from ? ideaMinutes(nodes.get(t.nodeId)?.kind ?? 'claim', t.from, t.to) : 0), 0);
-  const speed = learnerSpeed(estimated, studied);
+  // the learner's speed is one number, the one the plans use, whatever the filter shows
+  const speed = learnerSpeedNow(db);
 
   const view: StatsView = {
     filter,

@@ -13,7 +13,7 @@ import { transaction } from '../store/db';
 import { listStates, nodesWithEvidence } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listChains, listNodes } from '../store/world';
-import { replan } from './budget';
+import { freezeTimeOwners, replan } from './budget';
 import { getSetting, setSetting } from '../store/settingsTable';
 import { recomputeState, setGoalFields } from './evidence';
 
@@ -74,6 +74,19 @@ export function refreshGoalFields(db: Database): Map<string, Tier> {
  */
 export const STATE_RULES = 2;
 const STATE_RULES_KEY = 'states.rules';
+
+/**
+ * Study time logged before each span stored who it belongs to is given its owners once, by the goals
+ * as they are now. From then on the minutes stay with those goals.
+ */
+export function upgradeTimeOwners(db: Database): void {
+  if (getSetting(db, TIME_OWNERS_KEY) === '1') return;
+  transaction(db, () => {
+    freezeTimeOwners(db);
+    setSetting(db, TIME_OWNERS_KEY, '1');
+  });
+}
+const TIME_OWNERS_KEY = 'time.owners';
 
 export function upgradeDerivedStates(db: Database): void {
   if (Number(getSetting(db, STATE_RULES_KEY) ?? 1) >= STATE_RULES) return;

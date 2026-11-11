@@ -197,6 +197,15 @@ export function extendBaseline(db: Database, id: string, depths: Record<string, 
   db.prepare('UPDATE goals SET baseline = ? WHERE id = ?').run(JSON.stringify(next), id);
 }
 
+/** Raise the baseline of some ideas: what the learner turned out to know already is not what the goal taught them. */
+export function raiseBaseline(db: Database, id: string, depths: Record<string, Depth>): void {
+  const goal = getGoal(db, id);
+  if (!goal) return;
+  const next = { ...goal.baseline };
+  for (const [nodeId, depth] of Object.entries(depths)) if (depth > (next[nodeId] ?? 0)) next[nodeId] = depth;
+  db.prepare('UPDATE goals SET baseline = ? WHERE id = ?').run(JSON.stringify(next), id);
+}
+
 /** Write the plan's depth for each target, keyed `${capabilityId}|${nodeId}`. */
 export function savePlannedDepths(db: Database, planned: Map<string, Depth>): void {
   const stmt = db.prepare('UPDATE targets SET planned_depth = ? WHERE capability_id = ? AND node_id = ? AND (planned_depth IS NOT ? )');

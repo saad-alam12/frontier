@@ -94,7 +94,11 @@ export function logEvent(db: Database, kind: Exclude<ActivityKind, 'time'>, cont
 }
 
 /** Add `seconds` of active time ending at `at` to the span of this activity, or open a new span. */
-export function logTime(db: Database, surface: Surface, context: ActivityContext, seconds: number, at = new Date()): void {
+/**
+ * `owners` names the goals this time belongs to, asked for only when a new span opens. It is stored
+ * with the span, so the time stays where it was spent whatever happens to the goals later.
+ */
+export function logTime(db: Database, surface: Surface, context: ActivityContext, seconds: number, at = new Date(), owners?: () => string[]): void {
   const last = db.prepare("SELECT * FROM activity WHERE kind = 'time' ORDER BY ended_at DESC, rowid DESC LIMIT 1").get() as ActivityRow | undefined;
   const same =
     last &&
@@ -121,8 +125,15 @@ export function logTime(db: Database, surface: Surface, context: ActivityContext
     context.practiceSetId ?? null,
     context.nodeId ?? null,
     context.sourceId ?? null,
-    JSON.stringify({ surface }),
+    JSON.stringify(owners ? { surface, owners: owners() } : { surface }),
   );
+}
+
+/** Store who a span of time belongs to (for spans logged before owners were recorded). */
+export function setSpanOwners(db: Database, id: string, owners: string[]): void {
+  const row = db.prepare('SELECT data FROM activity WHERE id = ?').get(id) as { data: string } | undefined;
+  if (!row) return;
+  db.prepare('UPDATE activity SET data = ? WHERE id = ?').run(JSON.stringify({ ...parseJson<Record<string, unknown>>(row.data, {}), owners }), id);
 }
 
 export function listActivity(db: Database, options: { kinds?: ActivityKind[]; since?: string } = {}): Activity[] {

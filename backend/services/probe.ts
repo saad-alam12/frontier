@@ -12,7 +12,9 @@ import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
 import { recordBug } from '../store/bugs';
 import { deleteDrafts } from '../store/drafts';
-import { getGoal, listTargets } from '../store/goals';
+import { getGoal, listGoals, listTargets, raiseBaseline } from '../store/goals';
+import { getState } from '../store/evidence';
+import type { Depth } from '../core/types';
 import { closeProbeSet, createProbeSet, getProbeSet, openProbeId, recordProbeAnswer } from '../store/probes';
 import { getNodes } from '../store/world';
 import { recordEvidence } from './evidence';
@@ -143,6 +145,7 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
   );
   const byNode = new Map<string, Assessment>(assessments.map((a) => [a.nodeId, a]));
 
+  const depthBefore = new Map([...view.states].map(([nodeId, state]) => [nodeId, state.depth]));
   const outcomes = transaction(db, () => {
     const outcomes: ProbeOutcome[] = [];
     for (const { problem, input } of prepared) {
@@ -174,10 +177,36 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
     }
     closeProbeSet(db, probeId);
     deleteDrafts(db, set.problems.map((p) => probeDraftKey(p.id)));
+    notePriorKnowledge(db, depthBefore, new Set(outcomes.flatMap((o) => [o.nodeId, ...o.impliedPremises.map((p) => p.nodeId)])));
     return outcomes;
   });
   // what the probe showed changes what the time buys, and missing background may call for a new map
   if (set.goalId) noteBackgroundGaps(db, set.goalId, gaps, 'probe');
   refreshGoalFields(db);
   return outcomes;
+}
+
+/**
+ * What a probe certifies is what the learner already knew, not what a goal taught them in its time.
+ * Each goal that holds a probed idea gets its baseline for that idea raised by the depth the probe
+ * added, so the learner's speed (learned per minute studied) does not read a few minutes of
+ * questions as hours of learning and make every plan hold too much.
+ */
+function notePriorKnowledge(db: Database, before: Map<string, Depth>, touched: Set<string>): void {
+  const gains = new Map<string, { gain: number; now: Depth }>();
+  for (const nodeId of touched) {
+    const now = getState(db, nodeId)?.depth ?? 0;
+    const gain = now - (before.get(nodeId) ?? 0);
+    if (gain > 0) gains.set(nodeId, { gain, now });
+  }
+  if (!gains.size) return;
+  for (const goal of listGoals(db)) {
+    if (goal.status === 'draft') continue;
+    const raised: Record<string, Depth> = {};
+    for (const t of listTargets(db, goal.id, { all: true })) {
+      const g = gains.get(t.nodeId);
+      if (g) raised[t.nodeId] = Math.min(g.now, (goal.baseline[t.nodeId] ?? 0) + g.gain) as Depth;
+    }
+    if (Object.keys(raised).length) raiseBaseline(db, goal.id, raised);
+  }
 }

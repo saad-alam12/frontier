@@ -8,9 +8,11 @@ import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { listSources } from '../store/sources';
 import { listNodes } from '../store/world';
 import { tick } from './activity';
-import { attributeTime, goalProgress, previewPlan, spentByGoal } from './budget';
+import { attributeTime, freezeTimeOwners, goalProgress, learnerSpeedNow, previewPlan, spentByGoal, timeOwners } from './budget';
 import { recordEvidence } from './evidence';
-import { approveGoalPlan, compileGoal, createGoalFromForm, goalDetail, updateGoalFromForm } from './goals';
+import { approveGoalPlan, compileGoal, createGoalFromForm, goalDetail, setGoalStatus, updateGoalFromForm } from './goals';
+import { deleteGoal } from '../store/goals';
+import { submitProbe } from './probe';
 import { refreshGoalFields } from './knowledge';
 import { candidatesForGoal } from './planner';
 import { createProbe } from './probe';
@@ -245,5 +247,109 @@ describe('stats', () => {
     expect(view.topics.length).toBeGreaterThan(0);
     // filtering by goal narrows the time
     expect(statsView(db, { goalId: econ.id, topicId: null, range: '30d' }, now).headline.minutes).toBe(60);
+  });
+});
+
+describe('time stays where it was spent, and speed is one number', () => {
+  /** Study logged the way the app logs it: the owners are asked for when the span opens. */
+  function study(db: ReturnType<typeof setup>['db'], context: { goalId: string; nodeId?: string }, minutes: number, at: Date, surface: 'session' | 'practice' | 'cards' = 'session') {
+    logTime(db, surface, context, minutes * 60, at, () => timeOwners(db, context));
+  }
+  /** A second goal over two ideas the game theory goal also holds. */
+  function pricing(db: ReturnType<typeof setup>['db'], id: (k: string) => string) {
+    const goal = createGoalFromForm(db, { text: 'Understand price competition', budget: { mode: 'total', hours: 4 }, materials: [] });
+    addCapabilities(db, goal.id, [{ statement: 'Can find the equilibrium of a pricing game', targets: ['nash', 'bestResponse', 'dominant'].map((k) => ({ nodeId: id(k), depth: 3 as const })) }]);
+    refreshGoalFields(db);
+    return goal;
+  }
+  const t0 = new Date('2026-03-02T10:00:00Z');
+  const spent = (db: ReturnType<typeof setup>['db'], goalId: string) => Math.round(spentByGoal(attributeTime(db)).get(goalId) ?? 0);
+
+  it('a goal added later gets none of the time already spent, and the first goal keeps all of it', () => {
+    const { db, id } = setup();
+    const first = gameTheory(db, id, 20);
+    study(db, { goalId: first.id, nodeId: id('nash') }, 60, t0);
+    study(db, { goalId: first.id, nodeId: id('bestResponse') }, 60, new Date(t0.getTime() + DAY));
+    expect(spent(db, first.id)).toBe(120);
+    const second = pricing(db, id);
+    expect(spent(db, first.id)).toBe(120);
+    expect(spent(db, second.id)).toBe(0);
+    expect(goalProgress(db, second.id)?.spentMinutes).toBe(0);
+    // from now on, time on an idea both hold is shared
+    study(db, { goalId: first.id, nodeId: id('nash') }, 30, new Date(t0.getTime() + 2 * DAY));
+    expect(spent(db, first.id)).toBe(135);
+    expect(spent(db, second.id)).toBe(15);
+  });
+
+  it('pausing, finishing or removing a goal moves no minutes and does not change the speed or the other plan', () => {
+    const { db, id } = setup();
+    const first = gameTheory(db, id, 20);
+    const second = pricing(db, id);
+    // both goals learned at about the model's pace: two shared ideas, an hour of sessions
+    study(db, { goalId: first.id, nodeId: id('nash') }, 30, t0);
+    study(db, { goalId: second.id, nodeId: id('bestResponse') }, 30, new Date(t0.getTime() + DAY));
+    for (const k of ['nash', 'bestResponse']) recordEvidence(db, { nodeId: id(k), kind: 'derive', score: 0.9, reasoning: '', at: new Date(t0.getTime() + DAY).toISOString() });
+    refreshGoalFields(db);
+    const before = { speed: learnerSpeedNow(db), spentSecond: spent(db, second.id) };
+
+    for (const status of ['paused', 'done'] as const) {
+      setGoalStatus(db, first.id, status);
+      expect(learnerSpeedNow(db), status).toBe(before.speed);
+      expect(spent(db, second.id), status).toBe(before.spentSecond);
+      setGoalStatus(db, first.id, 'active');
+    }
+    const total = statsView(db, { goalId: null, topicId: null, range: 'all' }, new Date(t0.getTime() + 3 * DAY)).headline.minutes;
+    deleteGoal(db, first.id);
+    expect(spent(db, second.id)).toBe(before.spentSecond);
+    const after = statsView(db, { goalId: null, topicId: null, range: 'all' }, new Date(t0.getTime() + 3 * DAY));
+    expect(after.headline.minutes).toBe(total); // the time was studied, whatever happened to the goal
+    expect(after.weeks.some((w) => (w.minutes['removed'] ?? 0) > 0)).toBe(true);
+  });
+
+  it('what the probe shows the learner already knew is not counted as learning fast', async () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 4);
+    approveGoalPlan(db, goal.id);
+    const provider = new FakeProvider({
+      prober: (req: CompleteRequest<unknown>) => {
+        const text = req.messages[0]?.content ?? '';
+        const nodeIds = [...new Set([...text.matchAll(/(?:- \[|### )(node_[a-z0-9_]+)/g)].map((m) => m[1] as string))];
+        if (text.startsWith('Judge')) return { assessments: nodeIds.map((nodeId) => ({ nodeId, score: 0.95, reasoning: 'Knew it.', misconception: null })), gaps: [] };
+        return { questions: nodeIds.slice(0, 6).map((nodeId) => ({ nodeId, kind: 'derive', question: 'Why does this hold, in your own words?', answerKey: 'Because of its premises.', rubric: ['says why'] })) };
+      },
+    });
+    const probe = await createProbe(db, provider, goal.id);
+    logTime(db, 'probe', { goalId: goal.id }, 12 * 60, t0, () => [goal.id]);
+    await submitProbe(db, provider, probe.id, probe.questions.map((q) => ({ problemId: q.problemId, answer: 'I know this.', confidence: 0.9 })));
+    const known = listTargets(db, goal.id, { all: true }).filter((t) => (goalDetail(db, goal.id)?.goal.baseline[t.nodeId] ?? 0) > 0);
+    expect(known.length).toBeGreaterThan(0); // the probe's findings joined the baseline
+    // then an honest hour on one new idea, learned at about the model's pace
+    study(db, { goalId: goal.id, nodeId: id('mixedIndifference') }, 60, new Date(t0.getTime() + DAY));
+    expect(learnerSpeedNow(db)).toBe(1); // not 0.6, which would make every plan hold 1.7 times too much
+  });
+
+  it('time spent keeping what is known does not make the learner look slower', () => {
+    const { db, id } = setup();
+    const goal = gameTheory(db, id, 20);
+    approveGoalPlan(db, goal.id);
+    study(db, { goalId: goal.id, nodeId: id('nash') }, 60, t0);
+    recordEvidence(db, { nodeId: id('nash'), kind: 'use', score: 0.9, reasoning: '', at: t0.toISOString() });
+    refreshGoalFields(db);
+    const speed = learnerSpeedNow(db);
+    for (let week = 1; week <= 12; week += 1) {
+      study(db, { goalId: goal.id }, 30, new Date(t0.getTime() + week * 7 * DAY), 'practice');
+      study(db, { goalId: goal.id }, 10, new Date(t0.getTime() + week * 7 * DAY + 3_600_000), 'cards');
+    }
+    expect(learnerSpeedNow(db)).toBe(speed);
+  });
+
+  it('time logged before owners were stored gets them once and then stays put', () => {
+    const { db, id } = setup();
+    const first = gameTheory(db, id, 20);
+    logTime(db, 'session', { goalId: first.id, nodeId: id('nash') }, 3600, t0); // as older versions logged it
+    expect(freezeTimeOwners(db)).toBe(1);
+    expect(freezeTimeOwners(db)).toBe(0);
+    pricing(db, id);
+    expect(spent(db, first.id)).toBe(60);
   });
 });

@@ -11,7 +11,7 @@ import { centrality } from '../core/leverage';
 import { EXTRACTED_ROLES, OWNED_DEPTH } from '../core/types';
 import type { Depth, Goal, GoalBudget, KnowledgeNode, NodeState } from '../core/types';
 import type { Activity } from '../store/activity';
-import { listActivity } from '../store/activity';
+import { listActivity, setSpanOwners } from '../store/activity';
 import type { Database } from '../store/db';
 import { listStates } from '../store/evidence';
 import { getGoal, listCapabilities, listGoals, listMaterials, listTargets, savePlannedDepths } from '../store/goals';
@@ -42,27 +42,82 @@ interface TimeShare {
 }
 
 /**
+ * The goals a minute of study on this idea (or just for this goal) belongs to right now: the active
+ * goals whose plan holds the idea, and the goal the learner was working for. Asked when the time is
+ * logged and stored with it.
+ */
+export function timeOwners(db: Database, context: { goalId?: string | null; nodeId?: string | null }): string[] {
+  const goals = new Map(listGoals(db).map((g) => [g.id, g]));
+  const owners = new Set<string>();
+  if (context.nodeId) {
+    const caps = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
+    for (const t of listTargets(db)) {
+      const g = caps.get(t.capabilityId);
+      if (t.nodeId === context.nodeId && g && goals.get(g)?.status === 'active') owners.add(g);
+    }
+  }
+  if (context.goalId && goals.has(context.goalId)) owners.add(context.goalId);
+  return [...owners];
+}
+
+/**
  * Who each minute of study belongs to. Time on an idea is split evenly between the goals whose plan
- * holds it (shared ideas are not counted twice); time with no idea goes to the activity's goal.
+ * held it when it was studied (shared ideas are not counted twice); time with no idea goes to the
+ * activity's goal. The owners are the ones stored with the time: a goal added, paused, finished or
+ * removed later does not move minutes that were already spent. A share can therefore name a goal
+ * that no longer exists.
  */
 export function attributeTime(db: Database, since?: string): TimeShare[] {
-  const goals = new Map(listGoals(db).map((g) => [g.id, g]));
-  const caps = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
-  const goalsOfNode = new Map<string, Set<string>>();
-  for (const t of listTargets(db)) {
-    const g = caps.get(t.capabilityId);
-    if (!g || goals.get(g)?.status !== 'active') continue;
-    goalsOfNode.set(t.nodeId, (goalsOfNode.get(t.nodeId) ?? new Set()).add(g));
-  }
   const shares: TimeShare[] = [];
   for (const span of listActivity(db, { kinds: ['time'], since })) {
     if (!STUDY.has(String(span.data.surface))) continue;
-    const owners = new Set(span.nodeId ? (goalsOfNode.get(span.nodeId) ?? []) : []);
-    if (span.goalId && goals.has(span.goalId)) owners.add(span.goalId);
-    if (!owners.size) continue;
-    for (const goalId of owners) shares.push({ goalId, minutes: span.seconds / 60 / owners.size, span });
+    const stored = span.data.owners;
+    const owners = Array.isArray(stored) ? (stored as string[]) : timeOwners(db, span);
+    if (!owners.length) continue;
+    for (const goalId of owners) shares.push({ goalId, minutes: span.seconds / 60 / owners.length, span });
   }
   return shares;
+}
+
+/** Time logged before owners were stored gets them once, by today's goals, so it stops moving from then on. */
+export function freezeTimeOwners(db: Database): number {
+  let frozen = 0;
+  for (const span of listActivity(db, { kinds: ['time'] })) {
+    if (!STUDY.has(String(span.data.surface)) || Array.isArray(span.data.owners)) continue;
+    setSpanOwners(db, span.id, timeOwners(db, span));
+    frozen += 1;
+  }
+  return frozen;
+}
+
+/**
+ * How fast this learner learns against the cost model: time spent learning new ideas, over the
+ * model's minutes for what was learned (1 means as estimated; see `learnerSpeed` for the limits).
+ * Both sides cover the same goals, every goal that is not a draft, so pausing or finishing a goal
+ * leaves the number where it was. Only session time counts: practice and flashcards keep what is
+ * known and would make a steady learner look slower with every month of upkeep. What a goal's
+ * baseline holds (what the learner knew when it started, or showed in its probe) was not learned
+ * in that time and does not count.
+ */
+export function learnerSpeedNow(db: Database): number {
+  const goals = listGoals(db).filter((g) => g.status !== 'draft');
+  const goalIds = new Set(goals.map((g) => g.id));
+  const goalOf = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
+  const nodes = new Map(listNodes(db).map((n) => [n.id, n]));
+  const states = listStates(db);
+  const targets: Pick<PlanTarget, 'goalId' | 'nodeId' | 'idealDepth'>[] = [];
+  for (const t of listTargets(db, undefined, { all: true })) {
+    const goalId = goalOf.get(t.capabilityId);
+    if (goalId && goalIds.has(goalId) && nodes.has(t.nodeId)) targets.push({ goalId, nodeId: t.nodeId, idealDepth: t.idealDepth });
+  }
+  const targeted = new Set(targets.map((t) => t.nodeId));
+  const learned = goals.reduce((sum, g) => sum + learnedMinutes(g, targets, nodes, states), 0);
+  const inSessions = attributeTime(db).filter((s) => s.span.data.surface === 'session' && goalIds.has(s.goalId));
+  // depth gained on a goal's ideas in free study counts as learned, so the time it took counts as
+  // studied too (it is still no goal's time); otherwise free study would make the learner look faster
+  const freeOnGoalIdeas = freeStudy(db).filter((f) => f.span.nodeId !== null && targeted.has(f.span.nodeId));
+  const studied = inSessions.reduce((sum, s) => sum + s.minutes, 0) + freeOnGoalIdeas.reduce((sum, f) => sum + f.minutes, 0);
+  return learnerSpeed(learned, studied);
 }
 
 /** Free study (design §4.5): time in chosen sessions booked to no goal, which no goal's budget counts. */
@@ -140,21 +195,15 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
     planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centrality(id, index), premiseMinutes: missing * ideaMinutes('claim', 0, OWNED_DEPTH) });
   }
 
-  const shares = attributeTime(db);
-  const spent = spentByGoal(shares);
-  const learned = goals.reduce((sum, g) => sum + learnedMinutes(g, targets, nodes, states), 0);
-  // depth gained on a goal's ideas in free study counts as learned, so the time it took counts as
-  // studied too (it is still no goal's time); otherwise free study would make the learner look faster
-  const freeOnGoalIdeas = freeStudy(db).filter((f) => f.span.nodeId !== null && targeted.has(f.span.nodeId));
-  const studied = shares.reduce((sum, s) => sum + s.minutes, 0) + freeOnGoalIdeas.reduce((sum, f) => sum + f.minutes, 0);
-  return { goals, nodes, states, targets, planNodes, spent, speed: learnerSpeed(learned, studied) };
+  const spent = spentByGoal(attributeTime(db));
+  return { goals, nodes, states, targets, planNodes, spent, speed: learnerSpeedNow(db) };
 }
 
 /**
  * Minutes the cost model gives for what was learned toward a goal since it started (from its
  * baseline, up to each target's ideal depth), shared ideas split between the goals that hold them.
  */
-function learnedMinutes(goal: Goal, targets: PlanTarget[], nodes: Map<string, KnowledgeNode>, states: Map<string, NodeState>): number {
+function learnedMinutes(goal: Goal, targets: Pick<PlanTarget, 'goalId' | 'nodeId' | 'idealDepth'>[], nodes: Map<string, KnowledgeNode>, states: Map<string, NodeState>): number {
   const holders = new Map<string, Set<string>>();
   for (const t of targets) holders.set(t.nodeId, (holders.get(t.nodeId) ?? new Set()).add(t.goalId));
   const ideal = new Map<string, number>();
@@ -185,11 +234,6 @@ export function replan(db: Database): Allocation {
   const allocation = runAllocation(db, inputs);
   savePlannedDepths(db, allocation.planned);
   return allocation;
-}
-
-/** How fast this learner learns against the cost model (1 until there is enough to go on). */
-export function learnerSpeedNow(db: Database): number {
-  return planInputs(db).speed;
 }
 
 export interface PlanPreview {

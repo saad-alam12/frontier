@@ -42,6 +42,8 @@ export function StatsScreen() {
   // free study is a line of its own: time in sessions the learner chose that no goal counts
   const anyFree = view.weeks.some((w) => w.minutes['free']);
   if (anyFree) series.push({ id: 'free', label: 'Free study', color: FREE_STUDY });
+  // time for goals that were removed since still counts as studied
+  if (view.weeks.some((w) => w.minutes['removed'])) series.push({ id: 'removed', label: 'Removed goals', color: seriesColor(-1) });
   const empty = view.headline.minutes === 0 && view.headline.answers === 0 && view.headline.ideasOwned === 0;
   const h = view.headline;
 
