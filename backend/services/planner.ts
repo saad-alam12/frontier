@@ -7,7 +7,7 @@ import type { PlannerCandidate } from '../agents/planner';
 import { dependents } from '../core/graph';
 import { targetDepthFor } from '../core/leverage';
 import { computeFringe, doneSet } from '../core/ownership';
-import { orderByDependencies, planCandidates } from '../core/plan';
+import { orderByDependencies, planCandidates, withPrerequisites } from '../core/plan';
 import { SESSION_MINUTES, ideaMinutes } from '../core/budget';
 import { IDEA_MAX_MINUTES } from '../core/session';
 import { OWNED_DEPTH } from '../core/types';
@@ -184,10 +184,13 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
   const simplified = new Map<string, string>();
   for (const t of listTargets(db, goalId, { all: true })) if (t.simplified && !simplified.has(t.nodeId)) simplified.set(t.nodeId, t.simplified);
   const whyById = new Map(result.steps.map((s) => [s.nodeId, s.why]));
-  const ordered = orderByDependencies(
+  // the planner picks; code makes sure nothing is taught before what it is built on
+  const picked = withPrerequisites(
     result.steps.map((s) => s.nodeId),
     byId,
   );
+  for (const [id, forId] of picked.neededFor) whyById.set(id, `${view.nodes.get(forId)?.name ?? 'A later idea'} is built on it.`);
+  const ordered = orderByDependencies(picked.ids, byId);
   const steps: LessonStep[] = ordered.map((id) => {
     const node = view.nodes.get(id);
     const fromDepth = view.states.get(id)?.depth ?? 0;

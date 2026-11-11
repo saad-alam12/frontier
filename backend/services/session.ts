@@ -7,12 +7,12 @@ import { cardText, runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
-import { IDEA_MAX_MINUTES, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
+import { IDEA_MAX_MINUTES, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
 import type { EdgeState, Stage } from '../core/session';
 import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal, GoalLevel } from '../core/types';
-import { isCancelled } from '../llm/provider';
+import { isCancelled, CancelledError } from '../llm/provider';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
@@ -82,6 +82,8 @@ export interface SessionState {
    * response only writes that card, so nothing is graded or recorded twice.
    */
   owed?: boolean;
+  /** A session on a goal whose ideas the learner chose (going deeper): no recall, no practice, and the goal's planned sessions do not carry from it. */
+  chosen?: boolean;
 }
 
 /** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
@@ -256,16 +258,18 @@ async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[
   if (!goal) throw new Error(`unknown goal ${goalId}`);
   // only the goal's own planned sessions carry a half-done idea or are recalled: a chosen session
   // counted toward the goal is stored under it too, and must not hide the planned one before it
-  const ended = listEndedSessions<SessionState>(db, goalId).map(normalized).filter((s) => !s.state.free);
+  const ended = listEndedSessions<SessionState>(db, goalId).map(normalized).filter((s) => !s.state.free && !s.state.chosen);
   const view = loadKnowledge(db);
   // an idea erased from the map since has nothing left to carry, so it counts as reached
   const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => !view.nodes.has(id) || ((view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id)))) : null;
   const planned = focus?.length ? planFocusSession(db, goalId, focus) : await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
   const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
-  const previousNodes = previouslyTaughtNodes(ended);
+  // a session the learner chose (going deeper) is about those ideas: no recall of the last planned session
+  const previousNodes = focus?.length ? [] : previouslyTaughtNodes(ended);
   const state: SessionState = {
     goalId,
+    chosen: Boolean(focus?.length) || undefined,
     plan,
     phase: previousNodes.length ? 'reconstruct' : 'orient',
     stepIndex: 0,
@@ -305,6 +309,8 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   const { db } = deps;
   const session = getSession<SessionState>(db, sessionId);
   if (!session || session.status !== 'active') return;
+  // an answer still being judged is stopped if it can be; if not, the work stops itself at its next step (stillOpen)
+  deps.work.cancel(sessionId);
   endSession(db, sessionId, 'abandoned');
   deps.work.forget(sessionId);
   appendSessionEvent(db, sessionId, 'abandon', {});
@@ -430,11 +436,12 @@ async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionS
     case 'teach': {
       const step = state.plan.steps[state.stepIndex];
       if (state.owed && step && state.stage) {
-        await produceCard(deps, sessionId, state, step, state.stage, null, goal);
+        await produceCard(deps, sessionId, state, step, state.stage, null, goal, true);
         state.owed = false;
         break;
       }
       await handleTeachResponse(deps, sessionId, state, response, goal);
+      state.owed = false;
       break;
     }
     case 'practice': {
@@ -502,7 +509,7 @@ async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionS
 async function startSessionPractice(deps: SessionDeps, sessionId: string, state: SessionState): Promise<boolean> {
   if (state.practiceSetId !== undefined && state.practiceSetId !== null) return true;
   // a session the learner chose is about what they asked; a goal's fading ideas wait for its own sessions
-  if (state.free || !state.goalId) return false;
+  if (state.free || state.chosen || !state.goalId) return false;
   try {
     const set = await startPractice(deps, state.goalId, { sessionId, maxProblems: SESSION_PRACTICE_PROBLEMS, exclude: state.plan.steps.map((s) => s.nodeId) });
     state.practiceSetId = set?.id ?? null;
@@ -514,7 +521,7 @@ async function startSessionPractice(deps: SessionDeps, sessionId: string, state:
   }
 }
 
-async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goal: TutorGoal): Promise<void> {
+async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goal: TutorGoal, afterOutcome = false): Promise<void> {
   state.stepIndex = index;
   state.edge = emptyEdge();
   state.supportAfter = null;
@@ -523,7 +530,11 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
   if (!step) {
     state.stage = null;
     state.card = null;
-    state.phase = (await startSessionPractice(deps, sessionId, state)) ? 'practice' : 'close';
+    state.owed = false;
+    // saved as closing first: if the app quits while practice problems are written, the session reopens at its close
+    state.phase = 'close';
+    if (afterOutcome) saveSessionState(deps.db, sessionId, state);
+    if (await startSessionPractice(deps, sessionId, state)) state.phase = 'practice';
     return;
   }
   state.phase = 'teach';
@@ -537,11 +548,12 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
     state.pendingEffort = resume.pendingEffort;
     state.history[step.nodeId] = resume.history;
     state.resume = null;
+    state.owed = false;
     appendSessionEvent(deps.db, sessionId, 'resume', { nodeId: step.nodeId, stage: resume.stage, fromSessionId: resume.fromSessionId });
     return;
   }
   const first = stepStages(step)[0] as Stage;
-  await produceCard(deps, sessionId, state, step, first, null, goal);
+  await produceCard(deps, sessionId, state, step, first, null, goal, afterOutcome);
 }
 
 /** The step loop for a step: fitted to its aim, from the depth it started at. */
@@ -558,6 +570,12 @@ async function produceCard(
   stage: Stage,
   previous: TutorStepInput['previous'],
   goal: TutorGoal,
+  /**
+   * True when an answer was already judged and written before this call. The session is then saved
+   * first as owing this card, so a quit or a crash during the call reopens it at "the answer is saved,
+   * the next card is not written yet" and never at the card that was answered (which would grade it twice).
+   */
+  afterOutcome = false,
 ): Promise<Grade | null> {
   // on failure, where the session stands if what came before this call is kept (see respondTo)
   const owe = (error: unknown): never => {
@@ -565,10 +583,18 @@ async function produceCard(
     state.card = null;
     throw error;
   };
+  if (afterOutcome) {
+    state.stage = stage;
+    state.card = null;
+    state.owed = true;
+    saveSessionState(deps.db, sessionId, state);
+  }
   const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined }).catch(owe);
+  stillOpen(deps.db, sessionId);
   if (!result.card) return owe(new Error('the tutor returned no card'));
   state.stage = stage;
   state.card = result.card;
+  state.owed = false;
   pushHistory(state, step.nodeId, { stage, card: result.card, response: null, grade: null });
   if (result.card.stage === 'explain' || result.card.stage === 'support' || result.card.stage === 'reteach') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: result.card.markdown });
   if (result.card.stage === 'index') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: `${result.card.gist}\n\n${result.card.placement}` });
@@ -601,7 +627,7 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     const resumeFrom = stage === 'support' || stage === 'reteach' ? (state.supportAfter ?? stage) : stage;
     state.supportAfter = null;
     const next = nextStage(stages, resumeFrom, 'none');
-    await advance(deps, sessionId, state, step, next, null, goal);
+    await advance(deps, sessionId, state, step, next, null, goal, true);
     return;
   }
 
@@ -613,17 +639,25 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
   } else {
     const result = await runTutorStep(deps.provider, { ...buildTutorInput(db, state, step, previous, null, goal), images: imagesOf(deps, response) });
     grade = result.grade;
+    stillOpen(db, sessionId);
   }
   if (!grade) throw new Error('the tutor returned no grade');
   finishHistory(state, step.nodeId, stage, response, grade);
   appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade });
   writeOutcome(db, sessionId, state, step, stage, response, grade);
+  // The answer is judged and written. From here on a quit or a crash must never bring the answered
+  // card back: with no next card yet (the idea's last step) the session is saved as owing one.
+  if (state.card === card) {
+    state.card = null;
+    state.owed = true;
+  }
+  saveSessionState(db, sessionId, state);
 
   const { edge, action } = applyGrade(state.edge, { score: grade.score, confidence: response.confidence, stage, aim: step.aim });
   state.edge = edge;
   if (action === 'support' || action === 'escalate') {
     state.supportAfter = stage;
-    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goal);
+    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goal, true);
     return;
   }
 
@@ -637,16 +671,19 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     simplifyStep(db, state, step, SIMPLE_AIM, reason);
     // start again from a plain explanation of the core idea; the loop goes on from there
     state.edge = { ...state.edge, consecutiveFailures: 0, jumpedFrom: null };
-    await produceCard(deps, sessionId, state, step, 'explain', null, goal);
+    await produceCard(deps, sessionId, state, step, 'explain', null, goal, true);
     return;
   }
   if (box === 'wrapUp') state.edge = { ...state.edge, wrapping: true };
   const next = box === 'wrapUp' ? nextStage(stepStages(step), stage, 'wrapUp') : nextStage(stepStages(step), stage, action, edge, step.aim);
+  // a failed test-out goes back to teaching once; after that, a miss on the same question is an
+  // ordinary miss (it counts toward the worked example) instead of sending the learner round again
+  if (action === 'resume') state.edge = { ...state.edge, jumpedFrom: null };
   if (next === nominalNext) {
-    if (next === null) await advance(deps, sessionId, state, step, null, null, goal);
+    if (next === null) await advance(deps, sessionId, state, step, null, null, goal, true);
     return; // the card for `next` is already showing
   }
-  await advance(deps, sessionId, state, step, next, null, goal);
+  await advance(deps, sessionId, state, step, next, null, goal, true);
 }
 
 /** "I know this, test me" applies to a prediction or explanation with a deeper question still ahead. */
@@ -665,9 +702,9 @@ function minutesOn(db: Database, state: SessionState, sessionId: string, nodeId:
  * Simplify the step's idea for the goal (capped at `depth`, with the reason), and follow the caps
  * through the rest of today's plan: dependents planned deeper are capped to explaining.
  */
-function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth: Depth, reason: string): void {
+function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth: Depth, reason: string, options: { dependents: boolean } = { dependents: true }): void {
   // a chosen session simplifies only itself: the goal's plan is the goal's sessions' business
-  const changed = state.goalId && !state.free ? simplifyIdea(db, state.goalId, step.nodeId, depth, reason) : new Map<string, Depth>([[step.nodeId, depth]]);
+  const changed = state.goalId && !state.free ? simplifyIdea(db, state.goalId, step.nodeId, depth, reason, options) : new Map<string, Depth>([[step.nodeId, depth]]);
   for (const st of state.plan.steps) {
     const cap = changed.get(st.nodeId);
     if (cap === undefined) continue;
@@ -681,17 +718,27 @@ function simplifyStep(db: Database, state: SessionState, step: LessonStep, depth
  * idea that ends below its aim (its half hour ran out, or it never came together) is kept at the depth
  * it reached and marked simplified, so the plan stops counting on more and the learner can go deeper later.
  */
-async function advance(deps: SessionDeps, sessionId: string, state: SessionState, step: LessonStep, next: Stage | null, previous: TutorStepInput['previous'], goal: TutorGoal): Promise<void> {
+async function advance(deps: SessionDeps, sessionId: string, state: SessionState, step: LessonStep, next: Stage | null, previous: TutorStepInput['previous'], goal: TutorGoal, afterOutcome = false): Promise<void> {
   if (next === null) {
     const reached = getState(deps.db, step.nodeId)?.depth ?? 0;
-    if (step.aim >= 2 && reached < step.aim) simplifyStep(deps.db, state, step, Math.max(1, reached) as Depth, `Learned to ${DEPTH_WORD[reached] ?? 'a first look'} within its half hour; the plan asked ${DEPTH_WORD[step.aim] ?? 'more'}`);
+    // a session certifies up to applying; transfer comes from practice later, so it is never "missed" here.
+    // The idea alone is held at what was reached: the ideas built on it are capped only when it had to be simplified.
+    const asked = Math.min(step.aim, SESSION_MAX_DEPTH);
+    if (asked >= 2 && reached < asked) {
+      simplifyStep(deps.db, state, step, Math.max(1, reached) as Depth, `Learned to ${DEPTH_WORD[reached] ?? 'a first look'} within its half hour; the plan asked ${DEPTH_WORD[step.aim] ?? 'more'}`, { dependents: false });
+    }
     state.nodeStatus[step.nodeId] = 'done';
     appendSessionEvent(deps.db, sessionId, 'node-done', { nodeId: step.nodeId });
     deps.onIdeaFinished?.(ideaFinished(sessionId, state, step));
-    await beginStep(deps, sessionId, state, state.stepIndex + 1, goal);
+    await beginStep(deps, sessionId, state, state.stepIndex + 1, goal, afterOutcome);
     return;
   }
-  await produceCard(deps, sessionId, state, step, next, previous, goal);
+  await produceCard(deps, sessionId, state, step, next, previous, goal, afterOutcome);
+}
+
+/** The session was ended while its work was running: nothing more is written to it. */
+function stillOpen(db: Database, sessionId: string): void {
+  if (getSession(db, sessionId)?.status !== 'active') throw new CancelledError();
 }
 
 /** What the card writer reads about an idea the session just finished: what was taught and how the learner answered. */
@@ -817,7 +864,7 @@ function previouslyTaughtNodes(ended: SessionRecord<SessionState>[]): { id: stri
  */
 export function carriedPlace(session: SessionRecord<SessionState>, reached: (nodeId: string, targetDepth: number) => boolean): { step: LessonStep; resume: ResumePoint } | null {
   // a chosen session's half-done idea is not the goal's plan, so its planned sessions do not carry it
-  if (session.status !== 'abandoned' || session.state.free) return null;
+  if (session.status !== 'abandoned' || session.state.free || session.state.chosen) return null;
   const s = session.state;
   let resume: ResumePoint | null = null;
   const step = s.plan.steps[s.stepIndex];

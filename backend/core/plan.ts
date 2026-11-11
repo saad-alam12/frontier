@@ -48,6 +48,27 @@ export function planCandidates(targetIds: Iterable<string>, owned: Set<string>, 
 }
 
 /**
+ * The chosen ideas together with everything they need that the learner does not own yet: an idea is
+ * never planned without the candidates it is built on. Returns the chosen ideas first, then what was
+ * added for them (each with the chosen idea that needs it).
+ */
+export function withPrerequisites(chosen: string[], candidates: Map<string, PlanCandidate>): { ids: string[]; neededFor: Map<string, string> } {
+  const ids = [...new Set(chosen)];
+  const have = new Set(ids);
+  const neededFor = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 1) {
+    const id = ids[i] as string;
+    for (const dep of candidates.get(id)?.dependsOn ?? []) {
+      if (have.has(dep) || !candidates.has(dep)) continue;
+      have.add(dep);
+      ids.push(dep);
+      neededFor.set(dep, neededFor.get(id) ?? id);
+    }
+  }
+  return { ids, neededFor };
+}
+
+/**
  * Order chosen nodes so every node comes after the chosen nodes it depends on, also through
  * candidates that were not chosen (stable for ties).
  */

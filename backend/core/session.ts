@@ -30,6 +30,9 @@ export function stagesFor(aim: number, fromDepth = 0): Stage[] {
   return stages;
 }
 
+/** The deepest level a session's own steps certify (a `use` task: applying). Transfer is shown in practice, later. */
+export const SESSION_MAX_DEPTH = 4;
+
 /** The stage whose pass shows the aim is reached: what a test-out asks. */
 export function certifyingStage(aim: number): Stage {
   if (aim <= 1) return 'index';

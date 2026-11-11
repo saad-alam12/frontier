@@ -229,13 +229,17 @@ const SIMPLE_DEPTH: Depth = 2;
  * that use it as a direct premise and are planned to be derived or deeper (a derivation cannot rest on
  * an intuition): they are capped at explaining. Returns every idea that changed, with its new cap.
  */
-export function simplifyIdea(db: Database, goalId: string, nodeId: string, depth: Depth, reason: string): Map<string, Depth> {
+export function simplifyIdea(db: Database, goalId: string, nodeId: string, depth: Depth, reason: string, options: { dependents: boolean } = { dependents: true }): Map<string, Depth> {
   const view = loadKnowledge(db);
   const name = view.nodes.get(nodeId)?.name ?? nodeId;
   const planned = new Map<string, number>();
   for (const t of listTargets(db, goalId)) planned.set(t.nodeId, Math.max(planned.get(t.nodeId) ?? 0, t.depth));
+  // An idea that only ended below what was asked: this goal's own plan is what counts. When this goal
+  // asks no more than was reached (another goal asked for the rest), there is nothing to mark here.
+  if (!options.dependents && (planned.get(nodeId) ?? 0) <= depth) return new Map();
   const changed = new Map<string, Depth>([[nodeId, depth]]);
-  for (const chain of view.index.outOf.get(nodeId) ?? []) if ((planned.get(chain.conclusion) ?? 0) > SIMPLE_DEPTH) changed.set(chain.conclusion, SIMPLE_DEPTH);
+  // the ideas built directly on it are capped too only when it was taught as its core intuition
+  if (options.dependents) for (const chain of view.index.outOf.get(nodeId) ?? []) if ((planned.get(chain.conclusion) ?? 0) > SIMPLE_DEPTH) changed.set(chain.conclusion, SIMPLE_DEPTH);
   transaction(db, () => {
     for (const [id, cap] of changed) capTargets(db, goalId, id, cap, id === nodeId ? reason : `Simplified with ${name}`);
   });

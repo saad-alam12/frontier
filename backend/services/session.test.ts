@@ -10,7 +10,7 @@ import { addCapabilities, capTargets, createGoal, getGoal, listTargets } from '.
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForSession } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
-import { activeSession, listSessionEvents, listSessions } from '../store/sessions';
+import { activeSession, getSession, listSessionEvents, listSessions } from '../store/sessions';
 import { logTime } from '../store/activity';
 import { listSources } from '../store/sources';
 import { saveAttachment } from '../store/attachments';
@@ -70,7 +70,7 @@ function fakePlanner(req: CompleteRequest<unknown>) {
   return { title: 'Profiles and best responses', orientation: 'Today builds Nash equilibrium from the two ideas it is made of.', steps: picks.map((nodeId) => ({ nodeId, why: 'needed for the exam' })) };
 }
 
-async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 | 3 | 4 }[] = []) {
+async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 | 3 | 4 }[] = [], planner: (req: CompleteRequest<unknown>) => unknown = fakePlanner) {
   const db = openDatabase(':memory:');
   const ids = seedExampleGraph(db);
   const own = (key: string) => recordEvidence(db, { nodeId: ids.get(key) as string, kind: 'explain', score: 0.95, reasoning: 't' });
@@ -84,7 +84,7 @@ async function setup(scores: number[] = [], extra: { key: string; depth: 1 | 2 |
   refreshGoalFields(db);
   const tutor = fakeTutor(scores);
   const provider = new FakeProvider({ tutor, tutorEscalation: tutor });
-  provider.script('planner', fakePlanner);
+  provider.script('planner', planner);
   provider.script('extractor', { nodes: [], chains: [], conflicts: [] });
   provider.script('matcher', { decisions: [] });
   const ingestion = new IngestionService({ db, provider, embedder: new FakeEmbedder(), sourcesDir: join(mkdtempSync(join(tmpdir(), 'frontier-sess-')), 'sources') });
@@ -745,5 +745,116 @@ describe('images and a quoted reply on an answer', () => {
     // a plain answer still goes through, with no empty extras stored
     snap = await respond(withDir, snap.id, { answer: 'one strategy per player', attachments: [], quote: ' ' });
     expect(snap.history.nodes[0]?.items[0]?.response).toEqual({ answer: 'one strategy per player' });
+  });
+});
+
+describe('R7: an answer is judged once, whatever happens next', () => {
+  /** A planner that picks exactly these ideas, by name. */
+  const pick = (...names: string[]) => (req: CompleteRequest<unknown>) => {
+    const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+    const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
+    return { title: 'Today', orientation: 'Today builds on what you know.', steps: all.filter((c) => names.includes(c.name)).map((c) => ({ nodeId: c.id, why: 'needed for the exam' })) };
+  };
+
+  it('is saved as answered before the next card is asked for, so a quit in between cannot ask it again', async () => {
+    const { db, ids, goal, deps } = await setup([0.9]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer('')); // begin: the first idea's one question
+    expect(snap.current?.stage).toBe('index');
+    const answered = snap.current?.nodeId;
+
+    // what a quit during the follow-up call would leave on disk
+    let onDisk: SessionState | undefined;
+    const tutor = fakeTutor([0.9]);
+    deps.provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      const text = req.messages[0]?.content ?? '';
+      if (!/Grade the response/.test(text)) onDisk = getSession<SessionState>(db, snap.id)?.state;
+      return tutor(req);
+    });
+    const after = await respond(deps, snap.id, answer('one strategy per player', 0.9));
+    expect(after.current?.nodeId).not.toBe(answered); // on to the next idea
+    expect(onDisk?.owed).toBe(true);
+    expect(onDisk?.card).toBeNull(); // not the card that was answered
+    expect(onDisk?.plan.steps[onDisk.stepIndex]?.nodeId).toBe(after.current?.nodeId);
+    expect(listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === answered)).toHaveLength(1);
+    expect(after.owed).toBe(false);
+    void ids;
+  });
+
+  it('a failed test-out goes back to teaching once, not round and round', async () => {
+    // strong prediction, then the check is missed twice
+    const { goal, deps } = await setup([0.95, 0.3, 0.3, 0.8], [], pick('Strictly dominant strategy'));
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('predict');
+    snap = await respond(deps, snap.id, answer('It beats every other strategy whatever the others do.', 0.9));
+    expect(snap.current?.stage).toBe('check'); // tested out of the explanation
+    snap = await respond(deps, snap.id, answer('Not sure.', 0.33));
+    expect(snap.current?.stage).toBe('explain'); // back to teaching
+    snap = await respond(deps, snap.id, { answer: '' });
+    expect(snap.current?.stage).toBe('check');
+    snap = await respond(deps, snap.id, answer('Still not sure.', 0.33));
+    expect(snap.current?.stage).not.toBe('explain'); // an ordinary miss now: the loop goes on
+  });
+
+  it('an idea planned for transfer is not marked simplified when the session takes it as far as a session can', async () => {
+    const { db, ids, goal, deps } = await setup([0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [], pick('Strictly dominant strategy'));
+    addCapabilities(db, goal.id, [{ statement: 'Can transfer dominance', targets: [{ nodeId: ids.get('dominant') as string, depth: 5 }] }]);
+    refreshGoalFields(db);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    for (let i = 0; i < 12 && snap.current?.nodeId === ids.get('dominant'); i += 1) snap = await respond(deps, snap.id, snap.card && 'markdown' in snap.card ? { answer: '' } : answer('A full, correct answer.', 0.9));
+    expect(getState(db, ids.get('dominant') as string)?.depth).toBe(4);
+    const targets = listTargets(db, goal.id, { all: true });
+    expect(targets.filter((t) => t.nodeId === ids.get('dominant')).every((t) => !t.simplified)).toBe(true);
+    expect(targets.filter((t) => t.nodeId === ids.get('dominantNash')).every((t) => !t.simplified)).toBe(true); // the idea built on it keeps its depth
+  });
+
+  it('never plans an idea without the ideas it is built on', async () => {
+    const { ids, goal, deps } = await setup([], [], pick('Nash equilibrium')); // built on strategy profile and best response, neither owned
+    const snap = await startSession(deps, goal.id);
+    const order = snap.plan.steps.map((s) => s.nodeId);
+    expect(order.at(-1)).toBe(ids.get('nash'));
+    expect(order.slice(0, -1).sort()).toEqual([ids.get('profile'), ids.get('bestResponse')].sort());
+    expect(snap.plan.steps.find((s) => s.nodeId === ids.get('profile'))?.why).toBe('Nash equilibrium is built on it.');
+  });
+
+  it('ending a session while its next card is being written leaves nothing more in it', async () => {
+    const { db, goal, deps } = await setup([0.9]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const tutor = fakeTutor([0.9]);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    deps.provider.script('tutor', async (req: CompleteRequest<unknown>) => {
+      if (!/Grade the response/.test(req.messages[0]?.content ?? '')) await held; // the next idea's first card
+      return tutor(req);
+    });
+    const judging = respond(deps, snap.id, answer('one strategy per player', 0.9));
+    await settle();
+    await settle();
+    await abandonSession(deps, snap.id);
+    const events = listSessionEvents(db, snap.id).length;
+    release();
+    await expect(judging).rejects.toThrow('cancelled');
+    expect(listSessionEvents(db, snap.id)).toHaveLength(events);
+    expect(deps.work.current()).toBeNull();
+  });
+
+  it('a go-deeper session is a chosen one: no recall, no practice, and the planned session before it still carries', async () => {
+    const { db, ids, goal, deps } = await setup([0.8, 0.8, 0.8, 0.8]);
+    // a planned session, ended inside its first idea
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    const half = snap.current?.nodeId;
+    await abandonSession(deps, snap.id);
+    // then a session on one chosen idea, ended too
+    capTargets(db, goal.id, ids.get('dominant') as string, 1, 'It was taking too long');
+    const deeper = await startSession(deps, goal.id, [ids.get('dominant') as string]);
+    expect(deeper.phase).toBe('orient'); // no recall of the planned session
+    await abandonSession(deps, deeper.id);
+    // the next planned session picks up the half-done idea of the planned one
+    const next = await startSession(deps, goal.id);
+    expect(next.plan.steps[0]?.nodeId).toBe(half);
   });
 });
