@@ -4,9 +4,10 @@
  * depth, and reports where a goal stands: time spent against its budget, ideas ready against its plan,
  * and its pace.
  */
-import { allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from '../core/budget';
+import { SESSION_MINUTES, allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from '../core/budget';
 import type { Allocation, GoalPlan, Pace, PlanGoal, PlanNode, PlanTarget } from '../core/budget';
 import { addDays, localDate } from '../core/dates';
+import { roadmap } from '../core/plan';
 import { indexChains } from '../core/graph';
 import { centrality } from '../core/leverage';
 import { EXTRACTED_ROLES, OWNED_DEPTH } from '../core/types';
@@ -247,7 +248,24 @@ export function replan(db: Database): Allocation {
 export interface PlanPreview {
   plan: GoalPlan;
   /** Ideas in the preview with the depth the plan gives each (0: left out). */
-  ideas: { nodeId: string; name: string; statement: string; kind: KnowledgeNode['kind']; plannedDepth: Depth; idealDepth: Depth; currentDepth: Depth; sharedWith: string[]; skills: string[]; simplified: string | null }[];
+  ideas: {
+    nodeId: string;
+    name: string;
+    statement: string;
+    kind: KnowledgeNode['kind'];
+    plannedDepth: Depth;
+    idealDepth: Depth;
+    currentDepth: Depth;
+    sharedWith: string[];
+    skills: string[];
+    simplified: string | null;
+    /** Minutes the plan gives the idea, at the learner's speed; 0 when it is already there or left out. */
+    minutes: number;
+    /** Roughly which sessions it falls in (from 1), in an order where what it is built on comes first; null when nothing is left to learn of it. */
+    sessions: { from: number; to: number } | null;
+    /** Of its minutes, those for ideas outside the plan that it is built on and the learner does not own yet. */
+    premiseMinutes: number;
+  }[];
   /** True when the plan reaches every target at its full depth with time to spare: a bigger map would use it. */
   roomForMore: boolean;
 }
@@ -289,8 +307,33 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
       sharedWith: [...e.goals].filter((g) => g !== goalId).map((g) => titles.get(g) ?? g),
       skills: e.skills,
       simplified: simplified.get(nodeId) ?? null,
+      minutes: 0,
+      sessions: null as { from: number; to: number } | null,
+      premiseMinutes: 0,
     }))
     .sort((a, b) => b.plannedDepth - a.plannedDepth || b.idealDepth - a.idealDepth || a.name.localeCompare(b.name));
+  // a rough roadmap: what each idea costs, and the session it would fall in when ideas are taken in an order they can be learned in
+  const toLearn = ideas.filter((i) => i.plannedDepth > i.currentDepth);
+  const learning = new Set(toLearn.map((i) => i.nodeId));
+  const index = indexChains(listChains(db));
+  for (const idea of toLearn) {
+    const node = inputs.planNodes.get(idea.nodeId);
+    const surcharge = idea.currentDepth === 0 ? (node?.premiseMinutes ?? 0) : 0;
+    idea.minutes = Math.max(1, Math.round((ideaMinutes(idea.kind, idea.currentDepth, idea.plannedDepth) + surcharge) * inputs.speed));
+    idea.premiseMinutes = Math.round(surcharge * inputs.speed);
+  }
+  const sessions = roadmap(
+    toLearn.map((idea) => {
+      // the chain into it that asks for the fewest ideas still to be learned
+      const chains = (index.into.get(idea.nodeId) ?? []).map((c) => c.premises.filter((p) => learning.has(p)));
+      return { id: idea.nodeId, minutes: idea.minutes, dependsOn: chains.sort((a, b) => a.length - b.length)[0] ?? [], weight: inputs.planNodes.get(idea.nodeId)?.centrality ?? 0 };
+    }),
+    SESSION_MINUTES,
+  );
+  for (const idea of toLearn) idea.sessions = sessions.get(idea.nodeId) ?? null;
+  // the list reads top to bottom in learning order
+  const position = new Map([...sessions.keys()].map((id, i) => [id, i]));
+  ideas.sort((a, b) => (position.get(a.nodeId) ?? Infinity) - (position.get(b.nodeId) ?? Infinity));
   const total = plan.budgetMinutes;
   const roomForMore = total !== null && plan.ideas.trimmed === 0 && plan.plannedMinutes + plan.spentMinutes < total * 0.6;
   return { plan, ideas, roomForMore };

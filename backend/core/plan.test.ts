@@ -59,3 +59,31 @@ describe('probe mechanics', () => {
     expect(impliedPremiseScores('e', 0.5, 'derive', index).size).toBe(0);
   });
 });
+
+describe('a rough roadmap of a plan', () => {
+  it('puts what an idea is built on before it and lays the ideas over the sessions', async () => {
+    const { roadmap } = await import('./plan');
+    const sessions = roadmap(
+      [
+        { id: 'nash', minutes: 30, dependsOn: ['profile', 'best'], weight: 1 },
+        { id: 'profile', minutes: 12, dependsOn: [], weight: 3 },
+        { id: 'best', minutes: 25, dependsOn: [], weight: 2 },
+        { id: 'spe', minutes: 100, dependsOn: ['nash'], weight: 5 },
+        { id: 'loop-a', minutes: 10, dependsOn: ['loop-b'], weight: 0 },
+        { id: 'loop-b', minutes: 10, dependsOn: ['loop-a'], weight: 0 },
+      ],
+      45,
+    );
+    const order = [...sessions.keys()];
+    expect(order.indexOf('profile')).toBeLessThan(order.indexOf('nash'));
+    expect(order.indexOf('best')).toBeLessThan(order.indexOf('nash'));
+    expect(order.indexOf('nash')).toBeLessThan(order.indexOf('spe'));
+    expect(sessions.get('profile')).toEqual({ from: 1, to: 1 });
+    expect(sessions.get('best')).toEqual({ from: 1, to: 1 }); // minutes 12 to 37
+    expect(sessions.get('nash')).toEqual({ from: 1, to: 2 }); // minutes 37 to 67: it runs on into the second session
+    expect(sessions.get('spe')).toEqual({ from: 2, to: 4 }); // 100 minutes are more than two sessions
+    expect(sessions.size).toBe(6); // ideas that wait for each other are still placed
+    // the last session is the plan's session count: 187 minutes are five sessions of 45
+    expect(Math.max(...[...sessions.values()].map((v) => v.to))).toBe(Math.ceil(187 / 45));
+  });
+});

@@ -1561,6 +1561,59 @@ button.map-label:hover {
   flex-shrink: 0;
 }
 
+/* The plan as a list: ideas by name, session by session. */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.plan-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.plan-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.plan-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.plan-row:last-child {
+  border-bottom: 0;
+}
+.plan-row > .idea-dot {
+  align-self: center;
+}
+.plan-row-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.segmented.is-small {
+  padding: 3px;
+}
+.segmented.is-small button {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
 /* What the learner asked the tutor about a card, and the answer: set off from the card by a rule on
    the left, like a note in a margin. */
 .asides {

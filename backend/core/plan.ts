@@ -87,3 +87,49 @@ export function orderByDependencies(chosen: string[], candidates: Map<string, Pl
   for (const id of chosen) visit(id, new Set());
   return out;
 }
+
+export interface RoadmapIdea {
+  id: string;
+  /** Minutes the plan gives the idea. */
+  minutes: number;
+  /** The ideas of the plan it is built on: they come first. */
+  dependsOn: string[];
+  /** Higher comes earlier among ideas that could come in either order. */
+  weight: number;
+}
+
+/**
+ * The ideas of a plan in an order they can be learned in (what an idea is built on comes before it),
+ * laid end to end over sessions of `sessionMinutes`. It is a rough roadmap for the learner to read;
+ * the planner still picks each real session when it starts. Returns, per idea and in learning order,
+ * the session it starts in and the one it ends in (from 1): an idea longer than what is left of a
+ * session runs on into the next.
+ */
+export function roadmap(ideas: RoadmapIdea[], sessionMinutes: number): Map<string, { from: number; to: number }> {
+  const byId = new Map(ideas.map((i) => [i.id, i]));
+  const ordered: RoadmapIdea[] = [];
+  const placed = new Set<string>();
+  const visit = (idea: RoadmapIdea, stack: Set<string>) => {
+    if (placed.has(idea.id) || stack.has(idea.id)) return;
+    stack.add(idea.id);
+    for (const dep of idea.dependsOn.map((id) => byId.get(id)).filter((d): d is RoadmapIdea => d !== undefined).sort(firstByWeight)) visit(dep, stack);
+    stack.delete(idea.id);
+    placed.add(idea.id);
+    ordered.push(idea);
+  };
+  for (const idea of [...ideas].sort(firstByWeight)) visit(idea, new Set());
+  const sessions = new Map<string, { from: number; to: number }>();
+  let at = 0;
+  for (const idea of ordered) {
+    const end = at + Math.max(0, idea.minutes);
+    const from = Math.floor(at / sessionMinutes) + 1;
+    sessions.set(idea.id, { from, to: Math.max(from, Math.ceil(end / sessionMinutes)) });
+    at = end;
+  }
+  return sessions;
+}
+
+function firstByWeight(a: RoadmapIdea, b: RoadmapIdea): number {
+  return b.weight - a.weight || a.id.localeCompare(b.id);
+}
+

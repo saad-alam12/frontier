@@ -271,7 +271,7 @@ function DotTip({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
  * focusing a dot says which idea it is and what the plan does with it; arrow keys move between dots.
  * With no time limit nothing is left out, so the legend does not offer it.
  */
-export function IdeaField({ ideas, noLimit }: { ideas: PlanIdea[]; noLimit?: boolean }) {
+function IdeaDots({ ideas, noLimit }: { ideas: PlanIdea[]; noLimit?: boolean }) {
   const tip = useTip();
   const moveFocus = (e: React.KeyboardEvent<HTMLUListElement>) => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
@@ -390,4 +390,99 @@ export function trimSentence(plan: GoalPlan): string | null {
   const extra = Math.max(0, plan.fullMinutes - plan.plannedMinutes);
   const n = plan.ideas.trimmed;
   return `${n} ${n === 1 ? 'idea is' : 'ideas are'} planned shallower than the goal asks, to fit your time.${extra >= 15 ? ` About ${formatHours(extra)} more would cover ${n === 1 ? 'it' : 'them'} fully.` : ''}`;
+}
+
+const PLAN_VIEW_KEY = 'frontier.plan.view';
+type PlanView = 'dots' | 'list';
+
+function storedPlanView(): PlanView {
+  try {
+    return window.localStorage.getItem(PLAN_VIEW_KEY) === 'list' ? 'list' : 'dots';
+  } catch {
+    return 'dots';
+  }
+}
+
+/**
+ * The ideas of a plan, as a field of dots (the shape of the plan at a glance) or as a list (every
+ * idea by name, in the order it would be learned, session by session). The choice is remembered.
+ */
+export function IdeaField({ ideas, noLimit }: { ideas: PlanIdea[]; noLimit?: boolean }) {
+  const [view, setView] = useState<PlanView>(storedPlanView);
+  const choose = (next: PlanView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(PLAN_VIEW_KEY, next);
+    } catch {
+      // the choice is a convenience; without storage it lasts for this visit
+    }
+  };
+  return (
+    <div className="flex flex-col gap-[12px]">
+      <div className="segmented is-small self-end" role="radiogroup" aria-label="Show the plan as">
+        {(['dots', 'list'] as const).map((option) => (
+          <button key={option} type="button" role="radio" aria-checked={view === option} onClick={() => choose(option)}>
+            {option === 'dots' ? 'Dots' : 'List'}
+          </button>
+        ))}
+      </div>
+      {view === 'dots' ? <IdeaDots ideas={ideas} noLimit={noLimit} /> : <IdeaList ideas={ideas} />}
+    </div>
+  );
+}
+
+/** Depth levels as a short word after the idea's name. */
+const DEPTH_SHORT: Record<number, string> = { 1: 'recognize', 2: 'explain', 3: 'derive', 4: 'apply', 5: 'transfer' };
+
+function IdeaRow({ idea, kind }: { idea: PlanIdea; kind: DotKind }) {
+  const does = kind === 'deep' ? `In depth: ${DEPTH_SHORT[idea.plannedDepth] ?? 'explain'}` : KIND_LABEL[kind];
+  const when = idea.sessions ? (idea.sessions.from === idea.sessions.to ? `Session ${idea.sessions.from}` : `Sessions ${idea.sessions.from} to ${idea.sessions.to}`) : null;
+  return (
+    <li className="plan-row" title={dotLine(idea, kind)}>
+      <i className={`idea-dot is-${kind}`} aria-hidden="true">
+        {idea.simplified && <span className="simplified-mark" />}
+      </i>
+      <span className="flex min-w-0 flex-col">
+        <Markdown text={idea.name} inline className={kind === 'cut' || kind === 'known' ? 'text-secondary' : ''} />
+        <span className="plan-row-meta">
+          {[does, idea.minutes > 0 ? `${idea.minutes} min${idea.premiseMinutes > 0 ? ', with what it builds on' : ''}` : null, idea.sharedWith.length ? `also in ${idea.sharedWith.join(', ')}` : null].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      {when && <span className="plan-row-meta">{when}</span>}
+    </li>
+  );
+}
+
+/**
+ * The plan as a list: the ideas still to learn in an order they can be learned in, each with the
+ * sessions it falls in, then what is already known and what the time leaves out. The sessions are a
+ * rough guide; each real session is still chosen when it starts.
+ */
+function IdeaList({ ideas }: { ideas: PlanIdea[] }) {
+  const groups: { title: string; note: string; kind?: DotKind; ideas: PlanIdea[] }[] = [
+    { title: 'To learn, in this order', note: '', ideas: ideas.filter((i) => i.sessions !== null) },
+    { title: 'Already yours', note: 'no time', kind: 'known', ideas: ideas.filter((i) => i.sessions === null && dotKind(i) === 'known') },
+    { title: 'Left out for this time', note: '', kind: 'cut', ideas: ideas.filter((i) => i.sessions === null && dotKind(i) === 'cut') },
+  ];
+  const minutes = groups[0]?.ideas.reduce((sum, i) => sum + i.minutes, 0) ?? 0;
+  return (
+    <div className="plan-list">
+      {groups
+        .filter((g) => g.ideas.length > 0)
+        .map((g) => (
+          <section key={g.title} aria-label={g.title}>
+            <div className="plan-list-head">
+              <span>{g.title}</span>
+              <span>{g.note || (g.ideas.length === 1 ? '1 idea' : `${g.ideas.length} ideas`)}</span>
+            </div>
+            <ul>
+              {g.ideas.map((i) => (
+                <IdeaRow key={i.nodeId} idea={i} kind={g.kind ?? dotKind(i)} />
+              ))}
+            </ul>
+          </section>
+        ))}
+      {minutes > 0 && <p className="t-small m-0 text-muted">The sessions are a rough guide: each one is chosen when you start it, from where you stand then.</p>}
+    </div>
+  );
 }
