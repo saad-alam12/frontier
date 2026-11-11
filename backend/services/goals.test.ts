@@ -247,10 +247,11 @@ describe('pausing and finishing a goal', () => {
     expect(getState(db, nash)?.targetDepth).toBe(3);
     for (const status of ['paused', 'done'] as const) {
       setGoalStatus(db, goal.id, status);
-      expect(goalDetail(db, goal.id).goal.status).toBe(status);
-      expect(goalDetail(db, goal.id).capabilities).toHaveLength(3); // nothing is lost
+      const detail = goalDetail(db, goal.id);
+      expect(detail?.goal.status).toBe(status);
+      expect(detail?.capabilities).toHaveLength(3); // nothing is lost
       expect(getState(db, nash)?.targetDepth).toBe(0); // no active goal wants it now
-      expect(goalDetail(db, goal.id).schedule).toBeNull();
+      expect(detail?.schedule).toBeNull();
       setGoalStatus(db, goal.id, 'active');
       expect(getState(db, nash)?.targetDepth).toBe(3);
     }
