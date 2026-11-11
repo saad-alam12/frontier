@@ -535,7 +535,7 @@ describe('reading sources safely', () => {
   it('when the model for matching by meaning cannot be loaded, the source is still read, by name', async () => {
     const db = openDatabase(':memory:');
     const provider = new FakeProvider({ extractor: extractorFromFixture, matcher: matcherByName });
-    const broken: Embedder = { model: 'unavailable', dims: 64, embed: () => Promise.reject(new Error('fetch failed')) };
+    const broken: Embedder = { model: 'unavailable', dims: 64, floor: 0, sameIdeaBar: 0.55, embed: () => Promise.reject(new Error('fetch failed')) };
     const events: IngestProgress[] = [];
     const dir = mkdtempSync(join(tmpdir(), 'frontier-ingest-'));
     const service = new IngestionService({ db, provider, embedder: broken, sourcesDir: join(dir, 'sources'), onProgress: (p) => events.push(p) });

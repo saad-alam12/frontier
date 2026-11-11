@@ -57,7 +57,6 @@ export interface IngestionOptions {
 }
 
 const CANDIDATES = 5;
-const MIN_COSINE = 0.55;
 const MIN_NAME_SIMILARITY = 0.5;
 /** What the learner reads on a source they stopped. Its unread parts wait; "Run again" reads them. */
 export const STOPPED_MESSAGE = 'You stopped the reading. Run it again to read the rest.';
@@ -341,7 +340,7 @@ export class IngestionService {
     return nodes.map((n, i) => {
       const scores = new Map<string, number>();
       const vector = vectors[i];
-      if (vector) for (const hit of topK(vector, embeddings, CANDIDATES, MIN_COSINE)) scores.set(hit.id, hit.score);
+      if (vector) for (const hit of topK(vector, embeddings, CANDIDATES, this.options.embedder.sameIdeaBar, this.options.embedder.floor)) scores.set(hit.id, hit.score);
       for (const w of world) {
         const s = Math.max(nameSimilarity(n.name, w.name), ...w.aliases.map((a) => nameSimilarity(n.name, a)));
         if (s >= MIN_NAME_SIMILARITY) scores.set(w.id, Math.max(scores.get(w.id) ?? 0, s));

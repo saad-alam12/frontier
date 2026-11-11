@@ -22,6 +22,7 @@
     "live:compare": "tsx scripts/live-compare.ts",
     "live:cards": "tsx scripts/live-cards.ts",
     "live:link": "tsx scripts/live-link.ts",
+    "live:embed": "tsx scripts/live-embed.ts",
     "build:win": "electron-vite build && electron-builder --win",
     "build:linux": "electron-vite build && electron-builder --linux",
     "check:licenses": "tsx scripts/check-licenses.ts"

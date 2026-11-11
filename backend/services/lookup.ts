@@ -4,7 +4,7 @@
  */
 import { askLibrarian } from '../agents/librarian';
 import type { Embedder } from '../ingest/embedder';
-import { cosine, nameSimilarity } from '../ingest/similarity';
+import { cosine, nameSimilarity, relatedness } from '../ingest/similarity';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { logEvent } from '../store/activity';
@@ -50,11 +50,11 @@ export function fuzzyScore(query: string, fields: string[]): number {
     if (f.includes(q)) best = Math.max(best, 0.6 + 0.3 * (q.length / f.length));
     // the question names the idea outright ("difference between X and Y"); a one-word name inside
     // a sentence ("strategy") is weak evidence, a multi-word name is strong
-    if (f.length >= 4 && new RegExp(`\\b${escapeRegExp(f)}\\b`).test(q)) best = Math.max(best, f.includes(' ') ? 0.8 + 0.1 * Math.min(1, f.length / 30) : 0.45);
+    if (f.length >= 4 && new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(f)}(?![\\p{L}\\p{N}])`, 'u').test(q)) best = Math.max(best, f.includes(' ') ? 0.8 + 0.1 * Math.min(1, f.length / 30) : 0.45);
     best = Math.max(best, nameSimilarity(q, f));
     // prefixes: "nash eq" finds "Nash equilibrium"
-    const words = f.split(/[^a-z0-9]+/).filter(Boolean);
-    const qWords = q.split(/[^a-z0-9]+/).filter(Boolean);
+    const words = f.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const qWords = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     if (qWords.length && qWords.every((w) => words.some((x) => x.startsWith(w)))) best = Math.max(best, 0.55 + 0.05 * Math.min(4, qWords.length));
   }
   return Math.min(1, best);
@@ -73,7 +73,7 @@ export async function searchIdeas(deps: LookupDeps, query: string, limit = 8): P
     try {
       await deps.ingestion?.ensureEmbeddings();
       const [q] = await deps.embedder.embed([query]);
-      if (q) for (const e of listEmbeddings(db, deps.embedder.model)) semantic.set(e.nodeId, cosine(q, e.vector));
+      if (q) for (const e of listEmbeddings(db, deps.embedder.model)) semantic.set(e.nodeId, relatedness(cosine(q, e.vector), deps.embedder.floor));
     } catch {
       // the embedding model may be unavailable (offline first run); name matching still works
     }

@@ -15,17 +15,26 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   return dot / Math.sqrt(na * nb);
 }
 
-export function topK<T>(query: Float32Array, items: { id: T; vector: Float32Array }[], k: number, minScore = 0): { id: T; score: number }[] {
+/**
+ * How related two texts are, from 0 (no closer than unrelated texts) to 1 (the same), given their
+ * cosine and the cosine the embedding model gives unrelated texts (`Embedder.floor`).
+ */
+export function relatedness(cosineValue: number, floor: number): number {
+  return floor >= 1 ? 0 : Math.max(0, Math.min(1, (cosineValue - floor) / (1 - floor)));
+}
+
+/** The `k` items most related to the query, at least `minScore` related, each with its relatedness. */
+export function topK<T>(query: Float32Array, items: { id: T; vector: Float32Array }[], k: number, minScore = 0, floor = 0): { id: T; score: number }[] {
   const scored: { id: T; score: number }[] = [];
   for (const item of items) {
-    const score = cosine(query, item.vector);
+    const score = relatedness(cosine(query, item.vector), floor);
     if (score >= minScore) scored.push({ id: item.id, score });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, k);
 }
 
-/** Simple fuzzy name match: token overlap (Jaccard) after lowercasing. */
+/** Simple fuzzy name match: token overlap (Jaccard) after lowercasing. Letters of any alphabet count ("Lösung", "équilibre"). */
 export function nameSimilarity(a: string, b: string): number {
   const ta = new Set(tokens(a));
   const tb = new Set(tokens(b));
@@ -38,7 +47,7 @@ export function nameSimilarity(a: string, b: string): number {
 function tokens(s: string): string[] {
   return s
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 1);
 }
