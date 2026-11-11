@@ -35,7 +35,7 @@ What is true, independent of the learner. Never stores learner state.
   - A chain says the premises **jointly** entail (or are required for) the conclusion.
   - Independent arguments for the same conclusion are separate chains. Never union their premises.
   - A conclusion can be a premise in other chains, so chains compose into derivations.
-- **Chain simplification** (deterministic, at merge time): drop a chain when a kept chain for the same conclusion has a strict subset of its premises, or when its premises are covered by a kept chain's premises plus their transitive ancestry. Only provable redundancy is removed.
+- **Chain simplification** (deterministic, at merge time): drop a chain when a kept chain for the same conclusion has a strict subset of its premises. Nothing else is redundant: a route that runs through ideas another route is built on is kept, because a learner who owns the premises of either route can learn the idea. A new chain that would close a circle (its conclusion is already something one of its premises is built on) is not stored, since two ideas that each wait for the other could never be learned.
 - **Worked example** — `{ id, nodeId, sourceId, locator, title, body }`: a concrete problem with its worked solution from a source, attached to the node it illustrates. Examples are never nodes; the tutor uses them for worked-example cards and to model use tasks on the course's style.
 - The world layer is built by the ingestion pipeline (section 7) from sources and from teaching session transcripts.
 

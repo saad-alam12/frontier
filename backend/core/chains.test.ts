@@ -35,19 +35,21 @@ describe('simplifyChains', () => {
     expect(dropped).toHaveLength(0);
   });
 
-  it('drops a chain covered by a kept chain plus its ancestry', () => {
-    // a -> b ; b -> c ; and a redundant a, b -> c (b already implies a's contribution via ancestry)
+  it('drops a chain that only adds premises to a kept one', () => {
     const { kept, dropped } = simplifyChains([chain('ab', ['a'], 'b'), chain('bc', ['b'], 'c'), chain('abc', ['a', 'b'], 'c')]);
     expect(kept.map((c) => c.id).sort()).toEqual(['ab', 'bc']);
     expect(dropped[0]?.reason).toBe('subset');
+    const more = simplifyChains([chain('pq', ['p'], 'q'), chain('qrs', ['q', 'r'], 's'), chain('prs', ['p', 'r'], 's'), chain('qrps', ['q', 'r', 'p'], 's')]);
+    expect(more.kept.map((c) => c.id).sort()).toEqual(['pq', 'prs', 'qrs']);
+    expect(more.dropped.map((d) => d.chain.id)).toEqual(['qrps']);
   });
 
-  it('covered-by-ancestry removes a chain that restates a premise ancestor', () => {
-    // p -> q ; q, r -> s ; p, r -> s is NOT covered (p is an ancestor of q, but r is required and q is not a premise of the candidate)
-    // whereas q, r, p -> s is covered by (q, r) + ancestry(q) = {p}
-    const { kept, dropped } = simplifyChains([chain('pq', ['p'], 'q'), chain('qrs', ['q', 'r'], 's'), chain('prs', ['p', 'r'], 's'), chain('qrps', ['q', 'r', 'p'], 's')]);
-    expect(kept.map((c) => c.id).sort()).toEqual(['pq', 'prs', 'qrs']);
-    expect(dropped.map((d) => d.chain.id)).toEqual(['qrps']);
+  it('keeps a direct route beside a route through an idea built on the same premise', () => {
+    // fractions + algebra -> equations ; equations -> percentages ; fractions -> percentages.
+    // The direct route needs fractions only; the other needs algebra too. Both are real.
+    const { kept, dropped } = simplifyChains([chain('eq', ['fractions', 'algebra'], 'equations'), chain('viaEq', ['equations'], 'percentages'), chain('direct', ['fractions'], 'percentages')]);
+    expect(kept.map((c) => c.id).sort()).toEqual(['direct', 'eq', 'viaEq']);
+    expect(dropped).toHaveLength(0);
   });
 
   it('does not loop on cycles', () => {

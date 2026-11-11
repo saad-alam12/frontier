@@ -2,7 +2,6 @@
  * Chain dedupe and simplification (design §2.1). Only provable redundancy is removed.
  */
 import type { Chain } from './types';
-import { ancestors, indexChains } from './graph';
 
 export function chainKey(premises: readonly string[], conclusion: string): string {
   return `${[...new Set(premises)].sort().join('+')}=>${conclusion}`;
@@ -32,17 +31,18 @@ export function dedupeChains(chains: Chain[]): Chain[] {
 
 export interface SimplifyResult {
   kept: Chain[];
-  dropped: { chain: Chain; reason: 'subset' | 'covered' }[];
+  dropped: { chain: Chain; reason: 'subset' }[];
 }
 
 /**
- * For each conclusion: a chain is dropped when a kept chain for the same conclusion has a strict subset
- * of its premises, or when its premises are all covered by a kept chain's premises plus their transitive
- * ancestry. Chains are considered shortest first so the minimal argument is the one kept.
+ * For each conclusion: a chain is dropped when a kept chain for the same conclusion needs a strict
+ * subset of its premises ("fractions and algebra lead to percentages" says nothing once "fractions
+ * lead to percentages" is there). Chains are considered shortest first, so the minimal argument is
+ * the one kept. Nothing else is redundant: a route that runs through ideas another route is built on
+ * is still a route of its own, and dropping it would hide an idea from a learner who could learn it now.
  */
 export function simplifyChains(chains: Chain[]): SimplifyResult {
   const deduped = dedupeChains(chains);
-  const index = indexChains(deduped);
   const kept: Chain[] = [];
   const dropped: SimplifyResult['dropped'] = [];
   const byConclusion = new Map<string, Chain[]>();
@@ -56,20 +56,7 @@ export function simplifyChains(chains: Chain[]): SimplifyResult {
     const keptHere: Chain[] = [];
     for (const chain of group) {
       const premises = new Set(chain.premises);
-      let reason: 'subset' | 'covered' | null = null;
-      for (const k of keptHere) {
-        if (k.premises.length < premises.size && k.premises.every((p) => premises.has(p))) {
-          reason = 'subset';
-          break;
-        }
-        const covered = new Set(k.premises);
-        for (const p of k.premises) for (const a of ancestors(p, index)) covered.add(a);
-        if (chain.premises.every((p) => covered.has(p))) {
-          reason = 'covered';
-          break;
-        }
-      }
-      if (reason) dropped.push({ chain, reason });
+      if (keptHere.some((k) => k.premises.length < premises.size && k.premises.every((p) => premises.has(p)))) dropped.push({ chain, reason: 'subset' });
       else keptHere.push(chain);
     }
     kept.push(...keptHere);

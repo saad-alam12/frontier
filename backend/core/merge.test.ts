@@ -149,4 +149,36 @@ describe('planMerge', () => {
     expect(plan.newChains).toHaveLength(1);
     expect(plan.droppedChainIds).toEqual(['chain_long']);
   });
+
+  it('does not store a chain that would close a circle', () => {
+    // the map says best response leads to Nash; a second source derives best response from Nash
+    const direct = planMerge({ ...base(), extractedChains: [{ premises: ['node_nash'], conclusion: 'node_br', locator: 'p2' }] });
+    expect(direct.newChains).toEqual([]);
+    expect(direct.skippedChains).toEqual([{ chain: { premises: ['node_nash'], conclusion: 'node_br', locator: 'p2' }, reason: 'would close a circle of chains' }]);
+    // also through a new idea in between, and between two chains of the same source
+    const through = planMerge({
+      ...base(),
+      extractedNodes: [{ tempId: 'n1', kind: 'claim', name: 'Stability', statement: 's', aliases: [] }],
+      extractedChains: [
+        { premises: ['node_nash'], conclusion: 'n1' },
+        { premises: ['n1'], conclusion: 'node_br' },
+      ],
+    });
+    expect(through.newChains.map((c) => c.conclusion)).toEqual(['node_1']);
+    expect(through.skippedChains.map((k) => k.reason)).toEqual(['would close a circle of chains']);
+  });
+
+  it('keeps a second route to an idea beside the first', () => {
+    const plan = planMerge({
+      ...base(),
+      extractedNodes: [{ tempId: 'n1', kind: 'term', name: 'Payoff', statement: 's', aliases: [] }],
+      extractedChains: [
+        { premises: ['n1'], conclusion: 'node_br' }, // payoff -> best response (-> Nash, on the map)
+        { premises: ['n1'], conclusion: 'node_nash' }, // and a direct route from payoff to Nash
+      ],
+    });
+    expect(plan.newChains).toHaveLength(2);
+    expect(plan.droppedChainIds).toEqual([]);
+  });
 });
+

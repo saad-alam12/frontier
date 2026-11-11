@@ -3,6 +3,7 @@
  * identity decisions and the current world layer, compute exactly what to write. The store applies
  * the plan in one transaction; it is the only writer of the world layer.
  */
+import { ancestors, indexChains } from './graph';
 import { chainKey, simplifyChains } from './chains';
 import type { Chain, KnowledgeNode, NodeKind, SourceRef, WorkedExample } from './types';
 
@@ -128,6 +129,13 @@ export function planMerge(input: MergeInput): PlannedMerge {
     }
     if (seenNew.has(key)) continue;
     seenNew.add(key);
+    // A link the other way round is already there, directly or through other ideas (one source derives
+    // B from A, another A from B). With both, neither idea could ever have all its premises owned.
+    const index = indexChains([...input.existingChains, ...candidateChains]);
+    if (resolvedPremises.some((p) => ancestors(p, index).has(conclusion))) {
+      skippedChains.push({ chain: c, reason: 'would close a circle of chains' });
+      continue;
+    }
     candidateChains.push({ id: input.newId('chain'), premises: resolvedPremises, conclusion, sources: [ref] });
   }
 
