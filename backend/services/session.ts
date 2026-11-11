@@ -18,7 +18,8 @@ import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
-import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
+import { listBugsForNode } from '../store/bugs';
+import { afterAnswer } from './bugs';
 import { logEvent, secondsOnNode } from '../store/activity';
 import { getState } from '../store/evidence';
 import { getGoal, listTargets } from '../store/goals';
@@ -819,11 +820,7 @@ function writeOutcome(db: Database, sessionId: string, state: SessionState, step
   if (stage === 'connect' && grade.score >= 0.7 && response.answer.trim()) {
     state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: `Link the learner stated and the tutor confirmed: ${response.answer.trim()}` });
   }
-  if (grade.misconception) {
-    const open = listBugsForNode(db, step.nodeId).find((b) => b.description.toLowerCase() === grade.misconception?.toLowerCase());
-    if (open) touchBug(db, open.id);
-    else recordBug(db, step.nodeId, grade.misconception);
-  }
+  afterAnswer(db, step.nodeId, grade.misconception ?? null);
   creditRecalledCards(db, grade.recalledCards, { source: 'session', sessionId });
 }
 

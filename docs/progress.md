@@ -175,6 +175,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] B6 practice on demand (a skill's learned ideas, at Easier / As planned / Harder) and a list of ideas from problems you missed, with "Practise again"
 - [x] B3 add from a link: a web page, a PDF or a text file by its address. A video link asks for its transcript, pasted from the video's page, and keeps it by the minute. Fetching video transcripts automatically is not built (see Open questions)
 - [x] D26 a log file for errors of calls and background work, with "Show log" in Settings
+- [x] C5 (part) a misconception ends after two clean answers about its idea, one of them at least half a day later; seen again, it is open again. Still open: recognising a repeat by meaning, a Misconceptions view, contrast problems scheduled because of one
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -304,6 +305,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 C5, first part): Misconceptions end. `core/bugs.ts` `hasEnded`: two direct passing answers about the idea (`reviewRole` direct, score at or above the pass mark) after the misconception was last seen, at least one of them 12 hours or more after. `services/bugs.ts` `afterAnswer` is now the one writer of the bugs table and replaces three copies of "seen before? mark it, else record it" (session, practice, probe): an answer that shows a misconception records or re-opens it, dated when the learner answered; an answer that shows none closes the idea's misconceptions that have ended. Until now `resolveBug` was never called, so the lists only grew. Matching is still by the exact sentence (recognising a repeat by meaning is for the next session). Design §5.2 updated.
 
 - 2026-11-11 (R7 D26): The log. `backend/log.ts` `LogFile` appends to `frontier.log` beside `settings.json` (the app's own folder, not the data folder, so it survives a change of data folder); 1 MB, then one older file is kept. Written: the start (version, platform), every failed call from the window (`call <name>`), every failed model call with its role (`ThrottledProvider` tells the context; a call the learner stopped is not an error), every error notice and failed part of a source sent to the window (`AppContext.emit` now logs and forwards; the window's sink is `ctx.sink`), and uncaught exceptions and rejections in the main process (logged, the app keeps running). Entries carry the message and the top five stack lines, never learner text, prompts or keys. `app.showLog` reveals the file; Settings, Data has "Show log". Design §11.4 updated.
 

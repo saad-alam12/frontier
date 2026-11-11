@@ -17,7 +17,8 @@ import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { logEvent } from '../store/activity';
-import { listBugsForNode, recordBug, touchBug } from '../store/bugs';
+import { listBugsForNode } from '../store/bugs';
+import { afterAnswer } from './bugs';
 import { getGoal, listMaterials, listTargets } from '../store/goals';
 import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
 import type { AnswerRecord, PracticeKind } from '../store/practice';
@@ -376,11 +377,10 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
         at: answer.submittedAt,
       });
     }
-    if (grade.misconception) {
-      const { nodeId, description } = grade.misconception;
-      const open = listBugsForNode(db, nodeId).find((b) => b.description.toLowerCase() === description.toLowerCase());
-      if (open) touchBug(db, open.id);
-      else recordBug(db, nodeId, description);
+    // the misconception goes on record for its idea; the other ideas were answered without one
+    const wrong = grade.misconception;
+    for (const nodeId of new Set([...grade.ideas.map((i) => i.nodeId), ...(wrong ? [wrong.nodeId] : [])])) {
+      if (view.nodes.has(nodeId)) afterAnswer(db, nodeId, wrong?.nodeId === nodeId ? wrong.description : null, answer.submittedAt);
     }
     if (set && listProblems(db, set.id).every((p) => answerFor(db, p.id)?.score !== null && answerFor(db, p.id) !== undefined)) {
       closePracticeSet(db, set.id);

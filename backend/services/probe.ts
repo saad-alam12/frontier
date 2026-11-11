@@ -10,7 +10,7 @@ import { CommitGate } from '../llm/cancel';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
-import { recordBug } from '../store/bugs';
+import { afterAnswer } from './bugs';
 import { deleteDrafts } from '../store/drafts';
 import { getGoal, listGoals, listTargets, raiseBaseline } from '../store/goals';
 import { getState } from '../store/evidence';
@@ -160,7 +160,7 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
         confidence: input.confidence,
         context: { step: `probe:${goalId}`, problemId: problem.id },
       });
-      if (a.misconception) recordBug(db, problem.nodeId, a.misconception);
+      afterAnswer(db, problem.nodeId, a.misconception ?? null);
       const implied: ProbeOutcome['impliedPremises'] = [];
       for (const [premiseId, score] of impliedPremiseScores(problem.nodeId, a.score, problem.kind, view.index)) {
         if (!view.nodes.has(premiseId)) continue;

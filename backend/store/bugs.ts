@@ -14,19 +14,20 @@ interface BugRow {
 
 const toBug = (r: BugRow): Bug => ({ id: r.id, nodeId: r.node_id, description: r.description, firstSeen: r.first_seen, lastSeen: r.last_seen, resolvedAt: r.resolved_at });
 
-export function recordBug(db: Database, nodeId: string, description: string): Bug {
-  const now = nowIso();
-  const bug: Bug = { id: newId('bug'), nodeId, description, firstSeen: now, lastSeen: now, resolvedAt: null };
-  db.prepare('INSERT INTO bugs (id, node_id, description, first_seen, last_seen, resolved_at) VALUES (?, ?, ?, ?, ?, NULL)').run(bug.id, nodeId, description, now, now);
+/** `at` is when the answer that showed it was given. */
+export function recordBug(db: Database, nodeId: string, description: string, at: string = nowIso()): Bug {
+  const bug: Bug = { id: newId('bug'), nodeId, description, firstSeen: at, lastSeen: at, resolvedAt: null };
+  db.prepare('INSERT INTO bugs (id, node_id, description, first_seen, last_seen, resolved_at) VALUES (?, ?, ?, ?, ?, NULL)').run(bug.id, nodeId, description, at, at);
   return bug;
 }
 
-export function touchBug(db: Database, bugId: string): void {
-  db.prepare('UPDATE bugs SET last_seen = ?, resolved_at = NULL WHERE id = ?').run(nowIso(), bugId);
+/** Seen again: it is open, and it was last seen at the later of the two times. */
+export function touchBug(db: Database, bugId: string, at: string = nowIso()): void {
+  db.prepare('UPDATE bugs SET last_seen = max(last_seen, ?), resolved_at = NULL WHERE id = ?').run(at, bugId);
 }
 
-export function resolveBug(db: Database, bugId: string): void {
-  db.prepare('UPDATE bugs SET resolved_at = ? WHERE id = ?').run(nowIso(), bugId);
+export function resolveBug(db: Database, bugId: string, at: string = nowIso()): void {
+  db.prepare('UPDATE bugs SET resolved_at = ? WHERE id = ?').run(at, bugId);
 }
 
 export function listBugsForNode(db: Database, nodeId: string, includeResolved = false): Bug[] {
