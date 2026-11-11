@@ -94,7 +94,7 @@ export interface RoadmapIdea {
   minutes: number;
   /** The ideas of the plan it is built on: they come first. */
   dependsOn: string[];
-  /** Higher comes earlier among ideas that could come in either order. */
+  /** Higher comes earlier among ideas that could come in either order; at the same weight, the order given decides. */
   weight: number;
 }
 
@@ -107,6 +107,9 @@ export interface RoadmapIdea {
  */
 export function roadmap(ideas: RoadmapIdea[], sessionMinutes: number): Map<string, { from: number; to: number }> {
   const byId = new Map(ideas.map((i) => [i.id, i]));
+  // ties go by the order the ideas came in, never by their ids: ids are random, so the plan would read differently each time
+  const given = new Map(ideas.map((i, at) => [i.id, at]));
+  const firstByWeight = (a: RoadmapIdea, b: RoadmapIdea) => b.weight - a.weight || (given.get(a.id) ?? 0) - (given.get(b.id) ?? 0);
   const ordered: RoadmapIdea[] = [];
   const placed = new Set<string>();
   const visit = (idea: RoadmapIdea, stack: Set<string>) => {
@@ -129,7 +132,4 @@ export function roadmap(ideas: RoadmapIdea[], sessionMinutes: number): Map<strin
   return sessions;
 }
 
-function firstByWeight(a: RoadmapIdea, b: RoadmapIdea): number {
-  return b.weight - a.weight || a.id.localeCompare(b.id);
-}
 

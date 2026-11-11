@@ -86,4 +86,11 @@ describe('a rough roadmap of a plan', () => {
     // the last session is the plan's session count: 187 minutes are five sessions of 45
     expect(Math.max(...[...sessions.values()].map((v) => v.to))).toBe(Math.ceil(187 / 45));
   });
+
+  it('takes ideas of the same weight in the order given, whatever their ids', async () => {
+    const { roadmap } = await import('./plan');
+    const order = (ids: string[]) => [...roadmap(ids.map((id) => ({ id, minutes: 10, dependsOn: [], weight: 1 })), 45).keys()];
+    expect(order(['zeta', 'alpha', 'mid'])).toEqual(['zeta', 'alpha', 'mid']);
+    expect(order(['alpha', 'mid', 'zeta'])).toEqual(['alpha', 'mid', 'zeta']);
+  });
 });
