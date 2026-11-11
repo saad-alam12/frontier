@@ -167,6 +167,7 @@ R7 items built so far (each with tests; details under Decisions):
 - [x] D10 session logic: transfer-depth ideas no longer end "simplified"; a failed test-out returns to teaching once; the planner never skips prerequisites; ending a session stops its work; go-deeper sessions are chosen sessions
 - [x] D7 daily backups, a copy before upgrades, restore in Settings, a check of the data file at start, one copy of the app per data folder
 - [x] D14 goal edge cases: weekly target near and past the date, the rhythm starts again with a new time or after a pause, goals with only an exam or syllabus are mapped, one compile at a time, a missing premise is charged once, previews match what saving gives
+- [x] B1 ask the tutor during a session: a question of your own on any card; on explanations also "Explain it differently", "Simpler", "Show an example". Fake model only: the real answers are the owner's to judge
 
 **On this branch (`claude/r6-overnight`):** after the R5 checkpoint below, try the extras: press ⌘K and type "nash", then a question and Enter; press ⌘1 to ⌘8; in Library press "Paste text"; on a goal page press "Export notes" and open the file. Keep what you like; say what to drop.
 
@@ -296,6 +297,8 @@ Collected here because the owner was asleep while the build continued.
 ## Decisions
 
 Record choices the design did not settle, newest first: date, decision, reason.
+
+- 2026-11-11 (R7 B1): Asking the tutor. `session.ask` (`askTutor`) runs as the session's work (so no answer can be sent meanwhile; not stoppable), calls `runTutorAside` on the `tutor` role with the step's context, the open card and the mode (`question`, `different`, `simpler`, `example`), and appends an `aside` session event; the state's transcript gets the answer. Its prompt is `prompts/tutor-ask.md` (written for this project): at most about 150 words for a question and 250 for another form, never the answer to an open question. The snapshot carries `asides` for the open card and each history item its own; Trails shows them under the step. A question is at most 2,000 characters. The selection pill (Reply, Make a flashcard) does not offer "Ask about this" yet; carried-over steps do not bring their asides along.
 
 - 2026-11-11 (R7 D14): Goal edge cases. Migration 14 adds `goals.rhythm_at` (set at approval, on a new time, and when a paused or finished goal becomes active again). `goalRhythm` gives the start, the minutes left then and the weekly target; "behind" compares time spent since the start. `weeklyMinutes` is capped at what is left and is null once the date has passed. A new time resets the minutes added by going deeper. A goal never mapped is mapped as soon as nothing is being read, also with only assessment or scope material or when its only teaching file failed. `compileNow` shares the worker's one-run-per-goal guard. A premise outside every plan is charged to one idea only (most central first). The preview of a new time keeps simplified caps, as saving does. The pace sentence states a ratio only when there is one. Practice is weighed up only in the seven days before the exam, not after it. Removing a goal is refused while its session is open. Not done from the review: removing unverified ideas a deleted goal created; freed time is offered back in C8.
 

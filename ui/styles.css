@@ -1561,6 +1561,36 @@ button.map-label:hover {
   flex-shrink: 0;
 }
 
+/* What the learner asked the tutor about a card, and the answer: set off from the card by a rule on
+   the left, like a note in a margin. */
+.asides {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border-strong);
+}
+.aside-question {
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 300;
+  color: var(--text);
+}
+.ask-input {
+  min-height: 64px;
+  resize: vertical;
+}
+.chip.is-quiet {
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 /* The session's header (where you are: goal, idea, step, time) stays in view while the conversation
    scrolls under it. Its own top padding keeps it clear of the window's drag strip on macOS. */
 .session-head {

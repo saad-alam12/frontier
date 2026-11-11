@@ -1,3 +1,4 @@
+import { Asides } from '../components/AskTutor';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Trail, TrailItem, TrailSummary } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
@@ -187,6 +188,7 @@ function TrailEntry({ item, fresh }: { item: TrailItem; fresh: boolean }) {
             {item.carried ? ' · from the session before' : ''}
           </div>
           <Markdown text={cardText(item.card)} className="text-[15px] text-soft" />
+          <Asides asides={item.asides} past />
           {item.response && item.card.stage !== 'explain' && item.card.stage !== 'support' && item.card.stage !== 'reteach' && <Answer text={item.response.answer} confidence={item.response.confidence} extras={item.response} />}
           {item.grade && (
             <div className="flex flex-col gap-[4px]">

@@ -19,7 +19,8 @@ import { IngestionService } from './ingestion';
 import { refreshGoalFields } from './knowledge';
 import { deeperMinutes, goDeeper } from './goals';
 import { recordEvidence } from './evidence';
-import { abandonSession, currentSession, pauseSession, respond, startSession } from './session';
+import { abandonSession, askTutor, currentSession, pauseSession, respond, startSession } from './session';
+import { trail } from './trails';
 import { SessionWork } from './sessionWork';
 import { settleGrading } from './practice';
 import type { SessionState } from './session';
@@ -856,5 +857,68 @@ describe('R7: an answer is judged once, whatever happens next', () => {
     // the next planned session picks up the half-done idea of the planned one
     const next = await startSession(deps, goal.id);
     expect(next.plan.steps[0]?.nodeId).toBe(half);
+  });
+});
+
+describe('R7 B1: asking the tutor', () => {
+  /** The session's tutor, which also answers what the learner asks; it records what it was asked. */
+  function withAsides(deps: Awaited<ReturnType<typeof setup>>['deps'], scores: number[]) {
+    const asked: string[] = [];
+    const tutor = fakeTutor(scores);
+    deps.provider.script('tutor', (req: CompleteRequest<unknown>) => {
+      if (req.submit.name !== 'submit_answer') return tutor(req);
+      asked.push(req.messages[0]?.content ?? '');
+      return { answer: 'Think of it as a promise each player keeps because breaking it would only hurt themselves.' };
+    });
+    return asked;
+  }
+  const pickDominant = (req: CompleteRequest<unknown>) => {
+    const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+    const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
+    return { title: 'Dominance', orientation: 'Today builds on what you know.', steps: all.filter((c) => c.name === 'Strictly dominant strategy').map((c) => ({ nodeId: c.id, why: 'needed for the exam' })) };
+  };
+
+  it('answers under the open card without grading anything, and keeps the answer in the conversation and the trail', async () => {
+    const { db, goal, deps } = await setup([0.4, 0.8, 0.8], [], pickDominant);
+    const asked = withAsides(deps, [0.4, 0.8, 0.8]);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    snap = await respond(deps, snap.id, answer('Not sure.', 0.33)); // the prediction: on to the explanation
+    expect(snap.current?.stage).toBe('explain');
+    const evidence = listEvidenceForSession(db, snap.id).length;
+
+    snap = await askTutor(deps, snap.id, { mode: 'simpler' });
+    expect(snap.current?.stage).toBe('explain'); // the card stays
+    expect(snap.asides).toEqual([expect.objectContaining({ mode: 'simpler', question: '', answer: expect.stringContaining('promise') })]);
+    expect(listEvidenceForSession(db, snap.id)).toHaveLength(evidence); // nothing graded
+    expect(asked[0]).toContain('asked for a simpler explanation');
+    expect(asked[0]).not.toContain('has not answered yet');
+
+    // on to the check: a question of the learner's own, about an open question
+    snap = await respond(deps, snap.id, { answer: '' });
+    expect(snap.current?.stage).toBe('check');
+    expect(snap.asides).toEqual([]); // asides belong to the card they were asked about
+    snap = await askTutor(deps, snap.id, { mode: 'question', question: 'What does "whatever the others do" mean here?' });
+    expect(asked[1]).toContain('What does "whatever the others do" mean here?');
+    expect(asked[1]).toContain('has not answered yet. Do not answer it for them');
+    expect(snap.asides[0]?.question).toBe('What does "whatever the others do" mean here?');
+
+    // the explanation's aside is in the conversation, under its card, and in the trail
+    const explained = snap.history.nodes.flatMap((n) => n.items).find((i) => i.stage === 'explain');
+    expect(explained?.asides.map((a) => a.mode)).toEqual(['simpler']);
+    const steps = trail(db, snap.id)?.items.filter((i) => i.type === 'step') ?? [];
+    expect(steps.find((i) => i.type === 'step' && i.stage === 'explain' && i.asides.length === 1)).toBeDefined();
+    // what the tutor said is taught material for the card writer and the map
+    expect(getSession<SessionState>(db, snap.id)?.state.transcript.some((t) => t.text.includes('promise'))).toBe(true);
+  });
+
+  it('refuses an empty question and a session with no card open', async () => {
+    const { goal, deps } = await setup([0.8], [], pickDominant);
+    withAsides(deps, [0.8]);
+    const snap = await startSession(deps, goal.id);
+    await expect(askTutor(deps, snap.id, { mode: 'question', question: 'Why?' })).rejects.toThrow('no card open'); // still at the orientation
+    const teaching = await respond(deps, snap.id, answer(''));
+    await expect(askTutor(deps, teaching.id, { mode: 'question', question: '   ' })).rejects.toThrow('Write your question first');
+    await expect(askTutor(deps, teaching.id, { mode: 'question', question: 'x'.repeat(2001) })).rejects.toThrow('up to 2000 characters');
   });
 });

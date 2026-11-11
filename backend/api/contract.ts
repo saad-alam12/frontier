@@ -2,6 +2,7 @@
  * The IPC contract between the renderer and the backend. The UI imports only types from here.
  * Each method has an input and an output type; handlers live in ./handlers.ts.
  */
+import type { AsideMode } from '../agents/tutor';
 import type { BackupInfo } from '../store/backup';
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
 import type { MaterialRole } from '../core/types';
@@ -11,7 +12,7 @@ import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
 import type { LessonPlan } from '../services/planner';
-import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot } from '../services/session';
+import type { FrontierMap, FrontierState, HistoryItem, HistoryNode, PublicCard, SessionHistory, SessionSnapshot, Aside } from '../services/session';
 import type { SentAnswer, SessionWorkEvent, SessionWorkView } from '../services/sessionWork';
 import type { FreeBackgroundView, FreeChoice, FreeIdeaView, FreePlanView } from '../services/freeSession';
 import type { MakerRequest, MakerView } from '../services/sessionMaker';
@@ -27,7 +28,7 @@ import type { AdditionView } from '../services/addition';
 import type { TickInput } from '../services/activity';
 import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
 import type { EraseRequest, ErasePreview, EraseResult, EraseScope } from '../services/erase';
-export type { EraseRequest, ErasePreview, EraseResult, EraseScope };
+export type { EraseRequest, ErasePreview, EraseResult, EraseScope, Aside, AsideMode };
 import type { GoalBudget } from '../core/types';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
@@ -154,6 +155,8 @@ export interface ApiMethods {
   'session.start': { input: { goalId: string; focus?: string[] }; output: SessionSnapshot };
   /** `draftKey`: the unsent answer's draft, deleted once the answer is accepted. */
   'session.respond': { input: { sessionId: string; response: LearnerResponse; draftKey?: string }; output: SessionSnapshot };
+  /** Ask the tutor about the open card: a question of the learner's own, or the explanation in another form. Not graded. */
+  'session.ask': { input: { sessionId: string; mode: AsideMode; question?: string }; output: SessionSnapshot };
   /** A session the learner chooses, as it would be (ideas, aims, missing background, minutes), changing nothing. */
   'session.freePreview': { input: FreeChoice; output: FreePlanView };
   /** Ask the session maker to turn a description into a session; it runs in the background (see `session.maker`). */

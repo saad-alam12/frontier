@@ -4,7 +4,7 @@ import type { Stage } from '../core/session';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
 import type { Assessment, GoalFocus, GoalLevel } from '../core/types';
-import { answerReadingPrompt } from './prompts';
+import { answerReadingPrompt, loadPrompt } from './prompts';
 
 const md = (max: number) => z.string().trim().min(1).max(max);
 const Rubric = z.array(z.string().trim().min(2).max(300)).min(1).max(6);
@@ -83,6 +83,9 @@ export interface TutorGoal {
   context: string | null;
 }
 
+/** Everything about the idea, the learner and the goal that a tutor call starts from. */
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'cards' | 'nextStage'>;
+
 export interface TutorStepInput {
   goal: TutorGoal;
   why: string;
@@ -112,8 +115,8 @@ export interface TutorStepResult {
   card: TutorCard | null;
 }
 
-export async function runTutorStep(provider: LlmProvider, input: TutorStepInput): Promise<TutorStepResult> {
-  const expectGrade = input.previous !== null && isGraded(input.previous.stage);
+/** What the tutor is told about the idea and the learner, whatever it is asked to do next. */
+function contextSections(input: TutorContext): string[] {
   const sections: string[] = [];
   sections.push(goalSection(input.goal, input.why));
   sections.push(`## Node (for you only; do not reveal it before the learner has tried)\n[${input.node.id}] ${input.node.name} (${input.node.kind})\n${input.node.statement}`);
@@ -146,6 +149,12 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
         .join('\n\n')}`,
     );
   }
+  return sections;
+}
+
+export async function runTutorStep(provider: LlmProvider, input: TutorStepInput): Promise<TutorStepResult> {
+  const expectGrade = input.previous !== null && isGraded(input.previous.stage);
+  const sections = contextSections(input);
   if (input.previous) {
     sections.push(`## Previous card (${input.previous.stage})\n${cardText(input.previous.card)}\n\n## Learner's response\n${responseText(input.previous.response)}`);
   }
@@ -169,6 +178,47 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
     submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade, new Set(cards.map((c) => c.id))) },
   });
   return result.data as TutorStepResult;
+}
+
+/** What the learner asked for outside the step loop: their own question, or the explanation in another form. */
+export const ASIDE_MODES = ['question', 'different', 'simpler', 'example'] as const;
+export type AsideMode = (typeof ASIDE_MODES)[number];
+
+const ASIDE_TASK: Record<AsideMode, string> = {
+  question: 'Answer the learner\'s question.',
+  different: 'The learner asked for the idea explained differently: explain it again from another angle than before.',
+  simpler: 'The learner asked for a simpler explanation: give the core of the idea in everyday words with one concrete picture.',
+  example: 'The learner asked for an example: give one small, concrete, fully worked example of the idea.',
+};
+
+export interface TutorAsideInput extends TutorContext {
+  /** The card the learner is looking at, and whether it is a question they have not answered yet. */
+  open: { stage: Stage; card: TutorCard; unanswered: boolean };
+  mode: AsideMode;
+  /** The learner's own words, for a question. */
+  question: string;
+}
+
+/**
+ * Answer the learner outside the step loop (design §4.2, "Asking the tutor"): a question of their
+ * own, or what was explained in another form. Not graded, and no card comes of it.
+ */
+export async function runTutorAside(provider: LlmProvider, input: TutorAsideInput): Promise<string> {
+  const sections = contextSections(input);
+  sections.push(
+    `## The card the learner is looking at (${input.open.stage})\n${cardText(input.open.card)}${
+      input.open.unanswered ? '\n\nThis is a question the learner has not answered yet. Do not answer it for them or say anything that settles it.' : ''
+    }`,
+  );
+  if (input.mode === 'question') sections.push(`## The learner asks\n${input.question}`);
+  sections.push(`## Task\n${ASIDE_TASK[input.mode]}`);
+  const result = await provider.complete({
+    role: 'tutor',
+    system: `${loadPrompt('tutor-ask')}\n\n${loadPrompt('answering')}`,
+    messages: [{ role: 'user', content: sections.join('\n\n') }],
+    submit: { name: 'submit_answer', description: 'Submit the answer to the learner, in Markdown.', schema: z.object({ answer: z.string().trim().min(1).max(6000) }) },
+  });
+  return (result.data as { answer: string }).answer;
 }
 
 const DEPTH_TEXT = [

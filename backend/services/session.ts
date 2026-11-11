@@ -3,8 +3,8 @@
  * close → preview. State is persisted after every transition so the app can resume at the same card.
  */
 import { passageFor } from '../core/passage';
-import { cardText, runRecall, runTutorStep } from '../agents/tutor';
-import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
+import { cardText, runRecall, runTutorStep, runTutorAside } from '../agents/tutor';
+import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput, AsideMode } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
 import { IDEA_MAX_MINUTES, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
@@ -148,6 +148,8 @@ export interface SessionSnapshot {
     minutesAllowed: number;
   } | null;
   card: PublicCard | null;
+  /** What the learner asked the tutor about the open card, oldest first. */
+  asides: Aside[];
   previousNodes: { id: string; name: string }[];
   closing: SessionState['closing'];
   /** Everything already said in this session, oldest first, rebuilt from session events. */
@@ -162,11 +164,25 @@ export interface SessionSnapshot {
   work: SessionWorkView | null;
 }
 
+/** Something the learner asked the tutor while a card was open, and what the tutor said. Not graded. */
+export interface Aside {
+  id: string;
+  mode: AsideMode;
+  /** The learner's own words; empty when they asked for the explanation in another form. */
+  question: string;
+  answer: string;
+}
+
+/** The longest question the learner can ask the tutor, in characters. */
+export const ASIDE_MAX_CHARS = 2000;
+
 /** One answered step: the card as shown, the learner's answer exactly as given, the rating. */
 export interface HistoryItem {
   id: string;
   stage: Stage;
   card: PublicCard;
+  /** What the learner asked the tutor while this card was open. */
+  asides: Aside[];
   response: LearnerResponse | null;
   grade: Grade | null;
   /** True for steps answered in an earlier session and carried over with a half-done idea. */
@@ -968,6 +984,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
           }
         : null,
     card: publicCard(s.card),
+    asides: step && s.stage && s.card ? openAsides(db, session.id, step.nodeId, s.stage) : [],
     previousNodes: s.previousNodes,
     closing: s.closing,
     history: sessionHistory(db, session),
@@ -976,6 +993,58 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
     practiceRevealed: s.practiceRevealed ?? null,
     work: work?.forSession(session.id) ?? null,
   };
+}
+
+function asideOf(event: { id: string; payload: Record<string, unknown> }): Aside | null {
+  const p = event.payload as { mode?: AsideMode; question?: string; answer?: string };
+  return p.mode && typeof p.answer === 'string' ? { id: event.id, mode: p.mode, question: p.question ?? '', answer: p.answer } : null;
+}
+
+/** What was asked about the card that is open now: the asides since that card was shown. */
+function openAsides(db: Database, sessionId: string, nodeId: string, stage: Stage): Aside[] {
+  let asides: Aside[] = [];
+  for (const event of listSessionEvents(db, sessionId)) {
+    const p = event.payload as { nodeId?: string; stage?: Stage };
+    if (p.nodeId !== nodeId || p.stage !== stage) continue;
+    if (event.kind === 'card') asides = [];
+    else if (event.kind === 'aside') {
+      const aside = asideOf(event);
+      if (aside) asides.push(aside);
+    }
+  }
+  return asides;
+}
+
+/**
+ * The learner asks the tutor something while a card is open (design §4.2): a question of their own,
+ * or the explanation differently, simpler or as an example. The answer joins the conversation under
+ * the card and the session's trail; nothing is graded and the card stays as it is. It runs as the
+ * session's work, so an answer cannot be sent while the tutor is still replying.
+ */
+export async function askTutor(deps: SessionDeps, sessionId: string, input: { mode: AsideMode; question?: string }): Promise<SessionSnapshot> {
+  const { db } = deps;
+  const stored = getSession<SessionState>(db, sessionId);
+  if (!stored) throw new Error(`unknown session ${sessionId}`);
+  const session = normalized(stored);
+  const state = session.state;
+  const step = state.plan.steps[state.stepIndex];
+  const stage = state.stage;
+  const card = state.card;
+  if (session.status !== 'active' || state.phase !== 'teach' || !step || !stage || !card) throw new Error('There is no card open to ask about.');
+  const question = (input.question ?? '').trim();
+  if (input.mode === 'question' && !question) throw new Error('Write your question first.');
+  if (question.length > ASIDE_MAX_CHARS) throw new Error(`A question can be up to ${ASIDE_MAX_CHARS} characters.`);
+  await deps.work.run({ kind: 'respond', sessionId, goalId: state.goalId, sent: null, stoppable: false }, async () => {
+    const goal = tutorGoalFor(db, state);
+    const { previous: _previous, images: _images, cards: _cards, nextStage: _nextStage, ...context } = buildTutorInput(db, state, step, null, null, goal);
+    const answer = await runTutorAside(deps.provider, { ...context, open: { stage, card, unanswered: isGraded(stage) }, mode: input.mode, question });
+    stillOpen(db, sessionId);
+    appendSessionEvent(db, sessionId, 'aside', { nodeId: step.nodeId, stage, mode: input.mode, question, answer });
+    // what the tutor said is taught material: it is read into the map with the rest, and the card writer sees it
+    state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: answer });
+    saveSessionState(db, sessionId, state);
+  });
+  return snapshot(db, normalized(getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>), deps.work);
 }
 
 /** Rebuild the conversation from session events, so it survives restarts. The open card is not history. */
@@ -996,7 +1065,11 @@ export function sessionHistory(db: Database, session: SessionRecord<SessionState
     items.set(p.nodeId, list);
     if (event.kind === 'card' && p.card) {
       const card = publicCard(p.card);
-      if (card) list.push({ id: event.id, stage: p.stage, card, response: null, grade: null, carried: Boolean(p.carriedFrom) });
+      if (card) list.push({ id: event.id, stage: p.stage, card, asides: [], response: null, grade: null, carried: Boolean(p.carriedFrom) });
+    } else if (event.kind === 'aside') {
+      const aside = asideOf(event);
+      const open = [...list].reverse().find((h) => h.stage === p.stage && h.response === null);
+      if (aside && open) open.asides.push(aside);
     } else if (event.kind === 'response' && p.response) {
       const open = [...list].reverse().find((h) => h.stage === p.stage && h.response === null);
       if (open) {

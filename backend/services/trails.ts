@@ -13,7 +13,7 @@ import { getSession, listSessionEvents, listSessions } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { loadKnowledge } from './knowledge';
 import { publicCard } from './session';
-import type { FreeSession, PublicCard, SessionState } from './session';
+import type { Aside, FreeSession, PublicCard, SessionState } from './session';
 
 export interface TrailSummary {
   id: string;
@@ -35,7 +35,7 @@ export type Asked = Pick<FreeSession, 'description' | 'picked'>;
 export type TrailItem =
   | { id: string; at: string; type: 'plan'; title: string; orientation: string; ideas: string[]; resumed: string | null; asked: Asked | null }
   | { id: string; at: string; type: 'recall'; text: string; recalled: { name: string; score: number }[] }
-  | { id: string; at: string; type: 'step'; idea: string; stage: Stage; card: PublicCard; response: LearnerResponse | null; grade: Grade | null; carried: boolean }
+  | { id: string; at: string; type: 'step'; idea: string; stage: Stage; card: PublicCard; asides: Aside[]; response: LearnerResponse | null; grade: Grade | null; carried: boolean }
   | { id: string; at: string; type: 'idea-done'; idea: string; score: number | null }
   | { id: string; at: string; type: 'practice'; statement: string; answer: string; solution: string; score: number | null; feedback: string | null }
   | { id: string; at: string; type: 'pause' }
@@ -91,6 +91,9 @@ export function trail(db: Database, sessionId: string): Trail {
       card?: TutorCard;
       response?: LearnerResponse;
       grade?: Grade;
+      mode?: Aside['mode'];
+      question?: string;
+      answer?: string;
       carriedFrom?: string;
       text?: string;
       recalled?: { nodeId: string; score: number }[];
@@ -109,9 +112,15 @@ export function trail(db: Database, sessionId: string): Trail {
       case 'card': {
         const card = publicCard(p.card ?? null);
         if (!card || !p.stage || !p.nodeId) break;
-        const item: Extract<TrailItem, { type: 'step' }> = { ...base, type: 'step', idea: name(p.nodeId), stage: p.stage, card, response: null, grade: null, carried: Boolean(p.carriedFrom) };
+        const item: Extract<TrailItem, { type: 'step' }> = { ...base, type: 'step', idea: name(p.nodeId), stage: p.stage, card, asides: [], response: null, grade: null, carried: Boolean(p.carriedFrom) };
         items.push(item);
         open.set(`${p.nodeId}:${p.stage}`, item);
+        break;
+      }
+      case 'aside': {
+        // what the learner asked the tutor while the card was open
+        const item = open.get(`${p.nodeId}:${p.stage}`);
+        if (item && p.mode && typeof p.answer === 'string') item.asides.push({ id: e.id, mode: p.mode, question: p.question ?? '', answer: p.answer });
         break;
       }
       case 'response': {

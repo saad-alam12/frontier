@@ -1,7 +1,7 @@
 import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { call, isCancelled, onEvent } from '../api';
-import type { GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
+import type { AsideMode, GoalDetail, HistoryItem, HistoryNode, LearnerResponse, PublicCard, SessionSnapshot, Stage } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
 import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Notice, Section } from '../components/controls';
@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/Dialog';
 import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
 import { ResponseExtras, clearAnswerExtras, useAnswerExtras, withExtras } from '../components/AnswerExtras';
+import { AskTutor, Asides } from '../components/AskTutor';
 import { QuoteReply } from '../components/QuoteReply';
 import { CardSheet } from '../components/CardSheet';
 import type { CardSheetStart } from '../components/CardSheet';
@@ -114,6 +115,14 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
         throw new Error(notSent(e instanceof Error ? e.message : String(e)));
       }
       clearAnswerExtras();
+    });
+
+  /** Ask the tutor about the open card. Nothing is graded; the card and the unsent answer stay as they are. */
+  const ask = (mode: AsideMode, question?: string) =>
+    run('respond', async () => {
+      if (!snap) return;
+      setSending({ card: null, stage: null, response: { answer: question ?? '' } });
+      setSnap(await call('session.ask', { sessionId: snap.id, mode, question }));
     });
   // the backend's work on this session: an answer still being judged, or one that failed
   const mine = snap && work?.sessionId === snap.id ? work : null;
@@ -249,11 +258,11 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
       <History snap={snap} expanded={expanded} onToggle={(id) => setExpanded((prev) => toggle(prev, id))} />
 
-      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking={thinkingLabel} />}
+      {pending?.card && pending.stage && <Exchange id="pending" item={{ id: 'pending', stage: pending.stage, card: pending.card, asides: snap.asides, response: pending.response, grade: null, carried: false }} onStop={stoppable ? stop : undefined} thinking={thinkingLabel} />}
 
       <div ref={currentRef} className="flex flex-col gap-[36px]">
         {pending && !pending.card && <Thinking label={thinkingLabel} onStop={stoppable ? stop : undefined} />}
-        {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onDone={() => void refresh()} />}
+        {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onAsk={ask} onDone={() => void refresh()} />}
         {/* next to the answer it is about, where the eyes are */}
         {notice && (
           <Notice error detail={failed ?? undefined}>
@@ -405,6 +414,7 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
     <article id={id} className="flex flex-col gap-[14px]">
       <div className="t-caption text-muted">{item.carried && item.response ? `${STAGE_LABEL[item.stage]} · last session` : STAGE_LABEL[item.stage]}</div>
       <CardText card={item.card} past />
+      <Asides asides={item.asides} past />
       {!read && item.response && (
         <div className="answer-block flex flex-col gap-[8px]">
           <ResponseExtras response={item.response} />
@@ -472,7 +482,7 @@ function CardText({ card, past }: { card: PublicCard; past?: boolean }) {
 
 type Send = (response: LearnerResponse, draftKey?: string) => void;
 
-function PhaseView({ snap, busy, refocus, onSend, onDone }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send; onDone: () => void }) {
+function PhaseView({ snap, busy, refocus, onSend, onAsk, onDone }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send; onAsk: (mode: AsideMode, question?: string) => void; onDone: () => void }) {
   switch (snap.phase) {
     case 'reconstruct':
       return (
@@ -509,7 +519,7 @@ function PhaseView({ snap, busy, refocus, onSend, onDone }: { snap: SessionSnaps
         </section>
       );
     case 'teach':
-      return <TeachStep snap={snap} busy={busy} refocus={refocus} onSend={onSend} />;
+      return <TeachStep snap={snap} busy={busy} refocus={refocus} onSend={onSend} onAsk={onAsk} />;
     case 'practice':
       return snap.practice ? (
         <section className="flex flex-col gap-[28px]">
@@ -568,7 +578,7 @@ function PhaseView({ snap, busy, refocus, onSend, onDone }: { snap: SessionSnaps
   }
 }
 
-function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send }) {
+function TeachStep({ snap, busy, refocus, onSend, onAsk }: { snap: SessionSnapshot; busy: boolean; refocus: boolean; onSend: Send; onAsk: (mode: AsideMode, question?: string) => void }) {
   const card = snap.card;
   const current = snap.current;
   const [effort, setEffort] = useState<number | null>(null);
@@ -610,6 +620,8 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
       <section className="flex flex-col gap-[32px]">
         {notes}
         <CardText card={card} />
+        <Asides asides={snap.asides} />
+        <AskTutor explains busy={busy} onAsk={onAsk} />
         <div className="flex flex-col gap-[12px]">
           <span className="text-[15px] text-secondary">How hard was that to follow?</span>
           <div role="radiogroup" aria-label="How hard was that to follow" className="chip-group">
@@ -639,6 +651,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
     <section className="flex flex-col gap-[32px]">
       {notes}
       <CardText card={card} />
+      <Asides asides={snap.asides} />
       <div className="flex flex-col gap-[14px]">
         <AnswerSurface
           value={draft.answer}
@@ -657,6 +670,7 @@ function TeachStep({ snap, busy, refocus, onSend }: { snap: SessionSnapshot; bus
         )}
       </div>
       <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} onTestMe={testMe} disabled={busy} />
+      <AskTutor explains={false} busy={busy} onAsk={onAsk} />
     </section>
   );
 }

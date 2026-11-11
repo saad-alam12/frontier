@@ -1,3 +1,4 @@
+import { ASIDE_MODES } from '../agents/tutor';
 import { activeSession } from '../store/sessions';
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
 import { cancelProbe, createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
-import { abandonSession, currentSession, pauseSession, respond, startSession } from '../services/session';
+import { abandonSession, currentSession, pauseSession, respond, startSession, askTutor, ASIDE_MAX_CHARS } from '../services/session';
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, practiceView, startPractice, submitPracticeAnswer, endPracticeSet, resumeGrading } from '../services/practice';
@@ -241,6 +242,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       if (snap.status !== 'active' && snap.goalId) ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map
       return snap;
     },
+    'session.ask': ({ sessionId, mode, question }) => askTutor(ctx.practiceDeps(), sessionId, { mode: z.enum(ASIDE_MODES).parse(mode), question: z.string().max(ASIDE_MAX_CHARS).optional().parse(question) }),
     'session.cancel': ({ sessionId }) => ctx.sessionWork.cancel(sessionId),
     'session.dismissStart': () => {
       ctx.sessionWork.dismissStart();

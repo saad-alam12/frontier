@@ -211,6 +211,8 @@ Teach **one reasoning step at a time**, aiming for each step to feel obviously t
 
 The loop is fitted to the idea's **aim**, the depth the plan asks of it, and stops there: an idea planned only to be recognized gets a short **index pass** instead (gist, where it sits on the map, one recognition check); one planned to be explained runs predict, explain, check, compress; one planned to be derived adds a **derive** check (rebuild it from its chain's premises) and connect; apply adds use. An idea the learner already explains, taken deeper, goes predict, explain, then the deeper check. The tutor is told the aim, the goal's level and scope, and never goes deeper because there is time.
 
+**Asking the tutor.** While a card is open the learner can ask the tutor something: a question in their own words on any card, and on a card that explains (an explanation, a worked example, "another way in") also "Explain it differently", "Simpler" and "Show an example". The answer appears under the card, short, at the goal's level, anchored in what the learner holds. It is not graded and writes no evidence; the card and an unsent answer stay as they are. When the open card is a question the learner has not answered, the tutor is told not to answer it or settle it, only to clarify. What was asked and answered stays in the conversation and the trail, and the tutor's words count as taught material (the transcript, the card writer).
+
 ### 4.3 Session rules
 
 - **Stay at the edge.** Three failures in a row → drop a level (worked example, or a prerequisite node). A failure after that worked example → escalate once: a stronger model re-diagnoses the misconception from the idea's whole history and explains afresh.
@@ -421,6 +423,7 @@ Rules:
 | Prober | target subgraph, you-layer state, the goal's context | probe questions; then assessment updates |
 | Planner | owned nodes, targets, fringe | lesson map (DAG of nodes for this session) |
 | Tutor | lesson map, node, learner's neighbourhood, bugs, sources, the goal's level, scope and context, the flashcards of the node and its premises | the next step card (predict / explain / check / connect / compress / use), and with a grade the flashcards the answer recalled |
+| Tutor (asked) | the same context as a step, the open card and whether it is an unanswered question, the learner's question or the form they asked for | a short answer in Markdown (`submit_answer`); no grade, no card |
 | Tutor escalation | the whole history of one idea after a worked example did not help | a re-diagnosis and a fresh explanation (once per idea) |
 | Extractor | chunk + graph-so-far digest | nodes and chains with citations |
 | Matcher | extracted node + candidates | identity links |
