@@ -15,7 +15,13 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => setView(await call('practice.get', { setId })), [setId]);
+  const refresh = useCallback(async () => {
+    try {
+      setView(await call('practice.get', { setId }));
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    }
+  }, [setId]);
   useEffect(() => {
     void refresh();
     return onEvent('practice.graded', (e) => {
@@ -49,7 +55,20 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
     }
   };
 
-  if (!view) return <Screen>{null}</Screen>;
+  if (!view) {
+    return (
+      <Screen>
+        {error && (
+          <>
+            <Notice error>{error}</Notice>
+            <div className="button-row">
+              <Button onClick={onBack}>Back to today</Button>
+            </div>
+          </>
+        )}
+      </Screen>
+    );
+  }
   const mock = view.kind === 'mock';
   const finished = view.currentIndex === null && revealed === null;
   const graded = view.problems.filter((p) => p.grade !== null);

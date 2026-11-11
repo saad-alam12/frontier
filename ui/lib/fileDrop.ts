@@ -43,11 +43,20 @@ export function useWindowFileDrop(onPaths: (paths: string[]) => void): boolean {
       const paths = [...(e.dataTransfer?.files ?? [])].map((f) => window.frontier.pathForFile(f)).filter(Boolean);
       if (paths.length) handler.current(paths);
     };
+    // a drop taken by a place of its own never reaches the handler above: the drag is over all the same
+    const ended = () => {
+      depth = 0;
+      setDragging(false);
+    };
+    window.addEventListener('drop', ended, true);
+    window.addEventListener('dragend', ended, true);
     window.addEventListener('dragenter', enter);
     window.addEventListener('dragover', over);
     window.addEventListener('dragleave', leave);
     window.addEventListener('drop', drop);
     return () => {
+      window.removeEventListener('drop', ended, true);
+      window.removeEventListener('dragend', ended, true);
       window.removeEventListener('dragenter', enter);
       window.removeEventListener('dragover', over);
       window.removeEventListener('dragleave', leave);

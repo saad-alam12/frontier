@@ -89,10 +89,15 @@ export function LibraryScreen() {
     }
   };
 
+  const failed = (e: unknown) => setNotice(plainError(e instanceof Error ? e.message : String(e)));
   const remove = async (id: string) => {
-    await call('library.remove', { sourceId: id });
-    setSelected(null);
-    await refresh();
+    try {
+      await call('library.remove', { sourceId: id });
+      setSelected(null);
+      await refresh();
+    } catch (e) {
+      failed(e);
+    }
   };
 
   const readAgain = async (id: string) => {
@@ -204,12 +209,12 @@ export function LibraryScreen() {
             {reread?.sourceId === current.id && (reread.error ? <Notice error>{reread.text}</Notice> : current.status !== 'done' && <p className="t-small m-0 text-secondary">{reread.text}</p>)}
             <div className="button-row">
               {current.queued && (
-                <Button onClick={() => void call('library.stop', { sourceId: current.id }).then(refresh)} title="What was read so far stays. The rest waits until you run it again.">
+                <Button onClick={() => void call('library.stop', { sourceId: current.id }).then(refresh, failed)} title="What was read so far stays. The rest waits until you run it again.">
                   Stop reading
                 </Button>
               )}
               {current.readsIdeas && !current.queued && current.status !== 'running' && current.chunksDone < current.chunkCount && (
-                <Button kind={current.stopped ? 'primary' : 'secondary'} onClick={() => void call('library.run', { sourceId: current.id }).then(refresh)}>
+                <Button kind={current.stopped ? 'primary' : 'secondary'} onClick={() => void call('library.run', { sourceId: current.id }).then(refresh, failed)}>
                   Run again
                 </Button>
               )}
@@ -219,7 +224,7 @@ export function LibraryScreen() {
                 </Button>
               )}
               {current.path && (
-                <Button kind="quiet" onClick={() => void call('library.openOriginal', { sourceId: current.id }).catch((e: unknown) => setNotice(plainError(e instanceof Error ? e.message : String(e))))}>
+                <Button kind="quiet" onClick={() => void call('library.openOriginal', { sourceId: current.id }).catch(failed)}>
                   Open original
                 </Button>
               )}

@@ -132,9 +132,12 @@ export function App() {
   };
   // files dropped anywhere on the window go to the Library and are read
   const droppingFiles = useWindowFileDrop((paths) => {
-    void call('library.addPaths', { paths }).then((result) => {
-      if (result.added.length) navigateRef.current('library');
-    });
+    void call('library.addPaths', { paths }).then(
+      (result) => {
+        if (result.added.length) navigateRef.current('library');
+      },
+      () => navigateRef.current('library'), // the Library is where adding files can be tried again
+    );
   });
   const openTrail = (sessionId: string) => {
     setTrailId(sessionId);

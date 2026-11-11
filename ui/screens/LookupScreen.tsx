@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LookupAnswer, NodeCard } from '../../backend/api/contract';
 import { call } from '../api';
 import { plainError } from '../lib/errors';
@@ -33,7 +33,17 @@ export function LookupScreen({ onOpenTrail, onGoDeeper, initialQuery }: { onOpen
       setBusy(false);
     }
   };
-  const open = async (nodeId: string) => setCard(await call('lookup.open', { nodeId }));
+  /** The idea asked for last: an answer for an earlier click must not replace it. */
+  const wanted = useRef<string | null>(null);
+  const open = async (nodeId: string) => {
+    wanted.current = nodeId;
+    try {
+      const opened = await call('lookup.open', { nodeId });
+      if (wanted.current === nodeId) setCard(opened);
+    } catch (e) {
+      if (wanted.current === nodeId) setError(plainError(e instanceof Error ? e.message : String(e)));
+    }
+  };
   useEffect(() => {
     if (initialQuery) void search(initialQuery);
     // once, for the question the screen was opened with
