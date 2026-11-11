@@ -2,6 +2,7 @@
  * The teaching session (design §4): reconstruct → orient → teach each node with the step loop →
  * close → preview. State is persisted after every transition so the app can resume at the same card.
  */
+import { passageFor } from '../core/passage';
 import { cardText, runRecall, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
@@ -774,7 +775,11 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
     dependents: deps,
     bugs: listBugsForNode(db, node.id).map((b) => b.description),
     examples: listExamplesForNode(db, node.id).map((e) => ({ title: e.title, locator: `${getSource(db, e.sourceId)?.title ?? 'source'}, ${e.locator}`, body: e.body })),
-    excerpts: chunksCoveringNode(db, node.id).map((c) => ({ locator: `${c.sourceTitle}, ${c.locator}`, text: c.text.slice(0, 1800) })),
+    // the page that teaches the idea (its citation), not the first page of the source it is in
+    excerpts: chunksCoveringNode(db, node.id).map((c) => {
+      const cited = node.sources.find((ref) => ref.sourceId === c.sourceId)?.locator;
+      return { locator: `${c.sourceTitle}, ${cited ?? c.locator}`, text: passageFor(c.text, cited, node.name) };
+    }),
     history: (state.history[node.id] ?? []).filter((h) => h.response !== null || h.grade !== null),
     previous,
     cards: previous && isGraded(previous.stage) ? cardsToJudge(db, [node.id, ...premiseIds]) : [],

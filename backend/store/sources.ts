@@ -170,13 +170,16 @@ export function coveredNodeIds(db: Database, sourceId: string): string[] {
   return (db.prepare('SELECT node_id FROM source_coverage WHERE source_id = ?').all(sourceId) as { node_id: string }[]).map((r) => r.node_id);
 }
 
-/** Chunks whose extraction produced the node, newest source first; for tutor excerpts. */
-export function chunksCoveringNode(db: Database, nodeId: string, limit = 3): { sourceTitle: string; locator: string; text: string }[] {
+/**
+ * The parts of sources that an idea was read from, the learner's own material before the app's
+ * session transcripts, newest first within each.
+ */
+export function chunksCoveringNode(db: Database, nodeId: string, limit = 3): { sourceId: string; sourceTitle: string; locator: string; text: string }[] {
   const rows = db
     .prepare(
-      `SELECT c.locator, c.text, s.title FROM source_chunks c JOIN sources s ON s.id = c.source_id
-       WHERE c.status = 'done' AND c.node_ids LIKE ? ORDER BY s.added_at DESC, c.idx LIMIT ?`,
+      `SELECT c.locator, c.text, s.title, s.id FROM source_chunks c JOIN sources s ON s.id = c.source_id
+       WHERE c.status = 'done' AND c.node_ids LIKE ? ORDER BY (s.kind = 'session'), s.added_at DESC, c.idx LIMIT ?`,
     )
-    .all(`%"${nodeId}"%`, limit) as unknown as { locator: string; text: string; title: string }[];
-  return rows.map((r) => ({ sourceTitle: r.title, locator: r.locator, text: r.text }));
+    .all(`%"${nodeId}"%`, limit) as unknown as { locator: string; text: string; title: string; id: string }[];
+  return rows.map((r) => ({ sourceId: r.id, sourceTitle: r.title, locator: r.locator, text: r.text }));
 }
