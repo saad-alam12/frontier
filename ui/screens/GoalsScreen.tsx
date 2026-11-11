@@ -1,3 +1,4 @@
+import { dueIn } from '../lib/dueIn';
 import { useCallback, useEffect, useState } from 'react';
 import { call, onEvent } from '../api';
 import type { GoalDetail } from '../../backend/api/contract';
@@ -113,32 +114,50 @@ export function GoalsScreen({
           State what you want to learn: a course to pass, a book to work through, a paper to understand. Give it time, and Frontier plans the rest.
         </Empty>
       ) : (
-        <ul className="goal-cards">
-          {goals.map((g) => (
-            <li key={g.goal.id}>
-              <button type="button" className="goal-card" onClick={() => open(g)}>
-                <span className="flex items-baseline justify-between gap-[16px]">
-                  <span className="text-[17px] font-medium">{goalName(g)}</span>
-                  <span className="t-small shrink-0 text-muted">{cardStatus(g)}</span>
-                </span>
-                <MetaLine
-                  small
-                  items={[
-                    g.goal.kind === 'course' ? 'Course' : null,
-                    g.goal.assessment !== 'none' ? ASSESSMENT_LABEL[g.goal.assessment] : null,
-                    g.goal.date ? formatDate(g.goal.date) : null,
-                    g.goal.status === 'paused' ? 'Paused' : null,
-                  ]}
-                />
-                {g.progress && g.goal.status !== 'draft' && <BudgetBar compact caption progress={{ ...g.progress, plannedMinutes: g.progress.plan.plannedMinutes }} />}
-              </button>
-            </li>
-          ))}
-        </ul>
+        GROUPS.map((group) => {
+          const inGroup = goals.filter((g) => group.statuses.includes(g.goal.status));
+          if (!inGroup.length) return null;
+          // one kind of goal needs no heading; with several, each group says what it is
+          const headed = goals.some((g) => !group.statuses.includes(g.goal.status));
+          return (
+            <section key={group.title} className="flex flex-col gap-[12px]" aria-label={group.title}>
+              {headed && <h2 className="panel-label m-0">{group.title}</h2>}
+              <ul className="goal-cards">
+                {inGroup.map((g) => (
+                  <li key={g.goal.id}>
+                    <button type="button" className="goal-card" onClick={() => open(g)}>
+                      <span className="flex items-baseline justify-between gap-[16px]">
+                        <span className="text-[17px] font-medium">{goalName(g)}</span>
+                        <span className="t-small shrink-0 text-muted">{cardStatus(g)}</span>
+                      </span>
+                      <MetaLine
+                        small
+                        items={[
+                          g.goal.kind === 'course' ? 'Course' : null,
+                          g.goal.assessment !== 'none' ? ASSESSMENT_LABEL[g.goal.assessment] : null,
+                          g.goal.date ? [formatDate(g.goal.date), g.goal.status === 'done' ? null : dueIn(g.goal.date)].filter(Boolean).join(', ') : null,
+                        ]}
+                      />
+                      {g.progress && g.goal.status !== 'draft' && <BudgetBar compact caption progress={{ ...g.progress, plannedMinutes: g.progress.plan.plannedMinutes }} />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })
       )}
     </Screen>
   );
 }
+
+/** The list in the order the learner needs it: what they are learning, what waits for a yes, what rests. */
+const GROUPS: { title: string; statuses: GoalDetail['goal']['status'][] }[] = [
+  { title: 'Learning now', statuses: ['active'] },
+  { title: 'Plans to approve', statuses: ['draft'] },
+  { title: 'Paused', statuses: ['paused'] },
+  { title: 'Finished', statuses: ['done'] },
+];
 
 function cardStatus(g: GoalDetail): string {
   if (g.goal.status === 'draft') return g.capabilities.length ? 'Plan ready to approve' : 'Setting up';

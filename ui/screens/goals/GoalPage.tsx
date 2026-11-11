@@ -94,6 +94,12 @@ export function GoalPage({
     }
   };
 
+  const setStatus = (status: 'active' | 'paused' | 'done') =>
+    run('status', async () => {
+      await call('goals.setStatus', { goalId: goal.id, status });
+      onChanged();
+    });
+
   const course = goal.kind === 'course';
   const teaching = detail.materials.filter((m) => m.role === 'teaching');
   const weeks = weeksUntil(goal.date);
@@ -222,6 +228,18 @@ export function GoalPage({
         )}
       </section>
 
+      {(goal.status === 'paused' || goal.status === 'done') && (
+        <div className="state-note" role="status">
+          <span>
+            {goal.status === 'paused'
+              ? 'Paused. It is left out of Today, and its ideas take no time from your other goals. Everything you learned is kept.'
+              : 'Finished. It is left out of Today. What you learned stays yours, and its flashcards stay in review.'}
+          </span>
+          <Button disabled={busy !== null} onClick={() => void setStatus('active')}>
+            {goal.status === 'paused' ? 'Resume' : 'Reopen'}
+          </Button>
+        </div>
+      )}
       <WorkNotice detail={detail} onRetry={() => void run('compile', async () => void (await call('goals.compile', { goalId: goal.id })))} />
       {error && <Notice error>{error}</Notice>}
       <AdditionPanel goal={goal} onChanged={onChanged} onNewGoal={onNewGoal} />
@@ -272,14 +290,16 @@ export function GoalPage({
               )}
               <div className="button-row">
                 {/* one primary action: a proposal waiting for an answer comes first */}
-                <Button
-                  kind={goal.addition?.state === 'ready' || goal.remap?.state === 'ready' ? 'secondary' : 'primary'}
-                  onClick={() => void run('session', onStartSession)}
-                  disabled={!compiled || busy !== null}
-                  title={openSession !== undefined && openSession !== goal.id ? 'A session is open. Finish or end it to start one for this goal.' : undefined}
-                >
-                  {busy === 'session' ? 'Planning…' : openSession !== undefined ? 'Continue session' : "Start today's session"}
-                </Button>
+                {goal.status === 'active' && (
+                  <Button
+                    kind={goal.addition?.state === 'ready' || goal.remap?.state === 'ready' ? 'secondary' : 'primary'}
+                    onClick={() => void run('session', onStartSession)}
+                    disabled={!compiled || busy !== null}
+                    title={openSession !== undefined && openSession !== goal.id ? 'A session is open. Finish or end it to start one for this goal.' : undefined}
+                  >
+                    {busy === 'session' ? 'Planning…' : openSession !== undefined ? 'Continue session' : "Start today's session"}
+                  </Button>
+                )}
                 <Button onClick={() => setEditingTime(true)}>{goal.budget || goal.wantedLevel ? 'Change the time' : 'Set the time'}</Button>
                 {/* one proposal at a time: not while an addition or a new map waits for an answer */}
                 {goal.addition === null && goal.remap?.state !== 'ready' && goal.remap?.state !== 'requested' && <Button onClick={() => setAdding(true)}>Add to this goal</Button>}
@@ -393,6 +413,19 @@ export function GoalPage({
             ))}
           </ul>
         </details>
+      )}
+
+      {goal.status !== 'draft' && goal.status !== 'done' && (
+        <div className="button-row border-t border-line pt-[18px]">
+          {goal.status === 'active' && (
+            <Button kind="quiet" disabled={busy !== null} title="Leave it out of Today and of your other goals' plans until you resume it. Nothing is lost." onClick={() => void setStatus('paused')}>
+              Pause this goal
+            </Button>
+          )}
+          <Button kind="quiet" disabled={busy !== null} title="You are done with it. What you learned and its flashcards are kept, and you can reopen it." onClick={() => void setStatus('done')}>
+            Mark as finished
+          </Button>
+        </div>
       )}
     </Screen>
   );

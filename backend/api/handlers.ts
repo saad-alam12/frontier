@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import { app, dialog, ipcMain } from 'electron';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { SettingsPatchSchema, modelOptions } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
 import { addPastedText, deltaForSource, listSourceSummaries, readSourceAgain } from '../services/library';
-import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, updateGoalFromForm } from '../services/goals';
+import { approveGoalPlan, createGoalFromForm, goDeeper, goalDetail, guessRole, setGoalStatus, updateGoalFromForm } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
@@ -139,6 +140,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'goals.update': ({ goalId, form }) => {
       updateGoalFromForm(ctx.db(), goalId, form);
       ctx.goalWorker().refresh(goalId);
+      return detail(goalId);
+    },
+    'goals.setStatus': ({ goalId, status }) => {
+      setGoalStatus(ctx.db(), goalId, z.enum(['active', 'paused', 'done']).parse(status));
+      ctx.emit('goals.changed', { goalId });
       return detail(goalId);
     },
     'goals.preview': ({ goalId, budget }) => previewPlan(ctx.db(), goalId, budget),

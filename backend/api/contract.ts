@@ -102,6 +102,8 @@ export interface ApiMethods {
   'goals.approve': { input: { goalId: string }; output: GoalDetail };
   /** Saves edits; the compile that follows is incremental and keeps progress. */
   'goals.update': { input: { goalId: string; form: Partial<GoalForm> & { status?: 'active' | 'paused' | 'done' } }; output: GoalDetail };
+  /** Pause, finish or take up a goal again; everything it holds is kept. */
+  'goals.setStatus': { input: { goalId: string; status: 'active' | 'paused' | 'done' }; output: GoalDetail };
   'goals.remove': { input: { goalId: string }; output: undefined };
   /** Recompile now (incremental) even if no new material arrived. */
   'goals.compile': { input: { goalId: string }; output: GoalDetail };

@@ -9,7 +9,7 @@ import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForNode } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
 import { listNodes } from '../store/world';
-import { compileGoal, goalDetail } from './goals';
+import { compileGoal, goalDetail, setGoalStatus } from './goals';
 import { recordEvidence } from './evidence';
 import { loadKnowledge } from './knowledge';
 import { cancelProbe, createProbe, openProbe, probeDraftKey, submitProbe } from './probe';
@@ -218,5 +218,48 @@ describe('planner', () => {
     // nothing owned: the root terms the targets are built on are the fringe, and Nash is reachable through them
     expect(candidates.filter((c) => c.onFringe).map((c) => c.nodeId).sort()).toEqual([ids.get('payoff'), ids.get('strategy')].sort());
     expect(candidates.map((c) => c.nodeId)).toContain(ids.get('nash'));
+  });
+});
+
+describe('pausing and finishing a goal', () => {
+  async function activeGoal() {
+    const { db, ids, provider } = setup();
+    const goal = seedGoal(db, 'Understand Nash equilibrium');
+    provider.script('goalCompiler', () => ({
+      title: 'Nash',
+      level: 'working',
+      scope: 'Explain equilibrium.',
+      coverage: 'complete',
+      capabilities: [
+        { statement: 'Can explain a Nash equilibrium', targets: [{ ref: ids.get('nash'), depth: 3 }] },
+        { statement: 'Can find a best response', targets: [{ ref: ids.get('bestResponse'), depth: 2 }] },
+        { statement: 'Can read a strategy profile', targets: [{ ref: ids.get('profile'), depth: 2 }] },
+      ],
+      newNodes: [],
+    }));
+    await compileGoal({ db, provider }, goal.id);
+    return { db, ids, goal };
+  }
+
+  it('a paused or finished goal keeps its map but no longer asks for its ideas; resuming brings them back', async () => {
+    const { db, ids, goal } = await activeGoal();
+    const nash = ids.get('nash') as string;
+    expect(getState(db, nash)?.targetDepth).toBe(3);
+    for (const status of ['paused', 'done'] as const) {
+      setGoalStatus(db, goal.id, status);
+      expect(goalDetail(db, goal.id).goal.status).toBe(status);
+      expect(goalDetail(db, goal.id).capabilities).toHaveLength(3); // nothing is lost
+      expect(getState(db, nash)?.targetDepth).toBe(0); // no active goal wants it now
+      expect(goalDetail(db, goal.id).schedule).toBeNull();
+      setGoalStatus(db, goal.id, 'active');
+      expect(getState(db, nash)?.targetDepth).toBe(3);
+    }
+  });
+
+  it('a draft has no state to set', () => {
+    const { db } = setup();
+    const draft = createGoal(db, 'Not approved yet', { draft: true });
+    expect(() => setGoalStatus(db, draft.id, 'paused')).toThrow('Approve the plan');
+    expect(() => setGoalStatus(db, 'goal_missing', 'paused')).toThrow('no longer exists');
   });
 });

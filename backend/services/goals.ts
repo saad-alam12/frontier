@@ -190,6 +190,23 @@ export function updateGoalFromForm(db: Database, goalId: string, form: Partial<G
 }
 
 /**
+ * Pause, finish or take up a goal again. A paused or finished goal keeps everything (its map, its
+ * time, its flashcards) but is left out of Today, of the scheduler and of the shared plan, so its
+ * ideas no longer take a share of other goals' time. A draft has no plan yet, so it has no state to set.
+ */
+export function setGoalStatus(db: Database, goalId: string, status: 'active' | 'paused' | 'done'): void {
+  const goal = getGoal(db, goalId);
+  if (!goal) throw new Error('This goal no longer exists.');
+  if (goal.status === 'draft') throw new Error('Approve the plan of this goal first.');
+  if (goal.status === status) return;
+  transaction(db, () => {
+    updateGoal(db, goalId, { status });
+    logEvent(db, 'goal.status', { goalId }, { from: goal.status, to: status });
+  });
+  refreshGoalFields(db);
+}
+
+/**
  * The learner approved a draft's plan: it becomes active, its clock starts, and what they know now is
  * its baseline (progress counts from here). Its ideas join the shared plan of all goals.
  */

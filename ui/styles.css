@@ -1514,6 +1514,23 @@ button.map-label:hover {
   color: var(--text-secondary);
 }
 
+/* A goal that is paused or finished says so above everything else, with the way back beside it. */
+.state-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.state-note > button {
+  flex-shrink: 0;
+}
+
 /* ---------- Practice ---------- */
 
 .solution-block {
