@@ -46,6 +46,16 @@ export function StatsScreen() {
   if (view.weeks.some((w) => w.minutes['removed'])) series.push({ id: 'removed', label: 'Removed goals', color: seriesColor(-1) });
   const empty = view.headline.minutes === 0 && view.headline.answers === 0 && view.headline.ideasOwned === 0;
   const h = view.headline;
+  // a chart of one bar or one day says less than a sentence does
+  const weekTotal = (w: (typeof view.weeks)[number]) => Object.values(w.minutes).reduce((sum, m) => sum + m, 0);
+  const studiedWeeks = view.weeks.filter((w) => weekTotal(w) > 0);
+  const latest = view.growth[view.growth.length - 1];
+  const growthDays = view.growth.filter((g, i) => {
+    const before = view.growth[i - 1];
+    return before ? g.recognized !== before.recognized || g.owned !== before.owned || g.deep !== before.deep : g.recognized + g.owned + g.deep > 0;
+  }).length;
+  // a minute here and there is not a time of day you study at
+  const studiedHours = view.hours.filter((x) => x.minutes >= 5);
 
   return (
     <Screen wide>
@@ -115,7 +125,13 @@ export function StatsScreen() {
 
           <div className="stats-grid">
             <Card title="Time per week" wide note={`Stacked by goal. Time on an idea two goals share is split between them.${anyFree ? ' Free study is time in sessions you chose that count toward no goal.' : ''}`}>
-              <WeeklyBars weeks={view.weeks} series={series} format={formatHours} />
+              {studiedWeeks.length >= 2 ? (
+                <WeeklyBars weeks={view.weeks} series={series} format={formatHours} />
+              ) : (
+                <p className="t-small m-0 text-muted">
+                  {studiedWeeks[0] ? `${formatHours(weekTotal(studiedWeeks[0]))} in the week of ${shortDate(studiedWeeks[0].start)}. The chart appears once a second week has study in it.` : 'No study in this range.'}
+                </p>
+              )}
             </Card>
 
             <Card title="Every day" note="The last twelve weeks.">
@@ -123,16 +139,24 @@ export function StatsScreen() {
             </Card>
 
             <Card title="What you know" note="Ideas you recognize, own (can explain), and know in depth.">
-              <Lines
-                points={view.growth.map((g) => ({ x: g.date, values: [g.recognized, g.owned, g.deep] }))}
-                series={[
-                  { label: 'Recognize', color: '#8c877c' },
-                  { label: 'Own', color: '#7489e6' },
-                  { label: 'In depth', color: '#c98500' },
-                ]}
-                yFormat={(v) => String(Math.round(v))}
-                xLabel={shortDate}
-              />
+              {growthDays >= 2 ? (
+                <Lines
+                  points={view.growth.map((g) => ({ x: g.date, values: [g.recognized, g.owned, g.deep] }))}
+                  series={[
+                    { label: 'Recognize', color: '#a39d90' },
+                    { label: 'Own', color: '#7489e6' },
+                    { label: 'In depth', color: '#c98500' },
+                  ]}
+                  yFormat={(v) => String(Math.round(v))}
+                  xLabel={shortDate}
+                />
+              ) : (
+                <p className="t-small m-0 text-muted">
+                  {latest && latest.recognized + latest.owned + latest.deep > 0
+                    ? `${latest.recognized} recognized, ${latest.owned} owned, ${latest.deep} in depth. The chart appears once ideas were learned on a second day.`
+                    : 'Appears once you have learned your first ideas.'}
+                </p>
+              )}
             </Card>
 
             <Card title="What you keep" note={view.retention.now !== null ? `Average recall of what you own, if you stopped practising today. Now ${pct(view.retention.now)}, in a month ${pct(view.retention.inAMonth ?? 0)}.` : 'Appears once you own a few ideas.'}>
@@ -159,7 +183,13 @@ export function StatsScreen() {
             </Card>
 
             <Card title="When you study" note="Hover a bar for your average score at that hour.">
-              <HourBars hours={view.hours} format={formatHours} />
+              {studiedHours.length >= 3 ? (
+                <HourBars hours={view.hours} format={formatHours} />
+              ) : (
+                <p className="t-small m-0 text-muted">
+                  {studiedHours.length ? `So far only around ${studiedHours.map((x) => `${x.hour}:00`).join(' and ')}. The chart appears once you have studied at more times of day.` : 'Too little study in this range to say when you study.'}
+                </p>
+              )}
             </Card>
 
             <Card title="Hardest ideas" note="Lowest average over at least two answers.">

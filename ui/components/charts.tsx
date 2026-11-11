@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { labelPositions } from '../lib/chartLabels';
 import { useTip } from './tooltip';
 
 /**
@@ -218,8 +219,12 @@ export function Lines({ points, series, yFormat, xLabel, height = 180, yMax, are
             </g>
           );
         })}
-        {labelPositions(series.map((_, k) => y(points[points.length - 1]?.values[k] ?? 0))).map((ly, k) => (
-          <text key={series[k]?.label} x={x(points.length - 1) + 8} y={ly + 4} className="direct-label">
+        {labelPositions(
+          series.map((_, k) => y(points[points.length - 1]?.values[k] ?? 0)),
+          pad.t + 4,
+          H - pad.b - 2,
+        ).map((ly, k) => (
+          <text key={series[k]?.label} x={x(points.length - 1) + 8} y={ly + 4} className="direct-label" style={series.length > 1 ? { fill: series[k]?.color } : undefined}>
             {series[k]?.label}
           </text>
         ))}
@@ -288,36 +293,26 @@ export function HourBars({ hours, format }: { hours: { hour: number; minutes: nu
 
 /** How you scored at each confidence, against the confidence itself (the tick). */
 export function Calibration({ rows }: { rows: { label: string; confidence: number; avgScore: number; count: number }[] }) {
+  // a confidence never chosen has nothing to show
+  const used = rows.filter((r) => r.count > 0);
+  if (used.length === 0) return <p className="t-small m-0 text-muted">Appears once you say how sure you are when you answer.</p>;
   return (
     <ul className="calibration">
-      {rows.map((r) => (
+      {used.map((r) => (
         <li key={r.label}>
           <span className="cal-label">
             {r.label}
-            <span className="t-caption text-muted"> · {r.count} answers</span>
+            <span className="t-caption text-muted"> · {r.count === 1 ? '1 answer' : `${r.count} answers`}</span>
           </span>
           <span className="cal-track" role="img" aria-label={`${r.label}: ${Math.round(r.avgScore * 100)}% average score`}>
-            {r.count > 0 && <span className="cal-bar" style={{ width: `${r.avgScore * 100}%` }} />}
+            <span className="cal-bar" style={{ width: `${r.avgScore * 100}%` }} />
             <span className="cal-tick" style={{ left: `${r.confidence * 100}%` }} title={`Saying "${r.label.toLowerCase()}" means about ${Math.round(r.confidence * 100)}%`} />
           </span>
-          <span className="cal-value">{r.count ? `${Math.round(r.avgScore * 100)}%` : '—'}</span>
+          <span className="cal-value">{Math.round(r.avgScore * 100)}%</span>
         </li>
       ))}
     </ul>
   );
-}
-
-/** End labels pushed apart so lines that end together keep readable labels (14 px apart). */
-function labelPositions(ys: number[]): number[] {
-  const order = ys.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y);
-  for (let j = 1; j < order.length; j += 1) {
-    const prev = order[j - 1] as { y: number };
-    const cur = order[j] as { y: number };
-    if (cur.y - prev.y < 14) cur.y = prev.y + 14;
-  }
-  const out = new Array<number>(ys.length);
-  for (const o of order) out[o.i] = o.y;
-  return out;
 }
 
 function niceTicks(max: number, percent = false): number[] {
