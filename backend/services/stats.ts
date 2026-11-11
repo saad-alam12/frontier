@@ -3,6 +3,7 @@
  * learns, filtered by goal, topic and time range, plus a few plain sentences worth knowing. Everything
  * here is read-only arithmetic over stored data.
  */
+import { addDays, daysBetween, localDate, startOfDay, weekStart } from '../core/dates';
 import { formatHours, ideaMinutes, learnerSpeed } from '../core/budget';
 import { topics } from '../core/clusters';
 import { recallProbability } from '../core/fsrs';
@@ -176,7 +177,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
   return view;
 }
 
-interface Transition {
+export interface Transition {
   nodeId: string;
   at: string;
   from: number;
@@ -200,31 +201,32 @@ function depthHistory(evidence: Evidence[]): Transition[] {
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-function growthSeries(transitions: Transition[], fromIso: string, now: Date): StatsView['growth'] {
-  const start = new Date(fromIso.slice(0, 10));
-  const span = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / DAY_MS));
+/**
+ * What the learner knows over time: a point every few days (at most about sixty), each counting the
+ * ideas at each depth by the end of that local day, and always a last point for right now, so the
+ * chart ends where the headline numbers are.
+ */
+export function growthSeries(transitions: Transition[], fromIso: string, now: Date): StatsView['growth'] {
+  const start = startOfDay(new Date(fromIso));
+  const span = Math.max(1, daysBetween(start, now));
   const step = Math.max(1, Math.ceil(span / 60));
+  const points: { until: Date; date: string }[] = [];
+  for (let d = 0; d < span; d += step) points.push({ until: addDays(start, d + 1), date: localDate(addDays(start, d)) });
+  points.push({ until: new Date(now.getTime() + 1), date: localDate(now) });
   const depth = new Map<string, number>();
   const out: StatsView['growth'] = [];
   let i = 0;
-  for (let d = 0; d <= span; d += step) {
-    const until = new Date(start.getTime() + (d + 1) * DAY_MS).toISOString();
+  for (const point of points) {
+    const until = point.until.toISOString();
     while (i < transitions.length && (transitions[i] as Transition).at < until) {
       const t = transitions[i] as Transition;
       depth.set(t.nodeId, t.to);
       i += 1;
     }
     const ds = [...depth.values()];
-    out.push({ date: until.slice(0, 10), recognized: ds.filter((x) => x >= 1).length, owned: ds.filter((x) => x >= OWNED_DEPTH).length, deep: ds.filter((x) => x >= 3).length });
+    out.push({ date: point.date, recognized: ds.filter((x) => x >= 1).length, owned: ds.filter((x) => x >= OWNED_DEPTH).length, deep: ds.filter((x) => x >= 3).length });
   }
   return out;
-}
-
-function weekStart(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
-  return x;
 }
 
 function weekSeries(shares: ReturnType<typeof attributeTime>, since: string | null, now: Date, goals: ReturnType<typeof listGoals>, goalId: string | null, db: Database): StatsView['weeks'] {
@@ -236,8 +238,8 @@ function weekSeries(shares: ReturnType<typeof attributeTime>, since: string | nu
     .reduce((s, g) => s + (goalProgress(db, g.id, now)?.weeklyTarget ?? 0), 0);
   const out: StatsView['weeks'] = [];
   for (let w = count - 1; w >= 0; w -= 1) {
-    const start = new Date(startNow.getTime() - w * 7 * DAY_MS);
-    const end = new Date(start.getTime() + 7 * DAY_MS);
+    const start = addDays(startNow, -7 * w);
+    const end = addDays(start, 7);
     const minutes: Record<string, number> = {};
     for (const s of shares) {
       const at = new Date(s.span.endedAt);
@@ -245,35 +247,29 @@ function weekSeries(shares: ReturnType<typeof attributeTime>, since: string | nu
       minutes[s.goalId] = (minutes[s.goalId] ?? 0) + s.minutes;
     }
     for (const k of Object.keys(minutes)) minutes[k] = Math.round(minutes[k] as number);
-    out.push({ start: start.toISOString().slice(0, 10), minutes, target: target || null });
+    out.push({ start: localDate(start), minutes, target: target || null });
   }
   return out;
 }
 
 /** The last twelve weeks, a day each (all time in the filter, so the calendar never looks empty for a short range). */
-function calendar(shares: ReturnType<typeof attributeTime>, now: Date): StatsView['days'] {
-  const end = weekStart(now).getTime() + 7 * DAY_MS;
-  const start = end - 12 * 7 * DAY_MS;
+export function calendar(shares: { minutes: number; span: { endedAt: string } }[], now: Date): StatsView['days'] {
+  const first = addDays(weekStart(now), 7 - 12 * 7);
   const byDay = new Map<string, number>();
   for (const s of shares) {
     const at = new Date(s.span.endedAt);
-    if (at.getTime() < start) continue;
+    if (at < first) continue;
     const key = localDate(at);
     byDay.set(key, (byDay.get(key) ?? 0) + s.minutes);
   }
   const out: StatsView['days'] = [];
-  for (let t = start; t < end; t += DAY_MS) {
-    const key = localDate(new Date(t));
+  for (let i = 0; i < 12 * 7; i += 1) {
+    const key = localDate(addDays(first, i));
     out.push({ date: key, minutes: Math.round(byDay.get(key) ?? 0) });
   }
   return out;
 }
 
-function localDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Days in a row (up to today, or yesterday if today has nothing yet) with at least five minutes. */
 function streak(days: StatsView['days']): number {
   const today = localDate(new Date());
   const list = days.filter((d) => d.date <= today);
