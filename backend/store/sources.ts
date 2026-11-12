@@ -203,3 +203,32 @@ export function chunksCoveringNode(db: Database, nodeId: string, limit = 3): { s
     .all(`%"${nodeId}"%`, limit) as unknown as { locator: string; text: string; title: string; id: string }[];
   return rows.map((r) => ({ sourceId: r.id, sourceTitle: r.title, locator: r.locator, text: r.text }));
 }
+
+export interface PassageHit {
+  chunkId: string;
+  sourceId: string;
+  title: string;
+  locator: string;
+  /** The passage around the words found, with them in bold. */
+  snippet: string;
+  text: string;
+}
+
+/**
+ * Passages of the learner's sources (not session transcripts) that hold any of these words, best
+ * first (full-text index `chunk_search`, ranked by BM25).
+ */
+export function searchPassages(db: Database, words: string[], limit = 4): PassageHit[] {
+  const terms = words.map((w) => w.replace(/"/g, '').trim()).filter(Boolean);
+  if (terms.length === 0) return [];
+  const match = terms.map((w) => `"${w}"`).join(' OR ');
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.locator, c.text, s.id AS source_id, s.title, snippet(chunk_search, 0, '**', '**', '…', 28) AS snip
+       FROM chunk_search JOIN source_chunks c ON c.rowid = chunk_search.rowid JOIN sources s ON s.id = c.source_id
+       WHERE chunk_search MATCH ? AND s.kind != 'session'
+       ORDER BY bm25(chunk_search) LIMIT ?`,
+    )
+    .all(match, limit) as { id: string; locator: string; text: string; source_id: string; title: string; snip: string }[];
+  return rows.map((r) => ({ chunkId: r.id, sourceId: r.source_id, title: r.title, locator: r.locator, snippet: r.snip, text: r.text }));
+}

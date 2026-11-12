@@ -165,6 +165,13 @@ const daysAgo = (days: number, hour = 19) => new Date(now.getFullYear(), now.get
 
 // a lecture whose page 7 is mostly a figure: its picture shows Nash equilibrium
 const lecture = createSource(db, { kind: 'pdf', title: 'Lecture 3: Equilibrium', path: null, hash: 'sandbox-lecture-3' }, [{ text: '[p7]\nThe pricing game', locator: 'p7' }]);
+// lecture notes with real text, for Lookup's passages (marked read, as after reading)
+const notes = createSource(db, { kind: 'markdown', title: 'Lecture 5 notes: Sequential games', path: null, hash: 'sandbox-lecture-5' }, [
+  { text: 'In a sequential game players move one after another. A strategy says what a player does at every decision node, even at nodes that are never reached.', locator: 'p2' },
+  { text: 'A subgame perfect equilibrium (SPE) is a strategy profile that is a Nash equilibrium in every subgame. Every SPE is a Nash equilibrium, but not the other way round: some Nash equilibria rest on threats that are not credible.', locator: 'p7' },
+  { text: 'Backward induction finds the SPE of a finite game with perfect information: solve the last decision nodes first, replace them by their outcomes, and work back to the root.', locator: 'p9' },
+]);
+db.prepare("UPDATE sources SET status = 'done' WHERE id = ?").run(notes.id);
 db.prepare("UPDATE sources SET status = 'done', chunks_done = 1 WHERE id = ?").run(lecture.id);
 syncFigurePages(db, lecture.id, [{ page: 7, locator: 'p7' }]);
 const tableFigure = listFigures(db, lecture.id)[0];

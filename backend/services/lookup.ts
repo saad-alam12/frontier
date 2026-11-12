@@ -1,15 +1,19 @@
 /**
- * Lookup (design §8): find ideas by meaning (local embeddings) and by name (fuzzy), answer the
- * question from the learner's own cards (librarian), and count opening a card as a weak review.
+ * Lookup (design §8): find ideas by meaning (local embeddings) and by name (fuzzy), find passages of
+ * the learner's sources (full text), answer the question from the learner's own cards and those
+ * passages (librarian), with follow-up questions, and count opening a card as a weak review.
  */
 import { askLibrarian } from '../agents/librarian';
 import type { Embedder } from '../ingest/embedder';
 import { cosine, nameSimilarity, relatedness } from '../ingest/similarity';
+import { isCancelled } from '../llm/provider';
 import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { logEvent } from '../store/activity';
 import { listEvidenceForNode } from '../store/evidence';
 import { listEmbeddings } from '../store/embeddings';
+import { searchPassages } from '../store/sources';
+import type { PassageHit } from '../store/sources';
 import { recordEvidence } from './evidence';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge } from './knowledge';
@@ -56,9 +60,29 @@ export function fuzzyScore(query: string, fields: string[]): number {
     const words = f.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     const qWords = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     if (qWords.length && qWords.every((w) => words.some((x) => x.startsWith(w)))) best = Math.max(best, 0.55 + 0.05 * Math.min(4, qWords.length));
+    // an abbreviation of a name of several words: "SPE" for subgame perfect equilibrium
+    const initials = words.length >= 2 ? words.map((w) => w[0]).join('') : '';
+    if (initials.length >= 2 && qWords.includes(initials)) best = Math.max(best, 0.75);
+    // the name's first telling word in the question ("Nash" in "SPE versus Nash"); shorter names first
+    const telling = words.find((w) => w.length >= 4 && !COMMON_WORDS.has(w));
+    if (telling && qWords.includes(telling)) best = Math.max(best, 0.45 + 0.1 / words.length);
   }
   return Math.min(1, best);
 }
+
+/** Words that tell nothing about which idea is meant, in a name or in a question. */
+const COMMON_WORDS = new Set('what which when where does with from that this these those than then them they have between difference compare explain about there their into over under every each some more most less also only same other is are the and for not why how can and'.split(' '));
+
+/** The words of a question worth searching sources for: no question words or fillers, each once. */
+export function searchTerms(query: string): string[] {
+  const words = query
+    .toLowerCase()
+    .replace(/\$[^$]*\$/g, ' ')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 2 && !COMMON_WORDS.has(w) && !STOP_WORDS.has(w));
+  return [...new Set(words)].slice(0, 12);
+}
+const STOP_WORDS = new Set('a an of to in on at by as is it its be was were or if so do did done does you your me my we our us i'.split(' '));
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -101,24 +125,64 @@ export async function searchIdeas(deps: LookupDeps, query: string, limit = 8): P
 
 export interface LookupAnswer {
   hits: LookupHit[];
-  answer: { text: string; cited: string[] } | null;
+  /** Passages of the learner's sources that hold the question's words, with where they are. */
+  passages: (Omit<PassageHit, 'text'> & { id: string })[];
+  answer: { text: string; cited: string[]; passages: string[] } | null;
+  /** Why no answer was written although one was asked for (the model failed); what was found still shows. */
+  answerError?: string;
 }
 
-/** Search, then have the librarian answer from the top cards. Questions get answers; bare names only hits. */
-export async function lookup(deps: LookupDeps, query: string): Promise<LookupAnswer> {
+/** An earlier question and answer of the same lookup, for a follow-up. */
+export interface LookupTurn {
+  question: string;
+  answer: string;
+}
+
+/** Turns of a conversation the librarian reads for a follow-up. */
+export const MAX_TURNS = 6;
+
+/**
+ * Search, then have the librarian answer from the top cards and passages. Questions get answers; bare
+ * names only hits. A follow-up searches with the question before it too, and the librarian reads the
+ * conversation so far.
+ */
+export async function lookup(deps: LookupDeps, query: string, history: LookupTurn[] = []): Promise<LookupAnswer> {
+  const earlier = history.slice(-MAX_TURNS);
+  const context = earlier.at(-1)?.question ?? '';
   const hits = await searchIdeas(deps, query);
-  logEvent(deps.db, 'lookup', {}, { query, hits: hits.length, question: looksLikeQuestion(query) });
-  if (!deps.provider || hits.length === 0 || !looksLikeQuestion(query)) return { hits, answer: null };
+  // a follow-up ("and why?") says little on its own: the question before it keeps the subject
+  const contextHits = context ? (await searchIdeas(deps, context, 4)).filter((h) => !hits.some((x) => x.nodeId === h.nodeId)) : [];
+  const allHits = [...hits, ...contextHits].slice(0, 8);
+  const found = searchPassages(deps.db, searchTerms(`${context} ${query}`), 4);
+  const passages = found.map((p, i) => ({ id: `s${i + 1}`, chunkId: p.chunkId, sourceId: p.sourceId, title: p.title, locator: p.locator, snippet: p.snippet }));
+  logEvent(deps.db, 'lookup', {}, { query, hits: allHits.length, passages: passages.length, question: looksLikeQuestion(query), followUp: earlier.length > 0 });
+  const asks = looksLikeQuestion(query) || earlier.length > 0;
+  if (!deps.provider || (allHits.length === 0 && passages.length === 0) || !asks) return { hits: allHits, passages, answer: null };
   const view = loadKnowledge(deps.db);
-  const cards = hits.slice(0, 6).map((h) => ({
+  const cards = allHits.slice(0, 6).map((h) => ({
     id: h.nodeId,
     name: h.name,
     statement: h.statement,
     ownStatement: h.ownStatement,
     builtOn: (view.index.into.get(h.nodeId) ?? []).map((c) => c.premises.map((p) => view.nodes.get(p)?.name ?? p).join(' + ')),
   }));
-  const result = await askLibrarian(deps.provider, query, cards);
-  return { hits, answer: { text: result.answer, cited: result.cited } };
+  let result: { answer: string; cited: string[] };
+  try {
+    result = await askLibrarian(deps.provider, query, cards, {
+      passages: found.map((p, i) => ({ id: `s${i + 1}`, where: p.locator ? `${p.title}, ${p.locator}` : p.title, text: p.text })),
+      history: earlier,
+    });
+  } catch (error) {
+    if (isCancelled(error)) throw error;
+    // the ideas and passages found are still worth showing
+    return { hits: allHits, passages, answer: null, answerError: error instanceof Error ? error.message : String(error) };
+  }
+  const passageIds = new Set(passages.map((p) => p.id));
+  return {
+    hits: allHits,
+    passages,
+    answer: { text: result.answer, cited: result.cited.filter((id) => !passageIds.has(id)), passages: result.cited.filter((id) => passageIds.has(id)) },
+  };
 }
 
 /** A question rather than a name: several words, or a question word or mark. */

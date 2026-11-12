@@ -34,7 +34,7 @@ import { currentPractice, endPracticeSet, handInExam, practiceView, resumeGradin
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
 import { EraseRequestSchema, eraseFromMap, previewErase, removeSource } from '../services/erase';
-import { lookup, openCard } from '../services/lookup';
+import { MAX_TURNS, lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, requestRemap, startUnverified } from '../store/goals';
 import { getProbeSet } from '../store/probes';
@@ -382,7 +382,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const { keepId, dropId } = z.object({ keepId: z.string().min(1), dropId: z.string().min(1) }).parse(input);
       return mergeIdeas(ctx.db(), keepId, dropId);
     },
-    'lookup.search': ({ query }) => lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query),
+    'lookup.search': (input) => {
+      const { query, history } = z.object({ query: z.string().trim().min(1).max(500), history: z.array(z.object({ question: z.string().max(500), answer: z.string().max(4000) })).max(MAX_TURNS * 2).optional() }).parse(input);
+      return lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query, history);
+    },
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
     'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),

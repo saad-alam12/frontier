@@ -264,7 +264,8 @@ export interface ApiMethods {
   /** Merge `dropId` into `keepId`: one idea with both names, chains, evidence, targets and cards. */
   'map.mergeIdeas': { input: { keepId: string; dropId: string }; output: { keepId: string } };
   /** Ideas by meaning and name; a question also gets a short answer from the learner's own cards. */
-  'lookup.search': { input: { query: string }; output: LookupAnswer };
+  /** `history`: earlier questions and answers of the same lookup, for a follow-up. */
+  'lookup.search': { input: { query: string; history?: { question: string; answer: string }[] }; output: LookupAnswer };
   /** Open a card from Lookup: counts as a weak review (once per idea per day). */
   'lookup.open': { input: { nodeId: string }; output: NodeCard };
   'trails.list': { input: { nodeId?: string }; output: TrailSummary[] };

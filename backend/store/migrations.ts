@@ -510,6 +510,24 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 22,
+    // Full-text search over the passages of sources, for Lookup's citations; kept in step by triggers.
+    sql: `
+      CREATE VIRTUAL TABLE chunk_search USING fts5(text, content='source_chunks', content_rowid='rowid', tokenize='porter unicode61');
+      CREATE TRIGGER source_chunks_search_insert AFTER INSERT ON source_chunks BEGIN
+        INSERT INTO chunk_search(rowid, text) VALUES (new.rowid, new.text);
+      END;
+      CREATE TRIGGER source_chunks_search_delete AFTER DELETE ON source_chunks BEGIN
+        INSERT INTO chunk_search(chunk_search, rowid, text) VALUES ('delete', old.rowid, old.text);
+      END;
+      CREATE TRIGGER source_chunks_search_update AFTER UPDATE OF text ON source_chunks BEGIN
+        INSERT INTO chunk_search(chunk_search, rowid, text) VALUES ('delete', old.rowid, old.text);
+        INSERT INTO chunk_search(rowid, text) VALUES (new.rowid, new.text);
+      END;
+      INSERT INTO chunk_search(chunk_search) VALUES ('rebuild');
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {
