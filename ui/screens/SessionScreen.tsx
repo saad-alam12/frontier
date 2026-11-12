@@ -506,7 +506,12 @@ function PhaseView({ snap, busy, refocus, onSend, onAsk, onDone }: { snap: Sessi
       return (
         <RecallStep
           sessionId={snap.id}
-          prompt={`Before anything new: last session covered ${snap.previousNodes.length} idea${snap.previousNodes.length === 1 ? '' : 's'}. From memory, list or sketch what you remember. Two or three minutes, no looking back.`}
+          opening={snap.opening}
+          prompt={
+            snap.opening
+              ? `Answer it from memory, then list or sketch what else you remember of the last session's ${snap.previousNodes.length === 1 ? 'idea' : `${snap.previousNodes.length} ideas`}. Two or three minutes, no looking back.`
+              : `Before anything new: last session covered ${snap.previousNodes.length} idea${snap.previousNodes.length === 1 ? '' : 's'}. From memory, list or sketch what you remember. Two or three minutes, no looking back.`
+          }
           submitLabel="Compare with the map"
           busy={busy}
           refocus={refocus}
@@ -698,7 +703,7 @@ function TeachStep({ snap, busy, refocus, onSend, onAsk }: { snap: SessionSnapsh
   );
 }
 
-function RecallStep({ sessionId, prompt, submitLabel, busy, refocus, onSend }: { sessionId: string; prompt: string; submitLabel: string; busy: boolean; refocus: boolean; onSend: Send }) {
+function RecallStep({ sessionId, opening, prompt, submitLabel, busy, refocus, onSend }: { sessionId: string; opening?: string | null; prompt: string; submitLabel: string; busy: boolean; refocus: boolean; onSend: Send }) {
   const key = `session:${sessionId}:recall:${submitLabel}`;
   const drafts = useDrafts<CardDraft>([key], EMPTY_CARD_DRAFT);
   const text = (drafts.values[key] ?? EMPTY_CARD_DRAFT).answer;
@@ -709,7 +714,15 @@ function RecallStep({ sessionId, prompt, submitLabel, busy, refocus, onSend }: {
   };
   return (
     <section className="flex flex-col gap-[32px]">
-      <p className="t-question">{prompt}</p>
+      {opening ? (
+        <div className="flex flex-col gap-[12px]">
+          <span className="t-caption text-muted">Last time ended with a question</span>
+          <Markdown text={opening} className="t-question" />
+          <p className="m-0 t-lead text-secondary">{prompt}</p>
+        </div>
+      ) : (
+        <p className="t-question">{prompt}</p>
+      )}
       <AnswerSurface value={text} onChange={(answer) => drafts.set(key, { ...EMPTY_CARD_DRAFT, answer })} onSubmit={submit} placeholder="From memory, however it comes." rows={6} disabled={busy} autoFocus={refocus} extras />
       <div className="answer-actions">
         <Button kind="primary" onClick={submit} disabled={busy}>

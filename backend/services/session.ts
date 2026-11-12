@@ -37,7 +37,9 @@ import { noteBackgroundGaps } from './remap';
 import type { IngestionService } from './ingestion';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { KnowledgeView } from './knowledge';
-import { MAX_PLAN_NODES, candidatesForGoal, planFocusSession, planSession } from './planner';
+import { MAX_PLAN_NODES, candidatesForGoal, planFocusSession, planSession, stepMinutes } from './planner';
+import { learnerSpeedNow } from './budget';
+import { premiseToPullIn } from '../core/pullIn';
 import { practiceView, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps, PracticeView } from './practice';
 import type { LessonPlan, LessonStep } from './planner';
@@ -89,6 +91,10 @@ export interface SessionState {
   chosen?: boolean;
   /** "I know this: test me" from the map or a goal page: each idea opens at the question that shows its aim. */
   testMe?: boolean;
+  /** Prerequisites pulled in mid-session (design §4.1): the idea taught first, the idea it is for, and the stage to return to. */
+  pulledIn?: { nodeId: string; for: string; stage: Stage; returned?: boolean }[];
+  /** The question the last session left (its preview), asked first in this one's recall. */
+  opening?: string | null;
 }
 
 /** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
@@ -158,6 +164,8 @@ export interface SessionSnapshot {
   /** What the learner asked the tutor about the open card, oldest first. */
   asides: Aside[];
   previousNodes: { id: string; name: string }[];
+  /** The question the last session left, asked first in the recall. */
+  opening: string | null;
   closing: SessionState['closing'];
   /** Everything already said in this session, oldest first, rebuilt from session events. */
   history: SessionHistory;
@@ -293,6 +301,8 @@ async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
   // a session the learner chose (going deeper) is about those ideas: no recall of the last planned session
   const previousNodes = focus?.length ? [] : previouslyTaughtNodes(ended);
+  // the question the last session left opens this one (design §4.1, "Preview"), with the recall of its ideas
+  const opening = previousNodes.length ? ended[0]?.state.closing?.previewQuestion?.trim() || null : null;
   const state: SessionState = {
     goalId,
     chosen: Boolean(focus?.length) || undefined,
@@ -311,6 +321,7 @@ async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[
     pendingEffort: null,
     resume: carried?.resume ?? null,
     priorMinutes: carried ? { [carried.step.nodeId]: secondsOnNode(db, [carried.resume.fromSessionId], carried.step.nodeId) / 60 } : {},
+    opening,
   };
   if (carried) state.nodeStatus[carried.step.nodeId] = 'active';
   const session = createSession(db, goalId, state);
@@ -468,11 +479,11 @@ async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionS
       const view = loadKnowledge(db);
       const nodes = state.previousNodes.map((n) => ({ id: n.id, name: n.name, statement: view.nodes.get(n.id)?.statement ?? '' })).filter((n) => view.nodes.has(n.id));
       if (nodes.length) {
-        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: false, quote: response.quote, images: imagesOf(deps, response) });
+        const recall = await runRecall(deps.provider, { goalText, nodes, text: response.answer, closing: false, opening: state.opening ?? undefined, quote: response.quote, images: imagesOf(deps, response) });
         for (const r of recall.recalled) {
           recordEvidence(db, { nodeId: r.nodeId, kind: 'recall', score: r.score, reasoning: r.note || 'free recall at session start', sessionId, context: { step: 'reconstruct' } });
         }
-        appendSessionEvent(db, sessionId, 'reconstruct', { text: response.answer, recalled: recall.recalled, attachments: response.attachments, quote: response.quote });
+        appendSessionEvent(db, sessionId, 'reconstruct', { text: response.answer, recalled: recall.recalled, attachments: response.attachments, quote: response.quote, ...(state.opening ? { opening: state.opening } : {}) });
       }
       state.phase = 'orient';
       break;
@@ -570,6 +581,61 @@ async function startSessionPractice(deps: SessionDeps, sessionId: string, state:
   }
 }
 
+/** Prerequisites a session pulls in at most, and never two for the same idea. */
+const MAX_PULLS = 2;
+
+/**
+ * The prerequisite to pull in for a gap the tutor named: one of the ideas this one is built on, nearest
+ * first, that is learnable now and not already in today's plan (core/pullIn.ts). Null when there is none.
+ */
+function premiseFor(db: Database, state: SessionState, step: LessonStep, gap: string): LessonStep | null {
+  const pulls = state.pulledIn ?? [];
+  if (pulls.length >= MAX_PULLS || pulls.some((p) => p.for === step.nodeId || p.nodeId === step.nodeId)) return null;
+  const view = loadKnowledge(db);
+  const planned = new Set(state.plan.steps.map((s) => s.nodeId));
+  const hops = new Map<string, number>();
+  let layer = [step.nodeId];
+  for (let h = 1; layer.length && h <= 6; h += 1) {
+    const next: string[] = [];
+    for (const id of layer) {
+      for (const chain of view.index.into.get(id) ?? []) {
+        for (const p of chain.premises) {
+          if (hops.has(p) || p === step.nodeId) continue;
+          hops.set(p, h);
+          next.push(p);
+        }
+      }
+    }
+    layer = next;
+  }
+  const candidates = [...hops].flatMap(([id, h]) => {
+    const node = view.nodes.get(id);
+    return node && view.fringe.has(id) && !view.owned.has(id) && !planned.has(id) ? [{ id, name: node.name, aliases: node.aliases, hops: h }] : [];
+  });
+  const id = premiseToPullIn(gap, candidates);
+  const node = id ? view.nodes.get(id) : undefined;
+  if (!id || !node) return null;
+  const fromDepth = (view.states.get(id)?.depth ?? 0) as Depth;
+  const aim = SIMPLE_AIM as Depth;
+  return { nodeId: id, name: node.name, kind: node.kind, why: `${step.name.replace(/\$/g, '')} builds on it, and your answer showed it was missing.`, aim, fromDepth, minutes: stepMinutes(node.kind, fromDepth, aim, learnerSpeedNow(db)), simplified: null, dependsOn: [] };
+}
+
+/** What the learner reads on a prerequisite pulled in: why it came first, and where the session goes back to. */
+function pulledInNote(state: SessionState, nodeId: string): string | null {
+  const pull = state.pulledIn?.find((p) => p.nodeId === nodeId && !p.returned);
+  const forName = pull ? state.plan.steps.find((s) => s.nodeId === pull.for)?.name : undefined;
+  return forName ? `Your last answer showed this was missing for ${forName}, so it comes first. Then back to ${forName}.` : null;
+}
+
+/** Teach `premise` now, before the idea it is for; that idea comes back at the question it missed. */
+function pullIn(db: Database, sessionId: string, state: SessionState, step: LessonStep, premise: LessonStep, stage: Stage): void {
+  state.plan.steps.splice(state.stepIndex, 0, premise);
+  state.nodeStatus[premise.nodeId] = 'pending';
+  state.nodeStatus[step.nodeId] = 'pending';
+  state.pulledIn = [...(state.pulledIn ?? []), { nodeId: premise.nodeId, for: step.nodeId, stage }];
+  appendSessionEvent(db, sessionId, 'pull-in', { nodeId: premise.nodeId, for: step.nodeId, stage });
+}
+
 async function beginStep(deps: SessionDeps, sessionId: string, state: SessionState, index: number, goal: TutorGoal, afterOutcome = false): Promise<void> {
   state.stepIndex = index;
   state.edge = emptyEdge();
@@ -599,6 +665,13 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
     state.resume = null;
     state.owed = false;
     appendSessionEvent(deps.db, sessionId, 'resume', { nodeId: step.nodeId, stage: resume.stage, fromSessionId: resume.fromSessionId });
+    return;
+  }
+  // back from a prerequisite pulled in for this idea: the question it was missing is asked afresh
+  const back = state.pulledIn?.find((p) => p.for === step.nodeId && !p.returned);
+  if (back) {
+    back.returned = true;
+    await produceCard(deps, sessionId, state, step, back.stage, null, goal, afterOutcome, true);
     return;
   }
   const first = stepStages(step)[0] as Stage;
@@ -726,6 +799,13 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
 
   // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
   const missing = stage !== 'predict' && counted < PASS_SCORE && grade.missingBackground !== null;
+  // a missing foundation that is on the map and learnable now is taught first, then the idea goes on (design §4.1)
+  const premise = missing && grade.missingBackground ? premiseFor(db, state, step, grade.missingBackground.name) : null;
+  if (premise) {
+    pullIn(db, sessionId, state, step, premise, stage);
+    await beginStep(deps, sessionId, state, state.stepIndex, goal, true);
+    return;
+  }
   // a chosen session's gaps are about what the learner asked, not about the goal's map
   if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
   const follow = followUp(state.edge, followStep(step), stage, { score: counted, confidence: response.confidence, missingBackground: missing, minutes: minutesOn(db, state, sessionId, step.nodeId) });
@@ -1030,7 +1110,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
             why: step.why,
             aim: step.aim,
             simplified: step.simplified,
-            note: s.edge.wrapping ? 'This idea has had its half hour: one last step, then on to the next.' : null,
+            note: s.edge.wrapping ? 'This idea has had its half hour: one last step, then on to the next.' : pulledInNote(s, step.nodeId),
             canTestOut: canTestOut(step, s.stage, s.edge),
             stage: s.stage,
             stages,
@@ -1046,6 +1126,7 @@ function snapshot(db: Database, session: SessionRecord<SessionState>, work: Sess
     card: publicCard(s.card),
     asides: step && s.stage && s.card ? openAsides(db, session.id, step.nodeId, s.stage) : [],
     previousNodes: s.previousNodes,
+    opening: s.opening ?? null,
     closing: s.closing,
     history: sessionHistory(db, session),
     frontier: step ? frontierMap(db, s, step.nodeId) : null,

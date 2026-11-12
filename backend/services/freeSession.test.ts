@@ -111,6 +111,45 @@ describe('choosing what to learn', () => {
     expect(asked).toMatch(new RegExp(`Produce the \\*\\*${snap.card?.stage ?? 'none'}\\*\\* card`));
   });
 
+  it('pulls in a missing prerequisite the tutor names, then comes back to the question it missed', async () => {
+    let flagged = false;
+    // the first check on Nash equilibrium shows that best responses are missing
+    const gaps = (req: CompleteRequest<unknown>) => {
+      const text = req.messages[0]?.content ?? '';
+      if (!flagged && req.submit.name !== 'submit_recall' && /## Previous card \(check\)/.test(text) && text.includes('Nash equilibrium')) {
+        flagged = true;
+        return { grade: { score: 0.2, feedback: 'You did not use best responses.', misconception: null, confidentlyWrong: false, missingBackground: { name: 'best response', hours: 1 } }, card: { stage: 'explain', markdown: 'Again.' } };
+      }
+      return tutor(req);
+    };
+    const { id, provider, maker, deps } = setup({ tutor: gaps });
+    let snap = await startFreeSession(deps, maker, { goalId: null, counted: false, pick: [id('nash')] });
+    snap = await respond(deps, snap.id, { answer: '' });
+    for (let i = 0; i < 12 && !flagged; i += 1) snap = await respond(deps, snap.id, { answer: 'my answer', confidence: 0.66 });
+    expect(flagged).toBe(true);
+    // best response comes first, said why, then the session goes back
+    expect(snap.current?.nodeId).toBe(id('bestResponse'));
+    expect(snap.current?.note).toContain('missing for Nash equilibrium');
+    expect(snap.plan.steps.map((s) => s.nodeId)).toEqual([id('bestResponse'), id('nash')]);
+    for (let i = 0; i < 12 && snap.current?.nodeId === id('bestResponse'); i += 1) snap = await respond(deps, snap.id, { answer: 'my answer', confidence: 0.9 });
+    expect(snap.current?.nodeId).toBe(id('nash'));
+    expect(snap.card?.stage).toBe('check');
+    const back = provider.calls.filter((call) => call.role === 'tutor').at(-1)?.messages[0]?.content ?? '';
+    expect(back).toContain('The learner missed the last **check** question');
+  });
+
+  it('opens the next planned session with the question the last one left', async () => {
+    const { db, id, provider, deps } = setup();
+    const goal = gameTheoryGoal(db, id);
+    await teachToTheEnd(deps, await startSession(deps, goal.id));
+    const next = await startSession(deps, goal.id);
+    expect(next.phase).toBe('reconstruct');
+    expect(next.opening).toBe('What if?');
+    await respond(deps, next.id, { answer: 'If both undercut, neither gains.' });
+    const recall = provider.calls.filter((call) => call.role === 'tutor').at(-1)?.messages[0]?.content ?? '';
+    expect(recall).toContain('## The question the last session left\nWhat if?');
+  });
+
   it('warns about picked ideas whose premises are not yours, and adds them first when asked', () => {
     const { db, id, maker } = setup();
     const goal = gameTheoryGoal(db, id);

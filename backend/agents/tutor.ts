@@ -452,7 +452,7 @@ export type RecallResult = z.infer<typeof RecallSchema>;
 
 export async function runRecall(
   provider: LlmProvider,
-  input: { goalText: string; nodes: { id: string; name: string; statement: string }[]; text: string; closing: boolean; quote?: string; images?: LlmImage[] },
+  input: { goalText: string; nodes: { id: string; name: string; statement: string }[]; text: string; closing: boolean; opening?: string; quote?: string; images?: LlmImage[] },
 ): Promise<RecallResult> {
   const ids = new Set(input.nodes.map((n) => n.id));
   const schema = RecallSchema.superRefine((value, ctx) => {
@@ -468,6 +468,7 @@ export async function runRecall(
   const message = [
     `Goal: ${input.goalText}`,
     `## Ideas covered\n${input.nodes.map((n) => `- [${n.id}] ${n.name}: ${n.statement}`).join('\n')}`,
+    ...(input.opening ? [`## The question the last session left\n${input.opening}\n\nThe learner was asked to answer it first, from memory. Score the ideas their answer uses as recalled when it uses them correctly.`] : []),
     ...(input.quote ? [`## The learner is replying to this part\n"${input.quote}"`] : []),
     `## Learner's recall\n${input.text || (input.images?.length ? '(no text: the recall is in the attached images)' : '(nothing written)')}`,
     input.closing ? 'Score every idea and add the closing summary (canDo and previewQuestion).' : 'Score every idea. No closing summary.',

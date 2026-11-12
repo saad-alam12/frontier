@@ -190,13 +190,13 @@ A session serves at most one goal. A planned session serves its goal: the learne
 
 ### 4.1 Flow
 
-1. **Reconstruct (2–3 min).** Free recall: the learner sketches or lists last session's ideas from memory. The system diffs against the graph and records `recall` evidence.
+1. **Reconstruct (2–3 min).** Free recall: the learner sketches or lists last session's ideas from memory. The system diffs against the graph and records `recall` evidence. When the last planned session of the goal ended with a preview question, this one opens with it ("Last time ended with a question"): the learner answers it from memory first, and the recall is scored with it in view.
 2. **Orient.** One screen: today's task and why it matters for the goal.
 3. **Plan.** The tutor builds a minimal dependency tree from owned nodes to today's target nodes and shows it as the lesson map. The plan adapts when evidence shows the learner's understanding differs from the estimate.
-4. **Teach** each node on the plan with the step loop (4.2), pulling nodes in when the current task needs them.
+4. **Teach** each node on the plan with the step loop (4.2), pulling nodes in when the current task needs them: when the tutor's grade names a missing foundation (below the pass mark, not on a prediction) and it is one of the ideas the current one is built on, learnable now and not already in today's plan (matched by name or another name, the nearest first), it is taught first, to explaining, with a line saying why ("Your last answer showed this was missing for …"), and then the session goes back to the idea at the question it missed, asked afresh. At most two per session and one per idea; a gap that is not on the map, or further back than the edge, still simplifies the idea (section 4.3) and is noted for the goal's map.
 5. **Compound practice** (if any nodes are due, section 5).
 6. **Close.** Free-recall the session as a map; one sentence on what the learner can now do. Evidence and trail are written.
-7. **Preview.** Show tomorrow's opening question without asking for an answer.
+7. **Preview.** Show tomorrow's opening question without asking for an answer; the goal's next planned session opens with it (step 1).
 
 ### 4.2 The step loop (per node)
 

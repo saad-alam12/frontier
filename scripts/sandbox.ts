@@ -25,7 +25,7 @@ import { reviewCard, saveCard } from '../backend/services/cards';
 import { recordEvidence } from '../backend/services/evidence';
 import { refreshGoalFields } from '../backend/services/knowledge';
 import { abandonSession, respond, startSession } from '../backend/services/session';
-import type { SessionSnapshot } from '../backend/services/session';
+import type { SessionSnapshot, SessionState } from '../backend/services/session';
 import { startFreeSession } from '../backend/services/freeSession';
 import { proposeAddition, requestAddition } from '../backend/services/addition';
 import { SessionMaker } from '../backend/services/sessionMaker';
@@ -33,7 +33,7 @@ import { SessionWork } from '../backend/services/sessionWork';
 import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
 import { answerDialogue, startDialogue } from '../backend/services/dialogue';
 import { saveNote } from '../backend/services/notes';
-import { appendSessionEvent, listEndedSessions } from '../backend/store/sessions';
+import { appendSessionEvent, listEndedSessions, saveSessionState } from '../backend/store/sessions';
 
 const [folderArg, ...flags] = process.argv.slice(2);
 /** A diagram and a plot for the explanation (`--drawings`), as the tutor may draw them. */
@@ -294,6 +294,14 @@ if (flags.includes('--talk')) {
   const examiner = new FakeProvider({ examiner: [{ say: questions[0], done: false, verdict: null }, { say: questions[1], done: false, verdict: null }] });
   const talk = await startDialogue({ db, provider: examiner }, exam.id, 'oral');
   await answerDialogue({ db, provider: examiner }, talk.id, 'Each player is already playing a best response to the other, so neither gains by changing alone.');
+}
+
+// an open session at its recall, which opens with the question the last session left (`--recall`)
+if (flags.includes('--recall')) {
+  // the sandbox's earlier sessions were ended early; the last one is given the close it would have had
+  const last = listEndedSessions<SessionState>(db, exam.id, 1)[0];
+  if (last) saveSessionState(db, last.id, { ...last.state, closing: { canDo: 'You can find equilibria in small games and say why they hold.', previewQuestion: 'What changes when one player moves first?', recall: [] } });
+  await startSession(deps, exam.id);
 }
 
 // an open session at its first explanation (which shows the lecture's figure), past the recall and the orientation
