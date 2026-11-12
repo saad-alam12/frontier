@@ -269,7 +269,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
         {pending && !pending.card && <Thinking label={thinkingLabel} onStop={stoppable ? stop : undefined} />}
         {pending && writing && (
           <section className="writing-preview" aria-label="Being written">
-            <Markdown text={writing} />
+            <Markdown text={writing} drafting />
           </section>
         )}
         {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onAsk={ask} onDone={() => void refresh()} />}

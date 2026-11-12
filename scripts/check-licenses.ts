@@ -13,6 +13,13 @@ const ALLOWED = new Set(['MIT', 'MIT-0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Cl
 const EXCEPTIONS = new Set(['@anthropic-ai/claude-agent-sdk']);
 /** Platform builds of that same SDK, which npm lists as packages of their own. */
 const EXCEPTION_PREFIXES = ['@anthropic-ai/claude-agent-sdk-'];
+/**
+ * Packages whose package.json states no licence but whose licence file does (read by hand). The
+ * check still reads the file each time and fails if it no longer starts with the expected text.
+ */
+const LICENCE_FILES: Record<string, { license: string; startsWith: string }> = {
+  khroma: { license: 'MIT', startsWith: 'The MIT License' },
+};
 
 interface LockPackage {
   dev?: boolean;
@@ -42,10 +49,18 @@ for (const [path, entry] of Object.entries(lock.packages)) {
   const manifest = join(root, path, 'package.json');
   // an optional package for another platform is not installed here; the lock file states its licence
   const stated = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { license?: unknown; licenses?: { type?: string }[] }) : { license: entry.license };
-  const license = typeof stated.license === 'string' ? stated.license : (stated.licenses ?? []).map((l) => l.type).filter(Boolean).join(' OR ');
+  const license = typeof stated.license === 'string' ? stated.license : (stated.licenses ?? []).map((l) => l.type).filter(Boolean).join(' OR ') || licenceFromFile(name, join(root, path));
   checked += 1;
   if (!license) problems.push(`${name}: states no licence`);
   else if (!allowed(license)) problems.push(`${name}: ${license}`);
+}
+
+/** The licence a listed package states in its licence file, when the file still says so. */
+function licenceFromFile(name: string, dir: string): string {
+  const known = LICENCE_FILES[name];
+  if (!known) return '';
+  const file = ['license', 'LICENSE', 'license.md', 'LICENSE.md', 'LICENSE.txt'].map((f) => join(dir, f)).find((f) => existsSync(f));
+  return file && readFileSync(file, 'utf8').trimStart().startsWith(known.startsWith) ? known.license : '';
 }
 
 if (problems.length) {

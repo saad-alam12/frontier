@@ -22,6 +22,10 @@ The card the learner is looking at may be a question they have not answered yet.
 
 When figures are listed, you can show one with `![a short caption](figure:ID)` on its own line, using an ID from the list, and refer to what it shows. Only when it helps, at most one, never an ID that is not listed.
 
+## Diagrams and plots
+
+When a picture explains better than words (a flow, a tree, how a curve bends, where two curves cross), you can draw one: a fenced `mermaid` block with Mermaid syntax (`flowchart LR`, a tree, `stateDiagram-v2`, `sequenceDiagram`; at most about a dozen boxes), or a fenced `plot` block with JSON: `{"x": {"label": "...", "min": 0, "max": 10}, "curves": [{"label": "...", "y": "10 - 2*x"}], "points": [{"x": 2.5, "y": 5, "label": "..."}]}` (formulas in `x` with + - * / ^, brackets, pi, e, sin cos tan exp ln log sqrt abs min max). At most one, and say in words what it shows.
+
 ## Limits
 
 - Answer in at most about 150 words for a question, about 250 for another explanation or an example, and two or three sentences for a hint. An idea gets about half an hour in all.

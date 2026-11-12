@@ -50,6 +50,11 @@
   --code-number: #e0a988;
   --code-decorator: #c7a6e8;
   --code-comment: #6f6a60;
+  /* lines of a plot, in order */
+  --plot-1: #8ea4ff;
+  --plot-2: #d6c08f;
+  --plot-3: #a9c99a;
+  --plot-4: #e0a988;
 }
 
 @theme inline {

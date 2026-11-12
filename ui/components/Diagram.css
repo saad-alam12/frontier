@@ -1,0 +1,98 @@
+/* Diagrams and plots in explanations: drawn on the card's surface, in the app's colours. */
+.drawing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  overflow-x: auto;
+}
+.drawing.diagram {
+  min-height: 80px;
+}
+/* centred while it fits; wider than the card, it starts at the left edge and scrolls */
+.diagram-canvas svg {
+  display: block;
+  height: auto;
+  margin: 0 auto;
+}
+.drawing-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.drawing.is-pending {
+  min-height: 80px;
+  justify-content: center;
+  align-items: center;
+}
+.drawing-source {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+.plot {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  align-self: center;
+  overflow: visible;
+}
+.plot-grid {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.plot-zero {
+  stroke: var(--ring);
+  stroke-width: 1.25;
+}
+.plot-tick {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.plot-axis-label {
+  fill: var(--text-secondary);
+  font-size: 12px;
+}
+.plot-line {
+  fill: none;
+  stroke-width: 2.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.plot-point {
+  fill: var(--text);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.plot-point-label {
+  fill: var(--text-soft);
+  font-size: 12px;
+}
+.plot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.plot-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plot-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}

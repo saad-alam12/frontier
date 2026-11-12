@@ -215,6 +215,8 @@ The loop is fitted to the idea's **aim**, the depth the plan asks of it, and sto
 
 **Figures.** An idea whose material has a picture page that shows it (section 7, "Pages that are pictures") has up to four figures the tutor can show. The tutor is told what each shows (in the words of the extractor that saw it), and when it writes a card that explains (an explanation, a worked example, a fresh explanation, an index pass) the pictures of the first two go with the call, so it sees them. It shows one by writing `![a short caption](figure:ID)` in its text; an ID it was not given is sent back. The learner sees the picture there with its caption, source and page, and clicking it opens it large. Asked questions can show a figure the same way.
 
+**Diagrams and plots.** A card or an asked answer can draw what its text describes. A fenced `mermaid` block is a diagram (a flow, a tree, states, a sequence) drawn with Mermaid in the app's colours, in strict mode so its text can carry no script or link; a wide diagram shrinks to fit, its text never below four fifths of its size, and scrolls sideways past that. A fenced `plot` block is a JSON spec (an x range, optional y range, up to four curves written as formulas in x, up to four data series, up to twelve marked points with labels) that code reads, samples and draws: the formulas are parsed by the app (numbers, x, + − × ÷ and powers, brackets, pi, e and the common functions), never run as code, and the y range is fitted to the data unless given. A plot that cannot be read is sent back to the model before the card is accepted. While a card is still being written, a drawing shows as a quiet placeholder until its text is complete; one that cannot be drawn after all shows its text instead.
+
 **Hints.** On a question (check, derive, use) the learner can take up to two hints instead of giving up: the first points the way (which idea or premise to reach for), the second gives the first step of the reasoning; neither states the answer. An answer given with hints is not an unaided one, so it counts for less: its score times 0.85 with one hint and 0.7 with two, in the evidence and in what the loop does next. The conversation keeps the tutor's own score for the answer and says what it counts as.
 
 ### 4.3 Session rules
@@ -397,6 +399,7 @@ The interface uses cards and controls, not a raw chat log, wherever the step loo
 | Graph view | d3-force for the layout (with d3-dispatch, d3-quadtree, d3-timer) and an own canvas renderer | ISC |
 | Math rendering | KaTeX | MIT |
 | Markdown | react-markdown + remark/rehype plugins | MIT |
+| Diagrams | Mermaid 11 (loaded the first time a diagram is shown); plots are drawn by the app's own code. Mermaid 12 depends on elkjs (EPL-2.0 or GPL-3.0) and is not used | MIT (its dependencies MIT, ISC, BSD, Apache-2.0) |
 | PDF text | pdfjs-dist | Apache-2.0 |
 | Pictures of PDF pages | pdfjs-dist in a hidden window of Electron's own browser engine (no image library: the canvas library pdfjs installs for Node bundles MPL-2.0 code and is left out of the app) | Apache-2.0, Electron MIT |
 | Validation | zod | MIT |

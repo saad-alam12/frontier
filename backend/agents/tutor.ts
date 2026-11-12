@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CodeStarterSchema, codeForModel } from '../core/code';
 import type { CodeAnswer } from '../core/code';
 import { unknownFigureRefs } from '../core/figureRefs';
+import { plotIssues } from '../core/plot';
 import { partialStringField } from '../core/partialJson';
 import { isGraded } from '../core/session';
 import type { CardBranch, Stage } from '../core/session';
@@ -76,6 +77,7 @@ export function buildStepSchema(next: Stage | null | (Stage | null)[], expectGra
     if (step.card === null && !allowed.includes(null)) ctx.addIssue({ code: 'custom', path: ['card'], message: `write the ${named} card` });
     if (step.card && !stages.has(step.card.stage)) ctx.addIssue({ code: 'custom', path: ['card'], message: stages.size ? `the card must be the ${named} card, not ${step.card.stage}` : 'no card is needed here: card must be null' });
     for (const id of unknownFigureRefs(step.card, figureIds)) ctx.addIssue({ code: 'custom', path: ['card'], message: figureMessage(id, figureIds) });
+    for (const message of plotIssues(step.card)) ctx.addIssue({ code: 'custom', path: ['card'], message });
   });
 }
 
@@ -362,6 +364,7 @@ function writingOf(field: string, onWriting: ((text: string) => void) | undefine
 function asideSchema(figureIds: ReadonlySet<string>) {
   return z.object({ answer: z.string().trim().min(1).max(6000) }).superRefine((value, ctx) => {
     for (const id of unknownFigureRefs(value.answer, figureIds)) ctx.addIssue({ code: 'custom', path: ['answer'], message: figureMessage(id, figureIds) });
+    for (const message of plotIssues(value.answer)) ctx.addIssue({ code: 'custom', path: ['answer'], message });
   });
 }
 

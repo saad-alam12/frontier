@@ -34,6 +34,26 @@ import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/s
 import { answerDialogue, startDialogue } from '../backend/services/dialogue';
 
 const [folderArg, ...flags] = process.argv.slice(2);
+/** A diagram and a plot for the explanation (`--drawings`), as the tutor may draw them. */
+const DRAWINGS = [
+  '',
+  'Checking a cell means checking each firm in turn:',
+  '',
+  '```mermaid',
+  'flowchart LR',
+  '  A["Pick a cell"] --> B{"Row firm gains by moving?"}',
+  '  B -- yes --> X["Not stable"]',
+  '  B -- no --> C{"Column firm gains by moving?"}',
+  '  C -- yes --> X',
+  '  C -- no --> S["Stable: an equilibrium"]',
+  '```',
+  '',
+  "With prices as a continuous choice, each firm's best price is a line in the other's price; the equilibrium is where they cross:",
+  '',
+  '```plot',
+  '{"title": "Best responses in a price war", "x": {"label": "price of firm B", "min": 0, "max": 12}, "y": {"label": "price of firm A", "min": 0, "max": 12}, "curves": [{"label": "best price of A", "y": "2 + 0.5*x"}, {"label": "best price of B, read back", "y": "2*x - 4"}], "points": [{"x": 4, "y": 4, "label": "equilibrium (4, 4)"}]}',
+  '```',
+].join('\n');
 if (!folderArg) {
   console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session]');
   process.exit(2);
@@ -66,7 +86,7 @@ function tutor(scores: number[]) {
       predict: { stage: 'predict', prompt: 'Two firms set prices at the same time. What would make a pair of prices stable, so neither firm wants to change?' },
       explain: {
         stage: 'explain',
-        markdown: `## The idea\n\nA profile is stable when **no player gains by changing their own strategy alone**. Formally, for every player $i$:\n\n$$u_i(s_i, s_{-i}) \\ge u_i(s_i', s_{-i}) \\quad \\text{for all } s_i'$$\n\nSo each strategy is a best response to the others.${figure ? `\n\n![The pricing game as a table: each cell holds both firms' payoffs](figure:${figure})\n\nIn the table, look along a row for the column firm and down a column for the row firm: a cell where neither can do better is stable.` : ''}`,
+        markdown: `## The idea\n\nA profile is stable when **no player gains by changing their own strategy alone**. Formally, for every player $i$:\n\n$$u_i(s_i, s_{-i}) \\ge u_i(s_i', s_{-i}) \\quad \\text{for all } s_i'$$\n\nSo each strategy is a best response to the others.${figure ? `\n\n![The pricing game as a table: each cell holds both firms' payoffs](figure:${figure})\n\nIn the table, look along a row for the column firm and down a column for the row firm: a cell where neither can do better is stable.` : ''}${flags.includes('--drawings') ? DRAWINGS : ''}`,
       },
       check: { stage: 'check', question: 'In the game below, is (Up, Left) stable? Say which deviation you checked.', answerKey: 'Yes', rubric: ['says yes', 'checks both players'] },
       derive: { stage: 'derive', prompt: 'Rebuild the definition from best responses: what must hold for each player?', answerKey: 'mutual best responses', rubric: ['uses best responses'] },

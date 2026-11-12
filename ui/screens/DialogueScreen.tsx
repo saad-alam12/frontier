@@ -122,7 +122,7 @@ export function DialogueScreen({ dialogueId, goalTitle, onBack, onBackToGoals }:
         {busy && writing && (
           <li className="dialogue-turn is-examiner writing-preview" aria-label="Being written">
             <span className="t-caption text-muted">{WHO[view.kind]}</span>
-            <Markdown text={writing} className="t-question" />
+            <Markdown text={writing} className="t-question" drafting />
           </li>
         )}
       </ol>
