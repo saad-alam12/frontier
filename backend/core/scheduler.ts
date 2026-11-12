@@ -4,6 +4,7 @@
  * deepen or consolidate. Pure: every input is passed in, including the time.
  */
 import { isDue, recallProbability } from './fsrs';
+import { HELD_AFTER_MS } from './bugs';
 import type { GraphIndex } from './graph';
 import type { Assessment, Depth, FsrsState, Tier } from './types';
 
@@ -27,9 +28,12 @@ export interface ScheduleInput {
   fsrs: FsrsState;
   /** Passing practice evidence so far (not implicit credit): drives cue distance and rung. */
   practiceCount: number;
+  /** When an open misconception about the idea was last seen; null when it has none. */
+  misconceptionSeen?: string | null;
 }
 
-export type DueReason = 'due' | 'fading' | 'exam';
+/** `misconception`: a contrast problem is due for a misconception still open (design §5.2). */
+export type DueReason = 'due' | 'fading' | 'exam' | 'misconception';
 
 export interface DueNode {
   nodeId: string;
@@ -66,6 +70,8 @@ export function dueNodes(nodes: ScheduleInput[], now: Date, examDate: Date | nul
     if (isDue(n.fsrs, now)) reason = 'due';
     else if (recall < FADING_RECALL) reason = 'fading';
     else if (recallAtExam !== null && recallAtExam < EXAM_RECALL && !reviewedToday) reason = 'exam';
+    // a misconception still open half a day after it was last seen asks for a contrast problem
+    else if (n.misconceptionSeen && now.getTime() - Date.parse(n.misconceptionSeen) >= HELD_AFTER_MS && !reviewedToday) reason = 'misconception';
     if (reason) out.push({ nodeId: n.nodeId, recall, recallAtExam, reason });
   }
   return out.sort((a, b) => a.recall - b.recall || a.nodeId.localeCompare(b.nodeId));

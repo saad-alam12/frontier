@@ -33,6 +33,7 @@ import { SessionWork } from '../backend/services/sessionWork';
 import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
 import { answerDialogue, startDialogue } from '../backend/services/dialogue';
 import { saveNote } from '../backend/services/notes';
+import { afterAnswer } from '../backend/services/bugs';
 import { appendSessionEvent, listEndedSessions, saveSessionState } from '../backend/store/sessions';
 
 const [folderArg, ...flags] = process.argv.slice(2);
@@ -251,6 +252,13 @@ const adding = new FakeProvider({
 });
 await proposeAddition({ db, provider: adding }, pricing.id);
 refreshGoalFields(db);
+
+// two misconceptions from earlier answers: one open (and one clean answer since), one that ended
+afterAnswer(db, id('bestResponse'), 'Thinks a best response must be best against every strategy of the other player.', daysAgo(6).toISOString());
+recordEvidence(db, { nodeId: id('bestResponse'), kind: 'check', score: 0.9, reasoning: 'clean', at: daysAgo(5).toISOString() });
+afterAnswer(db, id('payoff'), 'Reads a payoff pair as (column, row).', daysAgo(10).toISOString());
+for (const d of [9, 8]) recordEvidence(db, { nodeId: id('payoff'), kind: 'check', score: 0.9, reasoning: 'clean', at: daysAgo(d).toISOString() });
+afterAnswer(db, id('payoff'), null, daysAgo(8).toISOString());
 
 // the learner's note on an idea and an example they asked for in an earlier session, for the goal's notes
 saveNote(db, id('nash'), 'Check each cell in turn: hold the other firm fixed, then ask whether moving pays.');

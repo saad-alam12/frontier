@@ -9,6 +9,15 @@ import { BudgetBar } from '../components/budget';
 import { Calendar, Calibration, FREE_STUDY, HourBars, Lines, WeeklyBars, seriesColor, shortDate } from '../components/charts';
 import { WeekReview } from '../components/WeekReview';
 import type { WeekActions } from '../components/WeekReview';
+import { MisconceptionsList } from '../components/MisconceptionsList';
+import type { MisconceptionActions } from '../components/MisconceptionsList';
+
+type Tab = 'numbers' | 'week' | 'misconceptions';
+const TAB_LABEL: Record<Tab, string> = { numbers: 'Numbers', week: 'Your week', misconceptions: 'Misconceptions' };
+const TAB_LEAD: Record<Exclude<Tab, 'numbers'>, string> = {
+  week: 'Your week on one page: what you learned, what faded, where you were too sure, and one change worth making.',
+  misconceptions: 'The wrong beliefs your answers showed, and how close each is to ending.',
+};
 
 const RANGES: { value: StatsRange; label: string }[] = [
   { value: '7d', label: '7 days' },
@@ -23,8 +32,8 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
  * Stats: how you learn, from everything Frontier logs. Filters sit in one row on top (time range,
  * goal, topic); a few plain sentences say what stands out; the charts below carry the detail.
  */
-export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: WeekActions; initialTab?: 'numbers' | 'week' }) {
-  const [tab, setTab] = useState<'numbers' | 'week'>(initialTab);
+export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: WeekActions & MisconceptionActions; initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [filter, setFilter] = useState<StatsFilter>({ goalId: null, topicId: null, range: '30d' });
   const [view, setView] = useState<StatsView | null>(null);
   const [cards, setCards] = useState<CardStats | null>(null);
@@ -40,24 +49,24 @@ export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: Week
 
   const tabs = (
     <div role="radiogroup" aria-label="Show" className="segmented is-small self-start">
-      {(['numbers', 'week'] as const).map((t) => (
+      {(['numbers', 'week', 'misconceptions'] as const).map((t) => (
         <button key={t} type="button" role="radio" aria-checked={tab === t} onClick={() => setTab(t)}>
-          {t === 'numbers' ? 'Numbers' : 'Your week'}
+          {TAB_LABEL[t]}
         </button>
       ))}
     </div>
   );
-  if (tab === 'week') {
+  if (tab !== 'numbers') {
     return (
       <Screen wide>
         <div className="flex flex-col gap-[18px]">
           <div className="flex flex-col gap-[10px]">
             <h1 className="t-display">Stats</h1>
-            <p className="t-lead m-0">Your week on one page: what you learned, what faded, where you were too sure, and one change worth making.</p>
+            <p className="t-lead m-0">{TAB_LEAD[tab]}</p>
           </div>
           {tabs}
         </div>
-        <WeekReview actions={actions} />
+        {tab === 'week' ? <WeekReview actions={actions} /> : <MisconceptionsList actions={actions} />}
       </Screen>
     );
   }

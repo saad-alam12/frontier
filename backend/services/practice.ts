@@ -21,7 +21,7 @@ import { attachmentExists, readAttachment } from '../store/attachments';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { logEvent } from '../store/activity';
-import { listBugsForNode } from '../store/bugs';
+import { listBugsForNode, listOpenBugs } from '../store/bugs';
 import { afterAnswer } from './bugs';
 import { getGoal, listCapabilities, listMaterials, listTargets } from '../store/goals';
 import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, handInPracticeSet, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
@@ -81,9 +81,12 @@ function goalScope(db: Database, goalId: string, view: KnowledgeView): Set<strin
 
 function scheduleInputs(db: Database, view: KnowledgeView, scope?: Set<string>): ScheduleInput[] {
   const counts = practiceCounts(db);
+  // the latest sighting of each idea's open misconceptions
+  const seen = new Map<string, string>();
+  for (const bug of listOpenBugs(db)) if ((seen.get(bug.nodeId) ?? '') < bug.lastSeen) seen.set(bug.nodeId, bug.lastSeen);
   return [...view.states.values()]
     .filter((s) => (!scope || scope.has(s.nodeId)) && view.nodes.has(s.nodeId))
-    .map((s) => ({ nodeId: s.nodeId, depth: s.depth, targetDepth: s.targetDepth, tier: s.tier, fsrs: s.fsrs, practiceCount: counts.get(s.nodeId) ?? 0 }));
+    .map((s) => ({ nodeId: s.nodeId, depth: s.depth, targetDepth: s.targetDepth, tier: s.tier, fsrs: s.fsrs, practiceCount: counts.get(s.nodeId) ?? 0, misconceptionSeen: seen.get(s.nodeId) ?? null }));
 }
 
 /** Ideas falling due per day across several goals, each idea counted once. */
@@ -120,7 +123,7 @@ export function goalSchedule(db: Database, goalId: string, now = new Date()): Go
   const firstFringe = candidates.find((c) => c.onFringe);
   const modeReason =
     choice.mode === 'consolidate'
-      ? `${due.length} ${due.length === 1 ? 'idea is' : 'ideas are'} fading; one practice set refreshes them together.`
+      ? consolidateReason(due)
       : choice.mode === 'deepen'
         ? `${deepenGaps.length} ${deepenGaps.length === 1 ? 'idea you know needs' : 'ideas you know need'} more depth for this goal.`
         : firstFringe
@@ -137,6 +140,14 @@ export function goalSchedule(db: Database, goalId: string, now = new Date()): Go
     daysToExam,
     mockOpen: mockExamsOpen(goal.assessment, examDate, now),
   };
+}
+
+/** Why practice comes first today: ideas fading, and misconceptions waiting for a contrast problem. */
+function consolidateReason(due: { reason: string }[]): string {
+  const contrast = due.filter((d) => d.reason === 'misconception').length;
+  const fading = due.length - contrast;
+  const parts = [fading ? `${fading} ${fading === 1 ? 'idea is' : 'ideas are'} fading` : '', contrast ? `${contrast} ${contrast === 1 ? 'idea has a misconception' : 'ideas have misconceptions'} to clear with a contrast problem` : ''].filter(Boolean);
+  return `${parts.join(', and ')}; one practice set covers them together.`;
 }
 
 /** What the renderer sees of a set. Solutions appear only once a problem is answered; rubrics never. */
@@ -443,6 +454,7 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     code: answer.extras.code,
     plots: plotsOf(deps, answer.extras.code),
     cards: cardsToJudge(db, withPremises(problem.nodeIds, view)),
+    misconceptions: problem.nodeIds.flatMap((id) => listBugsForNode(db, id).map((b) => ({ nodeId: id, description: b.description }))),
   });
   transaction(db, () => {
     creditRecalledCards(db, grade.recalledCards, { source: 'practice', sessionId: set?.sessionId ?? null });

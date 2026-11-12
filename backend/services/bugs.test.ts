@@ -4,7 +4,9 @@ import { openDatabase } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
 import { listEvidenceForNode } from '../store/evidence';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
-import { afterAnswer } from './bugs';
+import { afterAnswer, dismissMisconception } from './bugs';
+import { misconceptionsView } from './misconceptions';
+import { addCapabilities, createGoal } from '../store/goals';
 import { recordEvidence } from './evidence';
 
 const HOUR = 3_600_000;
@@ -83,5 +85,39 @@ describe('misconceptions', () => {
     expect(hasEnded({ lastSeen: at(-1) }, evidence)).toBe(true);
     expect(hasEnded({ lastSeen: at(30) }, evidence)).toBe(false); // one answer since
     expect(hasEnded({ lastSeen: at(45) }, evidence)).toBe(false);
+  });
+
+  it('recognises the same belief reworded, and opens an ended one again when it comes back', () => {
+    const { db, nash, answer, open } = setup();
+    answer(0, 0.3, WRONG);
+    answer(1, 0.2, 'Believes the equilibrium outcome is the best one for both of the players.');
+    expect(open()).toEqual([WRONG]);
+    // two clean answers, one half a day later: it ends
+    answer(2, 0.9);
+    answer(20, 0.9);
+    expect(open()).toEqual([]);
+    // the same belief again, worded differently: the same record, open again
+    answer(30, 0.2, 'Thinks an equilibrium means the best outcome for both players.');
+    expect(open()).toEqual([WRONG]);
+    expect(listBugsForNode(db, nash, true)).toHaveLength(1);
+  });
+
+  it('lists every misconception with how close it is to ending, and lets the learner set one aside', () => {
+    const { db, ids, nash, answer } = setup();
+    const goal = createGoal(db, { text: 'Pass the game theory exam' });
+    addCapabilities(db, goal.id, [{ statement: 'Can find equilibria', targets: [{ nodeId: nash, depth: 2 }] }]);
+    answer(0, 0.3, WRONG);
+    answer(2, 0.9);
+    recordEvidence(db, { nodeId: ids.get('dominant') as string, kind: 'explain', score: 0.3, reasoning: 'r', at: at(3) });
+    afterAnswer(db, ids.get('dominant') as string, 'Thinks a dominant strategy needs the other player to cooperate.', at(3));
+    const view = misconceptionsView(db);
+    expect(view.map((m) => [m.idea, m.cleanSince, m.goalId])).toEqual([
+      ['Strictly dominant strategy', 0, null],
+      ['Nash equilibrium', 1, goal.id],
+    ]);
+    const first = view[0]?.id ?? '';
+    dismissMisconception(db, first);
+    expect(misconceptionsView(db).find((m) => m.id === first)?.endedAt).not.toBeNull();
+    expect(() => dismissMisconception(db, first)).toThrow(/already ended/);
   });
 });

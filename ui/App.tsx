@@ -195,6 +195,8 @@ export function App() {
               onOpenGoal: (goalId) => openGoals({ name: 'goal', goalId }),
               onTestMe: (nodeIds) => openChoose({ pick: nodeIds, testMe: true }),
               onToday: () => navigate('today'),
+              onOpenPractice: openPractice,
+              onShowOnMap: showOnMap,
             }}
           />
         )}

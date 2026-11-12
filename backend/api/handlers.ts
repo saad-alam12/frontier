@@ -10,6 +10,8 @@ import { cheatSheetView, exportGoalNotes, goalNotesView, NOTE_CHARS, noteFor, sa
 import { notesPdfName } from '../core/notes';
 import { editIdea, mergeCandidates, mergeIdeas, NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
 import { weekReview } from '../services/weekReview';
+import { misconceptionsView } from '../services/misconceptions';
+import { dismissMisconception } from '../services/bugs';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
@@ -389,6 +391,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return undefined;
     },
     'stats.view': (filter) => statsView(ctx.db(), filter),
+    'stats.misconceptions': () => misconceptionsView(ctx.db()),
+    'stats.dismissMisconception': ({ bugId }) => {
+      dismissMisconception(ctx.db(), z.string().min(1).parse(bugId));
+      return misconceptionsView(ctx.db());
+    },
     'stats.week': ({ weekOf }) => weekReview(ctx.db(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().parse(weekOf ?? null)),
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
     'drafts.set': ({ key, value }) => {

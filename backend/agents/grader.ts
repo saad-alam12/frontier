@@ -17,6 +17,8 @@ export interface GradeInput {
   plots?: LlmImage[];
   /** Flashcards on the problem's ideas and what they build on, for the grade to say which facts the answer recalled. */
   cards?: { id: string; front: string; back: string }[];
+  /** Misconceptions still open on the problem's ideas, so the same belief is named the same way. */
+  misconceptions?: { nodeId: string; description: string }[];
 }
 
 export function buildPracticeGradeSchema(ideaIds: Set<string>, cardIds: ReadonlySet<string> = new Set()) {
@@ -57,6 +59,7 @@ export async function gradePractice(provider: LlmProvider, input: GradeInput): P
     `## Worked solution\n${input.solution}`,
     `## Rubric\n${input.rubric.map((r) => `- ${r}`).join('\n')}`,
     `## Ideas the problem needs (score each)\n${input.ideas.map((i) => `- [${i.id}] ${i.name}`).join('\n')}`,
+    ...(input.misconceptions?.length ? [`## Misconceptions already seen on these ideas\n${input.misconceptions.map((m) => `- [${m.nodeId}] ${m.description}`).join('\n')}`] : []),
     ...(cards.length ? [`## The learner's flashcards on these ideas\n${cards.map((c) => `- [${c.id}] ${c.front}\n  Answer: ${c.back.replace(/\n/g, ' ')}`).join('\n')}`] : []),
     `## Learner's answer${input.confidence === null ? '' : ` (confidence: ${confidenceLabel(input.confidence)})`}\n${input.answer.trim() || '(no text: the answer is the code below)'}`,
     ...(input.code?.source.trim() ? [codeForModel(input.code)] : []),
