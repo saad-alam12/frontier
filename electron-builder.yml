@@ -7,6 +7,9 @@ files:
   - out/**
   - package.json
   - prompts/**
+  # pdfjs installs a canvas library for drawing pages in Node; the app draws pages with Electron's own
+  # browser engine instead, and the library's binary bundles MPL-2.0 code (docs/progress.md, Decisions)
+  - '!node_modules/@napi-rs/canvas*/**'
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk*/**
   - node_modules/@huggingface/transformers/**

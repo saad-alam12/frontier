@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import type { EventSink } from './api/handlers';
 import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
+import type { PageRenderer } from './ingest/pictures';
 import { createInnerProvider, createProvider } from './llm';
 import type { LlmProvider } from './llm/provider';
 import type { ThrottledProvider } from './llm/queue';
@@ -49,6 +50,8 @@ export class AppContext {
     readonly version: string,
     readonly settingsFile: string,
     defaultDataFolder: string,
+    /** Makes pictures of PDF pages that are mostly figures; the app passes the browser engine's. */
+    private readonly renderer?: PageRenderer,
   ) {
     this.settings = new SettingsStore(settingsFile, defaultDataFolder);
     this.log = new LogFile(join(dirname(settingsFile), 'frontier.log'));
@@ -97,6 +100,8 @@ export class AppContext {
         provider: this.provider(),
         embedder: this.embedder(),
         sourcesDir: this.paths().sources,
+        renderer: this.renderer,
+        figuresDir: this.paths().figures,
         concurrency: this.settings.get().concurrency,
         onProgress: (p) => this.emit('library.progress', p),
         onSourceDone: (sourceId) => this.goalWorker().onSourceDone(sourceId),
@@ -126,6 +131,7 @@ export class AppContext {
       provider: this.provider(),
       ingestion: this.ingestion(),
       attachmentsDir: this.paths().attachments,
+      figuresDir: this.paths().figures,
       work: this.sessionWork,
       onGraded: (event: { setId: string; problemId: string }) => this.emit('practice.graded', event),
       onError: (message: string) => this.emit('app.toast', { kind: 'error', message }),
@@ -216,6 +222,6 @@ export class AppContext {
 
   private ensureFolders(): void {
     const p = this.paths();
-    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd, p.attachments, p.backups]) mkdirSync(dir, { recursive: true });
+    for (const dir of [p.root, p.sources, p.exports, p.modelsCache, p.agentCwd, p.attachments, p.figures, p.backups]) mkdirSync(dir, { recursive: true });
   }
 }

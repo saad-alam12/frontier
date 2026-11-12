@@ -140,6 +140,7 @@ describe('goal context', () => {
       bugs: [],
       examples: [],
       excerpts: [],
+      figures: [],
       history: [],
       previous: null,
       nextStage: 'predict',

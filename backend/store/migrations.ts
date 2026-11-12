@@ -424,6 +424,31 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE sources ADD COLUMN origin TEXT;
     `,
   },
+  {
+    version: 16,
+    // Pages of a source whose meaning is in a picture (a scan, a diagram, a large figure): the page,
+    // its marker in the source's text, the picture once it is made (a file in figures/, named by its
+    // content), what the extractor said it shows, and the ideas it shows.
+    sql: `
+      CREATE TABLE source_figures (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+        page INTEGER NOT NULL,
+        locator TEXT NOT NULL,
+        file TEXT,
+        width INTEGER,
+        height INTEGER,
+        caption TEXT,
+        UNIQUE (source_id, page)
+      );
+      CREATE TABLE figure_ideas (
+        figure_id TEXT NOT NULL REFERENCES source_figures(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+        PRIMARY KEY (figure_id, node_id)
+      );
+      CREATE INDEX figure_ideas_node ON figure_ideas(node_id);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

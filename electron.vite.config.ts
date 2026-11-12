@@ -22,7 +22,8 @@ export default defineConfig({
     root: resolve(__dirname, 'ui'),
     plugins: [react(), tailwindcss()],
     build: {
-      rollupOptions: { input: resolve(__dirname, 'ui/index.html') },
+      // the app's page, and the page a hidden window loads to make pictures of PDF pages
+      rollupOptions: { input: { index: resolve(__dirname, 'ui/index.html'), pages: resolve(__dirname, 'ui/pages/pages.html') } },
     },
   },
 });

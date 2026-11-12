@@ -213,6 +213,8 @@ The loop is fitted to the idea's **aim**, the depth the plan asks of it, and sto
 
 **Asking the tutor.** While a card is open the learner can ask the tutor something: a question in their own words on any card, and on a card that explains (an explanation, a worked example, "another way in") also "Explain it differently", "Simpler" and "Show an example". The answer appears under the card, short, at the goal's level, anchored in what the learner holds. It is not graded and writes no evidence; the card and an unsent answer stay as they are. When the open card is a question the learner has not answered, the tutor is told not to answer it or settle it, only to clarify. What was asked and answered stays in the conversation and the trail, and the tutor's words count as taught material (the transcript, the card writer).
 
+**Figures.** An idea whose material has a picture page that shows it (section 7, "Pages that are pictures") has up to four figures the tutor can show. The tutor is told what each shows (in the words of the extractor that saw it), and when it writes a card that explains (an explanation, a worked example, a fresh explanation, an index pass) the pictures of the first two go with the call, so it sees them. It shows one by writing `![a short caption](figure:ID)` in its text; an ID it was not given is sent back. The learner sees the picture there with its caption, source and page, and clicking it opens it large. Asked questions can show a figure the same way.
+
 **Hints.** On a question (check, derive, use) the learner can take up to two hints instead of giving up: the first points the way (which idea or premise to reach for), the second gives the first step of the reasoning; neither states the answer. An answer given with hints is not an unaided one, so it counts for less: its score times 0.85 with one hint and 0.7 with two, in the evidence and in what the loop does next. The conversation keeps the tutor's own score for the answer and says what it counts as.
 
 ### 4.3 Session rules
@@ -312,7 +314,9 @@ Each session the scheduler chooses between **build** (new fringe nodes), **deepe
 
 ## 7. Ingestion and delta reading
 
-Sources: PDFs, slides, Markdown notes, web pages, YouTube transcripts, exercise notebooks, and the system's own teaching session transcripts.
+Sources: PDFs (scans too), slides, Markdown notes, web pages, YouTube transcripts, exercise notebooks, and the system's own teaching session transcripts.
+
+**Pages that are pictures.** Some PDF pages say what they say in a picture: a scan, a slide that is mostly a diagram, a page with a large figure, a formula or table set as an image. When a PDF is read, each page is measured from its drawing operations: how much of it pictures cover, and how many shapes are drawn with lines and how much of the page they span. A page is a picture page when it has little text (under 250 characters) and any figure (pictures over 5% of the page, or a few shapes over a tenth of it), or when a figure covers most of it (pictures over 35%, or a dozen shapes over a quarter) and its text is under 3,000 characters; a page of plain text, or a title slide with a small logo, is not one. Picture pages are kept even with no text, and a slide build whose page is only a heading is not collapsed into the next page, which may show another figure. When the source is read, a picture of each such page is made once (WebP, about 1.15 megapixels, so the model reads it unscaled) with the browser engine the app already ships, in a hidden window, and kept in the data folder's `figures/`, named by its content. The extractor gets the pictures with the part's text, in page order, reads each as part of the text at its marker, and describes every one (what it shows, for a tutor who will not see it, and which ideas it shows); a part counts each picture as about 1,600 tokens, so a part holds a sensible number of them, and at most 40 go with one call. The pictures cost more of the learner's plan, once per source. A scan with no text at all is read entirely from its pictures. When pictures cannot be made, the pages are read from their text and the Library says why; outside the app (scripts) a PDF with no text is refused. Reading a source again keeps its pictures; removing it deletes those no other source uses.
 
 **From a link.** A web page, a PDF or a text file can be added by its address. It is fetched once, by the app under its own name, and a copy is kept in the data folder, so it is read (and read again) like a file; the source remembers its address, and the same address twice is the same source. A site that refuses, or a page that only shows its text in a browser, is not worked around: the app says so and offers "Paste the text instead". A video's transcript is not fetched. Video sites give transcripts only to their own players, and Frontier does not pretend to be one. For a video link the app finds the title and asks the learner to copy the transcript from the video's page and paste it. A pasted transcript (time stamps, then what is said) is kept by the minute, so its ideas cite where in the video they are taught ("12:00–18:00").
 
@@ -363,7 +367,7 @@ A desktop app (macOS first, then Windows/Linux). The rail has the five places yo
 | Stats | How you learn, filtered by time range, goal and topic (ideas clustered by chains): a few plain sentences on what stands out, then time per week by goal (free study as its own series) against the budgets' rhythm, every day for twelve weeks, what you know over time, what you keep (projected recall), how sure against how right, when you study, hardest ideas, shared ideas and the time they saved, misconceptions that came back, and time against each budget, with free study as its own line |
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions (a chosen one with what was asked), replay |
-| Library | Add sources (files, also dropped anywhere on the window; a link to a page or a PDF; or pasted text: notes, an article, a video's transcript, read like a file), open a source's stored original, see about how long a source being read still takes and stop it (what was read stays, the rest waits for "Run again"), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
+| Library | Add sources (files, also dropped anywhere on the window; a link to a page or a PDF; or pasted text: notes, an article, a video's transcript, read like a file), see how many pages were read from their pictures, open a source's stored original, see about how long a source being read still takes and stop it (what was read stays, the rest waits for "Run again"), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
 | Settings | Model provider and models, flashcards in sessions without a goal, reminders, data folder, backups (make one, restore one), the log, preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.
@@ -390,6 +394,7 @@ The interface uses cards and controls, not a raw chat log, wherever the step loo
 | Math rendering | KaTeX | MIT |
 | Markdown | react-markdown + remark/rehype plugins | MIT |
 | PDF text | pdfjs-dist | Apache-2.0 |
+| Pictures of PDF pages | pdfjs-dist in a hidden window of Electron's own browser engine (no image library: the canvas library pdfjs installs for Node bundles MPL-2.0 code and is left out of the app) | Apache-2.0, Electron MIT |
 | Validation | zod | MIT |
 | Tests | vitest | MIT |
 | LLM (default) | Claude Agent SDK, authenticated with the learner's Claude login (subscription) | Anthropic terms — isolated behind the provider interface |
@@ -430,10 +435,10 @@ Rules:
 | Course profiler | assessment and scope material | exam profile, upcoming lectures |
 | Prober | target subgraph, you-layer state, the goal's context | probe questions; then assessment updates |
 | Planner | owned nodes, targets, fringe | lesson map (DAG of nodes for this session) |
-| Tutor | lesson map, node, learner's neighbourhood, bugs, sources, the goal's level, scope and context, the flashcards of the node and its premises | the next step card (predict / explain / check / connect / compress / use), and with a grade the flashcards the answer recalled |
+| Tutor | lesson map, node, learner's neighbourhood, bugs, sources, the figures that show the node (their pictures on cards that explain), the goal's level, scope and context, the flashcards of the node and its premises | the next step card (predict / explain / check / connect / compress / use), which may show a figure, and with a grade the flashcards the answer recalled |
 | Tutor (asked) | the same context as a step, the open card and whether it is an unanswered question, the learner's question or the form they asked for | a short answer in Markdown (`submit_answer`); no grade, no card |
 | Tutor escalation | the whole history of one idea after a worked example did not help | a re-diagnosis and a fresh explanation (once per idea) |
-| Extractor | chunk + graph-so-far digest | nodes and chains with citations |
+| Extractor | chunk + graph-so-far digest + the pictures of its picture pages | nodes and chains with citations; what each picture shows and the nodes it shows |
 | Matcher | extracted node + candidates | identity links |
 | Problem Generator | target nodes and chains, rung, cue, presentation, recent problems | statement, solution, rubric |
 | Grader | problem, solution, rubric, learner answer, the flashcards of its ideas | score 0–10 + reasoning, and the flashcards the answer recalled |
@@ -450,6 +455,7 @@ Rules:
                        every schema upgrade and every restore, and those made with "Back up now"
   sources/             original files the learner added
   attachments/         images attached to session answers, named by their content hash
+  figures/             pictures of PDF pages that are mostly figures, named by their content hash
   models-cache/        the local embedding model
   agent/               working folder of the model process (nothing is read from it)
   exports/             optional Markdown export of nodes (Obsidian-readable)

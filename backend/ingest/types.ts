@@ -2,6 +2,8 @@
 export interface TextBlock {
   text: string;
   locator: string;
+  /** A PDF page whose meaning is in a picture (design §7): its page number, to make the picture from. Its text may be empty. */
+  picture?: number;
 }
 
 export interface ReadResult {

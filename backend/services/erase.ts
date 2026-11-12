@@ -15,6 +15,7 @@ import { deleteCapabilities, forgetCompiledSource, listCapabilities, listGoals, 
 import { closePracticeSet, openSetsWith } from '../store/practice';
 import { activeSession } from '../store/sessions';
 import { coveredNodeIds, coveredOutside, deleteSource, getSource, listSources } from '../store/sources';
+import { figureFilesInUse, listFigures } from '../store/figures';
 import { dropSourceRefs, listChains, listNodes, retireNodes } from '../store/world';
 import { eraseEvidenceFor } from './evidence';
 import { refreshGoalFields } from './knowledge';
@@ -51,6 +52,8 @@ export interface EraseDeps {
   db: Database;
   /** Where the app keeps its copies of added files. */
   sourcesDir: string;
+  /** Where the pictures of picture pages are kept; a removed source's pictures that nothing else uses are deleted. */
+  figuresDir?: string;
   /** A source being read would write ideas for a source that no longer exists. */
   isReading?: (sourceId: string) => boolean;
 }
@@ -112,6 +115,7 @@ export function eraseFromMap(deps: EraseDeps, request: EraseRequest): EraseResul
   const plan = planErase(db, request);
   if (plan.sourceIds.some((id) => deps.isReading?.(id))) throw new Error('A source you chose is being read right now. Wait until it finishes, then erase.');
   const files = plan.sourceIds.map((id) => getSource(db, id)?.path).filter((p): p is string => Boolean(p));
+  const pictures = plan.sourceIds.flatMap(pictureFiles(db));
   const ideas = [...plan.nodeIds];
 
   const goalsToMap = transaction(db, () => {
@@ -167,7 +171,24 @@ export function eraseFromMap(deps: EraseDeps, request: EraseRequest): EraseResul
       // The database is already erased; a stored copy that cannot be removed is unused and harmless.
     }
   }
+  deleteUnusedPictures(deps, pictures);
   return { ...countsOf(plan), goalsToMap };
+}
+
+const pictureFiles = (db: Database) => (sourceId: string) => listFigures(db, sourceId).flatMap((f) => (f.file ? [f.file] : []));
+
+/** Delete pictures of removed sources that no other source uses (two sources can share a picture). */
+function deleteUnusedPictures(deps: EraseDeps, files: string[]): void {
+  if (!deps.figuresDir || files.length === 0) return;
+  const inUse = figureFilesInUse(deps.db);
+  for (const file of files) {
+    if (inUse.has(file)) continue;
+    try {
+      rmSync(join(deps.figuresDir, file), { force: true });
+    } catch {
+      // an unused picture that cannot be removed is harmless
+    }
+  }
 }
 
 /**
@@ -180,11 +201,13 @@ export function removeSource(deps: EraseDeps, sourceId: string): void {
   const source = getSource(db, sourceId);
   if (!source) return;
   if (deps.isReading?.(sourceId)) throw new Error('This source is being read right now. Wait until it finishes, then remove it.');
+  const pictures = pictureFiles(db)(sourceId);
   transaction(db, () => {
     dropSourceRefs(db, sourceId);
     for (const goal of listGoals(db)) forgetCompiledSource(db, goal.id, sourceId);
-    deleteSource(db, sourceId); // its parts, its coverage and its place in goals' material go with it
+    deleteSource(db, sourceId); // its parts, its coverage, its picture pages and its place in goals' material go with it
   });
+  deleteUnusedPictures(deps, pictures);
   if (!source.path) return;
   try {
     rmSync(join(deps.sourcesDir, source.path), { force: true });

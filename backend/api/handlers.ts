@@ -36,6 +36,7 @@ import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
+import { FigureRequestSchema, figureView } from '../services/figures';
 import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
@@ -150,7 +151,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'library.reread': ({ sourceId }) => readSourceAgain(ctx.db(), ctx.ingestion(), sourceId),
     'library.remove': ({ sourceId }) => {
-      removeSource({ db: ctx.db(), sourcesDir: ctx.paths().sources, isReading: (id) => ctx.ingestion().isRunning(id) }, sourceId);
+      removeSource({ db: ctx.db(), sourcesDir: ctx.paths().sources, figuresDir: ctx.paths().figures, isReading: (id) => ctx.ingestion().isRunning(id) }, sourceId);
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
@@ -304,7 +305,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),
     'map.erasePreview': (request) => previewErase(ctx.db(), EraseRequestSchema.parse(request)),
     'map.erase': (request) => {
-      const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, isReading: (id) => ctx.ingestion().isRunning(id) }, EraseRequestSchema.parse(request));
+      const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, figuresDir: ctx.paths().figures, isReading: (id) => ctx.ingestion().isRunning(id) }, EraseRequestSchema.parse(request));
       for (const goalId of result.goalsToMap) ctx.goalWorker().refresh(goalId); // goals left with no map are mapped again
       return result;
     },
@@ -324,6 +325,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'attachments.save': (upload) => ({ name: saveAttachment(ctx.paths().attachments, upload) }),
     'attachments.read': ({ name }) => attachmentDataUrl(ctx.paths().attachments, name),
+    'figures.read': (input) => figureView(ctx.db(), ctx.paths().figures, FigureRequestSchema.parse(input).figureId),
     'cards.queue': ({ goalId }) => cardQueue(ctx.db(), goalId),
     'cards.review': (input) => {
       const { cardId, rating } = ReviewInputSchema.parse(input);

@@ -8,6 +8,10 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
+import { saveImageFile } from '../backend/store/attachments';
+import { describeFigure, listFigures, setFigurePicture, syncFigurePages } from '../backend/store/figures';
+import { createSource } from '../backend/store/sources';
 import { FakeProvider } from '../backend/llm/FakeProvider';
 import type { CompleteRequest } from '../backend/llm/provider';
 import { openDatabase } from '../backend/store/db';
@@ -50,12 +54,17 @@ function tutor(scores: number[]) {
       return { recalled: ids.map((nodeId) => ({ nodeId, score: 0.8, note: 'Named it and said why.' })), canDo: closing ? 'You can find equilibria in small games and say why they hold.' : null, previewQuestion: closing ? 'What changes when one player moves first?' : null };
     }
     const next = /roduce the \*\*(\w+)\*\* card/.exec(text)?.[1] ?? null;
+    // shows the idea's figure when it has one, as the real tutor may
+    const figure = /## Figures you can show[\s\S]*?^- \[(fig_[a-z0-9]+)\]/m.exec(text)?.[1];
     const grading = /Grade the response/.test(text);
     const score = scores[i++ % scores.length] ?? 0.8;
     const grade = grading ? { score, feedback: score >= 0.7 ? 'Right, and you said why: no player gains by moving alone.' : 'Close, but you checked only one player. Each must be best-responding.', misconception: null, confidentlyWrong: false, missingBackground: null } : null;
     const cards: Record<string, unknown> = {
       predict: { stage: 'predict', prompt: 'Two firms set prices at the same time. What would make a pair of prices stable, so neither firm wants to change?' },
-      explain: { stage: 'explain', markdown: '## The idea\n\nA profile is stable when **no player gains by changing their own strategy alone**. Formally, for every player $i$:\n\n$$u_i(s_i, s_{-i}) \\ge u_i(s_i\', s_{-i}) \\quad \\text{for all } s_i\'$$\n\nSo each strategy is a best response to the others.' },
+      explain: {
+        stage: 'explain',
+        markdown: `## The idea\n\nA profile is stable when **no player gains by changing their own strategy alone**. Formally, for every player $i$:\n\n$$u_i(s_i, s_{-i}) \\ge u_i(s_i', s_{-i}) \\quad \\text{for all } s_i'$$\n\nSo each strategy is a best response to the others.${figure ? `\n\n![The pricing game as a table: each cell holds both firms' payoffs](figure:${figure})\n\nIn the table, look along a row for the column firm and down a column for the row firm: a cell where neither can do better is stable.` : ''}`,
+      },
       check: { stage: 'check', question: 'In the game below, is (Up, Left) stable? Say which deviation you checked.', answerKey: 'Yes', rubric: ['says yes', 'checks both players'] },
       derive: { stage: 'derive', prompt: 'Rebuild the definition from best responses: what must hold for each player?', answerKey: 'mutual best responses', rubric: ['uses best responses'] },
       connect: { stage: 'connect', prompt: 'State one link between this idea and dominant strategies.' },
@@ -87,6 +96,38 @@ const sessionPlanner = {
   background: [],
 };
 
+/** A PNG of a 2 × 2 payoff table drawn in boxes, standing in for a page picture (the sandbox has no browser to draw pages). */
+function tablePicture(width = 900, height = 560): Buffer {
+  const ink = (x: number, y: number): boolean => {
+    const left = 150, top = 90, cell = 300, rows = 2;
+    const inGrid = x >= left && x <= left + cell * 2 && y >= top && y <= top + (cell * rows) / 1.6;
+    const lineX = [0, 1, 2].some((i) => Math.abs(x - (left + i * cell)) < 3);
+    const lineY = [0, 1, 2].some((i) => Math.abs(y - (top + (i * cell) / 1.6)) < 3);
+    const mark = [0, 1].some((c) => [0, 1].some((r) => Math.hypot(x - (left + cell * c + 150), y - (top + (cell * r) / 1.6 + 94)) < 22));
+    return (inGrid && (lineX || lineY)) || mark;
+  };
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const at = y * (width * 3 + 1) + 1 + x * 3;
+      raw.fill(ink(x, y) ? 40 : 255, at, at + 3);
+    }
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
 const provider = new FakeProvider({ tutor: tutor([0.85, 0.6, 0.9]), tutorEscalation: tutor([0.8]), planner, sessionPlanner: [sessionPlanner], extractor: () => ({ nodes: [], chains: [], conflicts: [] }), matcher: () => ({ decisions: [] }) });
 const db: Database = openDatabase(join(dataFolder, 'frontier.db'));
 const ids = seedExampleGraph(db);
@@ -95,6 +136,16 @@ const work = new SessionWork();
 const deps = { db, provider, work };
 const now = new Date();
 const daysAgo = (days: number, hour = 19) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, hour, 10);
+
+// a lecture whose page 7 is mostly a figure: its picture shows Nash equilibrium
+const lecture = createSource(db, { kind: 'pdf', title: 'Lecture 3: Equilibrium', path: null, hash: 'sandbox-lecture-3' }, [{ text: '[p7]\nThe pricing game', locator: 'p7' }]);
+db.prepare("UPDATE sources SET status = 'done', chunks_done = 1 WHERE id = ?").run(lecture.id);
+syncFigurePages(db, lecture.id, [{ page: 7, locator: 'p7' }]);
+const tableFigure = listFigures(db, lecture.id)[0];
+if (tableFigure) {
+  setFigurePicture(db, tableFigure.id, { file: saveImageFile(join(dataFolder, 'figures'), tablePicture(), 'image/png'), width: 900, height: 560 });
+  describeFigure(db, tableFigure.id, "The pricing game as a 2 × 2 table of both firms' payoffs; the low-low cell is circled.", [id('nash'), id('dominant')]);
+}
 
 // what the learner brought: the basics of games
 for (const key of ['strategy', 'payoff', 'player']) if (ids.has(key)) recordEvidence(db, { nodeId: id(key), kind: 'explain', score: 0.95, reasoning: 'probe' });
@@ -176,6 +227,11 @@ const adding = new FakeProvider({
 await proposeAddition({ db, provider: adding }, pricing.id);
 refreshGoalFields(db);
 
-if (flags.includes('--open-session')) await answer(await startSession(deps, exam.id), 1);
+// an open session at its first explanation (which shows the lecture's figure), past the recall and the orientation
+if (flags.includes('--open-session')) {
+  let open = await startSession(deps, exam.id);
+  for (let i = 0; i < 3 && open.phase !== 'teach'; i += 1) open = await respond(deps, open.id, { answer: '' });
+  if (open.card?.stage === 'predict') await respond(deps, open.id, { answer: 'Each firm would undercut the other until neither gains from moving alone.', confidence: 0.33 });
+}
 db.close();
 console.log(`sandbox ready: FRONTIER_USER_DATA=${folder} npx electron-vite dev --remoteDebuggingPort 9333`);

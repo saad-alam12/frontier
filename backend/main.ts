@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, nativeTheme, Notification, shell } from 'electron';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
+import { ChromiumPageRenderer } from './render/pagePictures';
 import { externalUrl, isAppPage } from './api/navigation';
 import { resumeGrading } from './services/practice';
 import { badgeCount, takeReminder } from './services/reminders';
@@ -135,6 +136,7 @@ void app.whenReady().then(() => {
     app.getVersion(),
     join(app.getPath('userData'), 'settings.json'),
     join(app.getPath('home'), 'Frontier'),
+    new ChromiumPageRenderer(),
   );
   context = ctx;
   ctx.log.info('app', `Frontier ${app.getVersion()} started on ${process.platform}`);
@@ -172,8 +174,9 @@ void app.whenReady().then(() => {
   }, REMINDER_CHECK_MS).unref();
   ctx.resumeGoalWork();
   resumeGrading(ctx.practiceDeps());
+  // the hidden window that makes page pictures is not the app's window
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!mainWindow) createWindow();
   });
 });
 

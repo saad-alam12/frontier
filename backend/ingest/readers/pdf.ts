@@ -1,5 +1,6 @@
 import type * as PdfJsModule from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { ReadResult, TextBlock } from '../types';
+import { isPicturePage, measureOperators } from '../pageLayout';
 
 interface TextItemLike {
   str?: string;
@@ -23,8 +24,12 @@ async function loadPdfJs(): Promise<PdfJs> {
   return pdfjs;
 }
 
-/** One block per page, locator `p<N>`. Lines are rebuilt from item positions. */
-export async function readPdf(data: Uint8Array, fallbackTitle: string): Promise<ReadResult> {
+/**
+ * One block per page, locator `p<N>`. Lines are rebuilt from item positions. A page whose meaning is
+ * in a picture (a scan, a diagram, a large figure) is marked with its page number, and kept even when
+ * it has no text; `pictures: false` leaves such pages out (when no pictures can be made).
+ */
+export async function readPdf(data: Uint8Array, fallbackTitle: string, options: { pictures?: boolean } = {}): Promise<ReadResult> {
   const pdfjs = await loadPdfJs();
   const task = pdfjs.getDocument({ data, useSystemFonts: true, verbosity: 0 });
   const doc = await task.promise.catch((error: unknown) => {
@@ -46,11 +51,25 @@ export async function readPdf(data: Uint8Array, fallbackTitle: string): Promise<
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
     const text = itemsToText(content.items as TextItemLike[]);
-    if (text.trim()) blocks.push({ text, locator: `p${i}` });
+    const picture = options.pictures !== false && (await isPicture(pdfjs, page, text));
+    if (picture) blocks.push({ text, locator: `p${i}`, picture: i });
+    else if (text.trim()) blocks.push({ text, locator: `p${i}` });
     page.cleanup();
   }
   await task.destroy();
   return { title, blocks };
+}
+
+type PdfPage = Awaited<ReturnType<Awaited<ReturnType<PdfJs['getDocument']>['promise']>['getPage']>>;
+
+/** Whether the page says what it says in a picture; a page whose drawing cannot be read counts as text. */
+async function isPicture(pdfjs: PdfJs, page: PdfPage, text: string): Promise<boolean> {
+  try {
+    const list = await page.getOperatorList();
+    return isPicturePage(measureOperators(list.fnArray, list.argsArray, pdfjs.OPS, page.view, text.replace(/\s+/g, '').length));
+  } catch {
+    return false;
+  }
 }
 
 function itemsToText(items: TextItemLike[]): string {

@@ -20,7 +20,11 @@ export function saveAttachment(dir: string, upload: unknown): string {
   // the first plain-language issue is what the learner sees, not zod's JSON dump
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'That image cannot be attached.');
   const { mediaType, data } = parsed.data;
-  const bytes = Buffer.from(data, 'base64');
+  return saveImageFile(dir, Buffer.from(data, 'base64'), mediaType);
+}
+
+/** Store image bytes under the name of their content; the same bytes again reuse the file. Returns the name. */
+export function saveImageFile(dir: string, bytes: Uint8Array, mediaType: ImageMediaType): string {
   const name = `${createHash('sha256').update(bytes).digest('hex')}.${IMAGE_EXTENSION[mediaType]}`;
   const path = join(dir, name);
   if (!existsSync(path)) {

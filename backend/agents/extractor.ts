@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { estimateTokens } from '../ingest/chunker';
-import type { LlmProvider } from '../llm/provider';
+import type { LlmImage, LlmProvider } from '../llm/provider';
 import { loadPrompt } from './prompts';
 
 const TEMP_ID = /^n\d{1,3}$/;
@@ -27,6 +27,13 @@ export const ExtractedExampleSchema = z.object({
   locator: z.string().trim().max(80).optional(),
 });
 
+/** What a page picture shows, for a tutor who will not see it, and the ideas it shows. */
+export const FigureNoteSchema = z.object({
+  page: z.string().trim().min(1).max(80),
+  shows: z.string().trim().min(10).max(600),
+  ideas: z.array(z.string().trim().min(1)).max(6).default([]),
+});
+
 export const ConflictSchema = z.object({
   nodeId: z.string().trim().min(1),
   description: z.string().trim().min(3).max(400),
@@ -37,6 +44,7 @@ export type Extraction = {
   chains: z.infer<typeof ExtractedChainSchema>[];
   examples: z.infer<typeof ExtractedExampleSchema>[];
   conflicts: z.infer<typeof ConflictSchema>[];
+  figures: z.infer<typeof FigureNoteSchema>[];
 };
 
 /** Hard cap per call; the range below is what the extractor is asked for. */
@@ -55,14 +63,19 @@ export function ideaRange(text: string): { min: number; max: number } {
   return { min, max };
 }
 
-/** The schema is built per call so chain references are checked against the ids the model was given. */
-export function buildExtractionSchema(knownIds: Set<string>) {
+/**
+ * The schema is built per call so chain references are checked against the ids the model was given,
+ * and every page picture sent with the text is described once.
+ */
+export function buildExtractionSchema(knownIds: Set<string>, pictures: string[] = []) {
+  const attached = new Set(pictures);
   return z
     .object({
       nodes: z.array(ExtractedNodeSchema).max(MAX_IDEAS),
       chains: z.array(ExtractedChainSchema).max(80).default([]),
       examples: z.array(ExtractedExampleSchema).max(20).default([]),
       conflicts: z.array(ConflictSchema).max(20).default([]),
+      figures: z.array(FigureNoteSchema).max(Math.max(1, pictures.length)).default([]),
     })
     .superRefine((value, ctx) => {
       const tempIds = new Set<string>();
@@ -86,6 +99,17 @@ export function buildExtractionSchema(knownIds: Set<string>) {
       value.conflicts.forEach((k, i) => {
         if (!knownIds.has(k.nodeId)) ctx.addIssue({ code: 'custom', path: ['conflicts', i, 'nodeId'], message: `conflicts must name an id from the graph so far` });
       });
+      const described = new Set<string>();
+      value.figures.forEach((f, i) => {
+        if (!attached.has(f.page)) ctx.addIssue({ code: 'custom', path: ['figures', i, 'page'], message: `${f.page} is not one of the page pictures sent (${pictures.join(', ') || 'none'})` });
+        if (described.has(f.page)) ctx.addIssue({ code: 'custom', path: ['figures', i, 'page'], message: `${f.page} is described twice` });
+        described.add(f.page);
+        f.ideas.forEach((id, j) => {
+          if (!valid(id)) ctx.addIssue({ code: 'custom', path: ['figures', i, 'ideas', j], message: `unknown id ${id}; use a tempId from nodes or an id from the graph so far` });
+        });
+      });
+      const missing = pictures.filter((p) => !described.has(p));
+      if (missing.length) ctx.addIssue({ code: 'custom', path: ['figures'], message: `describe every page picture once; missing: ${missing.join(', ')}` });
     });
 }
 
@@ -130,6 +154,8 @@ export interface ExtractorInput {
   chunkCount: number;
   text: string;
   digest: DigestEntry[];
+  /** Pictures of the part's picture pages, by their marker in the text, in the order they are attached. */
+  pictures?: { locator: string; image: LlmImage }[];
 }
 
 export function formatDigest(digest: DigestEntry[]): string {
@@ -139,6 +165,7 @@ export function formatDigest(digest: DigestEntry[]): string {
 
 export async function runExtractor(provider: LlmProvider, input: ExtractorInput, signal?: AbortSignal): Promise<Extraction> {
   const knownIds = new Set(input.digest.map((d) => d.id));
+  const pictures = input.pictures ?? [];
   const range = ideaRange(input.text);
   const message = [
     `Source: "${input.sourceTitle}" (${input.sourceKind}). ${input.chunkCount === 1 ? 'The whole source' : `Part ${input.chunkIndex + 1} of ${input.chunkCount}`}, ${input.locator}.`,
@@ -149,12 +176,19 @@ export async function runExtractor(provider: LlmProvider, input: ExtractorInput,
     '',
     '## Text',
     input.text,
+    ...(pictures.length
+      ? [
+          '',
+          '## Page pictures',
+          `The ${pictures.length === 1 ? 'image' : `${pictures.length} images`} after this text ${pictures.length === 1 ? 'is the picture' : 'are the pictures'} of ${pictures.length === 1 ? 'this page' : 'these pages, in this order'}: ${pictures.map((p) => p.locator).join(', ')}. Read each as part of the text at its marker, and describe each in figures.`,
+        ]
+      : []),
   ].join('\n');
   const result = await provider.complete({
     role: 'extractor',
     system: loadPrompt('extractor'),
-    messages: [{ role: 'user', content: message }],
-    submit: { name: 'submit_extraction', description: 'Submit the ideas, chains, worked examples and conflicts found in this text.', schema: buildExtractionSchema(knownIds) },
+    messages: [{ role: 'user', content: message, images: pictures.length ? pictures.map((p) => p.image) : undefined }],
+    submit: { name: 'submit_extraction', description: 'Submit the ideas, chains, worked examples and conflicts found in this text, and what each page picture shows.', schema: buildExtractionSchema(knownIds, pictures.map((p) => p.locator)) },
     signal,
   });
   return result.data;

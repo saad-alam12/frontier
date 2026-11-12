@@ -25,19 +25,24 @@ export function kindForFile(path: string): SourceKind | null {
 
 export const SUPPORTED_EXTENSIONS = ['pdf', 'md', 'markdown', 'txt', 'html', 'htm'];
 
-export async function readSourceFile(path: string): Promise<{ kind: SourceKind; bytes: Buffer; result: ReadResult }> {
+/** What a reader is asked for: `pictures: false` when no pictures of pages can be made, so a PDF's picture pages are left out. */
+export interface ReadOptions {
+  pictures?: boolean;
+}
+
+export async function readSourceFile(path: string, options: ReadOptions = {}): Promise<{ kind: SourceKind; bytes: Buffer; result: ReadResult }> {
   const kind = kindForFile(path);
   if (!kind) throw new Error(`Unsupported file type: ${basename(path)}`);
   const bytes = await readFile(path);
   const fallbackTitle = basename(path, extname(path));
-  const result = await readBytes(kind, bytes, fallbackTitle);
+  const result = await readBytes(kind, bytes, fallbackTitle, options);
   return { kind, bytes, result };
 }
 
-export async function readBytes(kind: SourceKind, bytes: Buffer, fallbackTitle: string): Promise<ReadResult> {
+export async function readBytes(kind: SourceKind, bytes: Buffer, fallbackTitle: string, options: ReadOptions = {}): Promise<ReadResult> {
   switch (kind) {
     case 'pdf':
-      return readPdf(new Uint8Array(bytes), fallbackTitle);
+      return readPdf(new Uint8Array(bytes), fallbackTitle, options);
     case 'html':
       return readHtml(decodeText(bytes), fallbackTitle);
     case 'markdown':
@@ -63,7 +68,7 @@ export function decodeText(bytes: Uint8Array): string {
   }
 }
 
-/** True when a read gave nothing to learn from: no block with any text. */
+/** True when a read gave nothing to learn from: no block with any text, and no page that is a picture. */
 export function hasNoText(result: ReadResult): boolean {
-  return !result.blocks.some((b) => b.text.trim());
+  return !result.blocks.some((b) => b.text.trim() || b.picture);
 }

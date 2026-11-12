@@ -9,6 +9,7 @@ import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
 import { activeSession } from '../store/sessions';
 import { coveredNodeIds, findSourceByOrigin, listChunks, listSources } from '../store/sources';
+import { listFigures } from '../store/figures';
 import { LinkError, fetchDocument, fetchVideoTitle } from '../ingest/link';
 import type { Fetcher } from '../ingest/link';
 import { readBytes } from '../ingest/readers';
@@ -33,6 +34,8 @@ export interface SourceSummary extends Source {
   queued: boolean;
   /** The learner stopped the reading, or the app closed during it: nothing failed, the rest waits for "Run again". */
   stopped: boolean;
+  /** Pages that are mostly figures, read from their pictures as well as their text. */
+  pictures: number;
 }
 
 /**
@@ -57,6 +60,7 @@ export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionServ
       secondsLeft: ingestion?.secondsLeft(s.id) ?? null,
       queued: ingestion?.isRunning(s.id) ?? false,
       stopped: s.status === 'failed' && !chunks.some((c) => c.status === 'failed'),
+      pictures: listFigures(db, s.id).filter((f) => f.file).length,
       roles,
       readsIdeas: roles.length === 0 || roles.some((r) => EXTRACTED_ROLES.includes(r)),
       readOld: s.extraction < EXTRACTION && s.chunksDone > 0,

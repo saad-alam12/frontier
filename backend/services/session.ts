@@ -3,8 +3,8 @@
  * close → preview. State is persisted after every transition so the app can resume at the same card.
  */
 import { passageFor } from '../core/passage';
-import { cardText, runRecall, runTutorStep, runTutorAside } from '../agents/tutor';
-import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput, AsideMode } from '../agents/tutor';
+import { FIGURE_STAGES, cardText, runRecall, runTutorStep, runTutorAside } from '../agents/tutor';
+import type { Grade, LearnerResponse, TutorCard, TutorFigure, TutorGoal, TutorStepInput, AsideMode } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
 import { HINT_STAGES, IDEA_MAX_MINUTES, MAX_HINTS, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, countedScore, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
@@ -16,6 +16,7 @@ import { isCancelled, CancelledError } from '../llm/provider';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
+import { figuresForNode, getFigure } from '../store/figures';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
@@ -234,6 +235,8 @@ export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> 
   ingestion?: IngestionService;
   /** Where answer images are stored; needed only when a response attaches any. */
   attachmentsDir?: string;
+  /** Where the pictures of picture pages are kept; without it the tutor gets figures by description only. */
+  figuresDir?: string;
   /** The work in flight, which keeps running when the Session screen closes. */
   work: SessionWork;
   /** Told when an idea is finished, so its flashcards can be written in the background. */
@@ -384,6 +387,26 @@ function checkExtras(deps: SessionDeps, response: LearnerResponse): LearnerRespo
     if (!dir || !extras.attachments.every((name) => attachmentExists(dir, name))) throw new Error('An attached image was not saved. Attach it again.');
   }
   return { ...rest, ...(extras.attachments ? { attachments: extras.attachments } : {}), ...(extras.quote ? { quote: extras.quote } : {}) };
+}
+
+/** Figures whose pictures go with a call that writes an explaining card: the first two the idea has. */
+const FIGURE_PICTURES = 2;
+
+function figureImagesOf(deps: SessionDeps, figures: TutorFigure[]): LlmImage[] | undefined {
+  const dir = deps.figuresDir;
+  if (!dir || figures.length === 0) return undefined;
+  const images: LlmImage[] = [];
+  for (const figure of figures.slice(0, FIGURE_PICTURES)) {
+    const stored = getFigure(deps.db, figure.id);
+    if (!stored?.file) break;
+    try {
+      images.push(readAttachment(dir, stored.file));
+    } catch {
+      // a picture file that went missing: the tutor goes by the description, and the order still matches
+      break;
+    }
+  }
+  return images.length ? images : undefined;
 }
 
 /** The images of the response being judged, read from disk for the model call. */
@@ -610,7 +633,8 @@ async function produceCard(
     state.owed = true;
     saveSessionState(deps.db, sessionId, state);
   }
-  const result = await runTutorStep(deps.provider, { ...buildTutorInput(deps.db, state, step, previous, stage, goal), images: previous ? imagesOf(deps, previous.response) : undefined, retry }).catch(owe);
+  const input = buildTutorInput(deps.db, state, step, previous, stage, goal);
+  const result = await runTutorStep(deps.provider, { ...input, images: previous ? imagesOf(deps, previous.response) : undefined, figureImages: FIGURE_STAGES.has(stage) ? figureImagesOf(deps, input.figures) : undefined, retry }).catch(owe);
   stillOpen(deps.db, sessionId);
   if (!result.card) return owe(new Error('the tutor returned no card'));
   state.stage = stage;
@@ -824,6 +848,9 @@ function writeOutcome(db: Database, sessionId: string, state: SessionState, step
   creditRecalledCards(db, grade.recalledCards, { source: 'session', sessionId });
 }
 
+/** Figures the tutor is told about for one idea. */
+const MAX_FIGURES = 4;
+
 function buildTutorInput(db: Database, state: SessionState, step: LessonStep, previous: TutorStepInput['previous'], nextStage: Stage | null, goal: TutorGoal): TutorStepInput {
   const view = loadKnowledge(db);
   const node = view.nodes.get(step.nodeId);
@@ -852,6 +879,9 @@ function buildTutorInput(db: Database, state: SessionState, step: LessonStep, pr
       const cited = node.sources.find((ref) => ref.sourceId === c.sourceId)?.locator;
       return { locator: `${c.sourceTitle}, ${cited ?? c.locator}`, text: passageFor(c.text, cited, node.name) };
     }),
+    figures: figuresForNode(db, node.id)
+      .slice(0, MAX_FIGURES)
+      .map((f) => ({ id: f.id, where: `${f.sourceTitle}, ${f.locator}`, shows: f.caption ?? 'A figure from the material.' })),
     history: (state.history[node.id] ?? []).filter((h) => h.response !== null || h.grade !== null),
     previous,
     cards: previous && isGraded(previous.stage) ? cardsToJudge(db, [node.id, ...premiseIds]) : [],

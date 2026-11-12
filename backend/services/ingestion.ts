@@ -18,9 +18,13 @@ import { textHash } from '../ingest/embedder';
 import type { Embedder } from '../ingest/embedder';
 import { hasNoText, kindForFile, readBytes, readSourceFile } from '../ingest/readers';
 import { nameSimilarity, topK } from '../ingest/similarity';
-import type { TextBlock } from '../ingest/types';
+import type { Chunk, TextBlock } from '../ingest/types';
+import type { PageRenderer } from '../ingest/pictures';
 import { isCancelled } from '../llm/provider';
-import type { LlmProvider } from '../llm/provider';
+import type { LlmImage, LlmProvider } from '../llm/provider';
+import { readAttachment, saveImageFile } from '../store/attachments';
+import { describeFigure, listFigures, setFigurePicture, syncFigurePages } from '../store/figures';
+import type { Figure } from '../store/figures';
 import { Semaphore } from '../llm/queue';
 import { nodesWithCards } from '../store/cards';
 import type { Database } from '../store/db';
@@ -54,6 +58,13 @@ export interface IngestionOptions {
   onSourceDone?: (sourceId: string) => void;
   /** Tokens per part; tests use small parts to exercise multi-part sources. */
   partTokens?: number;
+  /**
+   * Makes pictures of PDF pages whose meaning is in a picture (design §7). Without one (scripts outside
+   * the app) such pages are read as text only, and a PDF with no text at all is refused.
+   */
+  renderer?: PageRenderer;
+  /** Where page pictures are kept (the data folder's figures/); needed with a renderer. */
+  figuresDir?: string;
 }
 
 const CANDIDATES = 5;
@@ -62,6 +73,8 @@ const MIN_NAME_SIMILARITY = 0.5;
 export const STOPPED_MESSAGE = 'You stopped the reading. Run it again to read the rest.';
 /** A part takes at least this long, however short (two model calls and the search model). */
 const MIN_PART_SECONDS = 15;
+/** Page pictures sent with one part at most; parts are sized so that a part rarely has more. */
+const MAX_PICTURES_PER_PART = 40;
 
 export class IngestionService {
   private readonly sources: Semaphore;
@@ -105,8 +118,8 @@ export class IngestionService {
    */
   async addDocument(input: { kind: SourceKind; name: string; bytes: Buffer; origin?: string | null }): Promise<{ source: Source; existed: boolean }> {
     const { kind, name, bytes } = input;
-    const result = await readBytes(kind, bytes, basename(name, extname(name)));
-    if (hasNoText(result)) throw new Error(kind === 'pdf' ? `${name} has no text to read: it looks like a scan or pictures of pages. Frontier reads text only for now.` : `${name} has no text to read.`);
+    const result = await readBytes(kind, bytes, basename(name, extname(name)), { pictures: this.makesPictures });
+    if (hasNoText(result)) throw new Error(kind === 'pdf' && !this.makesPictures ? `${name} has no text to read: it looks like a scan or pictures of pages, which only the app can read.` : `${name} has no text to read.`);
     const hash = sha256(bytes);
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
@@ -131,12 +144,24 @@ export class IngestionService {
     return { source: this.createFromBlocks(input.kind, input.title, null, hash, blocks, input.origin), existed: false };
   }
 
-  private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[], origin?: string | null): Source {
-    return createSource(this.db, { kind, title, path, hash, origin }, this.parts(kind, blocks));
+  private get makesPictures(): boolean {
+    return Boolean(this.options.renderer && this.options.figuresDir);
   }
 
-  private parts(kind: SourceKind, blocks: TextBlock[]) {
-    return chunkBlocks(kind === 'pdf' ? collapseBuildPages(blocks) : blocks, this.options.partTokens ?? PART_TOKENS);
+  private createFromBlocks(kind: SourceKind, title: string, path: string | null, hash: string, blocks: TextBlock[], origin?: string | null): Source {
+    const { parts, pictures } = this.parts(kind, blocks);
+    return transaction(this.db, () => {
+      const source = createSource(this.db, { kind, title, path, hash, origin }, parts);
+      syncFigurePages(this.db, source.id, pictures);
+      return source;
+    });
+  }
+
+  /** The parts to read, and the picture pages among them (a slide build collapsed into one page keeps its last page's picture). */
+  private parts(kind: SourceKind, blocks: TextBlock[]): { parts: Chunk[]; pictures: { page: number; locator: string }[] } {
+    const kept = kind === 'pdf' ? collapseBuildPages(blocks) : blocks;
+    const pictures = kept.flatMap((b) => (b.picture ? [{ page: b.picture, locator: b.locator }] : []));
+    return { parts: chunkBlocks(kept, this.options.partTokens ?? PART_TOKENS), pictures };
   }
 
   /**
@@ -149,8 +174,8 @@ export class IngestionService {
     const source = getSource(this.db, sourceId);
     if (!source) throw new Error(`unknown source ${sourceId}`);
     if (this.running.has(sourceId)) throw new Error('This source is being read right now.');
-    const blocks = source.path ? (await readSourceFile(join(this.options.sourcesDir, source.path))).result.blocks : blocksFromParts(listChunks(this.db, sourceId));
-    const parts = this.parts(source.kind, blocks);
+    const blocks = source.path ? (await readSourceFile(join(this.options.sourcesDir, source.path), { pictures: this.makesPictures })).result.blocks : blocksFromParts(listChunks(this.db, sourceId));
+    const { parts, pictures } = this.parts(source.kind, blocks);
     if (parts.length === 0) throw new Error('There is no text in this source to read again.');
     const old = coveredNodeIds(this.db, sourceId);
     const keep = new Set([...nodesWithEvidence(this.db), ...coveredElsewhere(this.db, sourceId), ...nodesInOpenSets(this.db), ...nodesInSessions(this.db, old), ...nodesWithCards(this.db)]);
@@ -158,6 +183,7 @@ export class IngestionService {
     transaction(this.db, () => {
       retireNodes(this.db, retired);
       resetSourceParts(this.db, sourceId, parts);
+      syncFigurePages(this.db, sourceId, pictures);
     });
     this.emit(sourceId);
     return { retired };
@@ -234,6 +260,8 @@ export class IngestionService {
     // ideas without an embedding for this model (a goal's own ideas, a changed model) get one first;
     // when the model cannot be loaded, reading goes on and ideas are matched by name only
     await this.ensureEmbeddings().catch((error: unknown) => this.emit(sourceId, { message: byNameOnly(error) }));
+    // pictures of its picture pages, once; when they cannot be made the pages are read from their text
+    await this.makePictures(source).catch((error: unknown) => this.emit(sourceId, { message: noPictures(error) }));
     let failures = 0;
     for (const chunk of listChunks(this.db, sourceId)) {
       if (chunk.status === 'done') continue;
@@ -278,6 +306,7 @@ export class IngestionService {
     updateChunk(this.db, chunk.id, { status: 'running', attempts: chunk.attempts + 1, error: null });
     const chunkCount = (this.db.prepare('SELECT count(*) AS n FROM source_chunks WHERE source_id = ?').get(source.id) as { n: number }).n;
     const digest = this.digestFor(source.id);
+    const figures = this.picturesIn(source.id, chunk.text);
     const extraction = await runExtractor(
       this.options.provider,
       {
@@ -288,6 +317,7 @@ export class IngestionService {
         chunkCount,
         text: chunk.text,
         digest,
+        pictures: figures.map((f) => ({ locator: f.figure.locator, image: f.image })),
       },
       signal,
     );
@@ -318,12 +348,48 @@ export class IngestionService {
           const vector = vectors[i];
           if (vector) upsertEmbedding(this.db, { nodeId: n.id, model: this.options.embedder.model, vector, textHash: textHash(embeddingText(n)) });
         });
+        for (const note of extraction.figures) {
+          const figure = figures.find((f) => f.figure.locator === note.page)?.figure;
+          if (figure) describeFigure(this.db, figure.id, note.shows, [...new Set(note.ideas.map((id) => plan.resolved.get(id) ?? id))]);
+        }
         updateChunk(this.db, chunk.id, { status: 'done', error: null, nodeIds: plan.coveredNodeIds, conflicts: extraction.conflicts });
         const done = listChunks(this.db, source.id).filter((c) => c.status === 'done').length;
         updateSourceStatus(this.db, source.id, { chunksDone: done });
       });
     }, signal);
     this.emit(source.id);
+  }
+
+  /** Make the pictures of a source's picture pages that it does not have yet (a source read again keeps its pictures). */
+  private async makePictures(source: Source): Promise<void> {
+    const { renderer, figuresDir } = this.options;
+    const missing = listFigures(this.db, source.id).filter((f) => !f.file);
+    if (!renderer || !figuresDir || missing.length === 0 || !source.path) return;
+    const pdf = await readFile(join(this.options.sourcesDir, source.path));
+    const pictures = await renderer.render(new Uint8Array(pdf), missing.map((f) => f.page));
+    transaction(this.db, () => {
+      for (const picture of pictures) {
+        const figure = missing.find((f) => f.page === picture.page);
+        if (figure) setFigurePicture(this.db, figure.id, { file: saveImageFile(figuresDir, picture.bytes, picture.mediaType), width: picture.width, height: picture.height });
+      }
+    });
+  }
+
+  /** The pictures of the picture pages in this part's text, in page order, for the extractor to look at. */
+  private picturesIn(sourceId: string, text: string): { figure: Figure; image: LlmImage }[] {
+    const dir = this.options.figuresDir;
+    if (!dir) return [];
+    return listFigures(this.db, sourceId)
+      .filter((f) => f.file && text.includes(`[${f.locator}]\n`))
+      .slice(0, MAX_PICTURES_PER_PART)
+      .flatMap((figure) => {
+        try {
+          return [{ figure, image: readAttachment(dir, figure.file as string) }];
+        } catch {
+          // a picture file that went missing: the page is read from its text
+          return [];
+        }
+      });
   }
 
   private digestFor(sourceId: string): DigestEntry[] {
@@ -390,6 +456,10 @@ export class IngestionService {
     if (!s) return;
     this.options.onProgress?.({ sourceId, status: s.status, chunkCount: s.chunkCount, chunksDone: s.chunksDone, ...extra });
   }
+}
+
+function noPictures(error: unknown): string {
+  return `Pictures of the pages that are mostly figures could not be made, so those pages are read from their text only. (${error instanceof Error ? error.message : String(error)})`;
 }
 
 function byNameOnly(error: unknown): string {

@@ -11,11 +11,22 @@ export function estimateTokens(text: string): number {
  */
 export const PART_TOKENS = 40_000;
 const MIN_CHUNK_TOKENS = 200;
+/** What the picture of a page costs the model, about (a page picture of some 1.1 megapixels). */
+export const PICTURE_TOKENS = 1600;
+
+/** A block's share of a part: its text, and its picture when it is one. */
+function blockTokens(block: TextBlock): number {
+  return estimateTokens(block.text) + (block.picture ? PICTURE_TOKENS : 0);
+}
+
+/** A picture page with no more text than a heading may be a different figure under the same heading as the next. */
+const MIN_PICTURE_BUILD_CHARS = 40;
 
 /**
  * Slide PDFs often export every animation build as its own page, each repeating the one before plus a
  * little more. Collapse consecutive pages whose text is contained in the next page's text: keep the
- * last (fullest) page and give it the whole page range, so citations still point at real pages.
+ * last (fullest) page and give it the whole page range, so citations still point at real pages. A
+ * picture page with only a heading is kept: the next page under the same heading may show another figure.
  */
 export function collapseBuildPages(blocks: TextBlock[]): TextBlock[] {
   const out: TextBlock[] = [];
@@ -23,11 +34,12 @@ export function collapseBuildPages(blocks: TextBlock[]): TextBlock[] {
   blocks.forEach((block, i) => {
     const next = blocks[i + 1];
     const text = normalize(block.text);
-    if (next && text && normalize(next.text).includes(text)) {
+    const tooShort = block.picture !== undefined && text.length < MIN_PICTURE_BUILD_CHARS;
+    if (next && text && !tooShort && normalize(next.text).includes(text)) {
       runStart ??= block.locator;
       return;
     }
-    out.push(runStart ? { text: block.text, locator: joinLocators(runStart, block.locator) } : block);
+    out.push(runStart ? { ...block, locator: joinLocators(runStart, block.locator) } : block);
     runStart = null;
   });
   return out;
@@ -45,21 +57,24 @@ function normalize(text: string): string {
 export function chunkBlocks(blocks: TextBlock[], budget = PART_TOKENS): Chunk[] {
   const pieces: TextBlock[] = [];
   for (const block of blocks) {
-    if (estimateTokens(block.text) <= budget) pieces.push(block);
+    if (blockTokens(block) <= budget) pieces.push(block);
     else for (const part of splitLarge(block.text, budget)) pieces.push({ text: part, locator: block.locator });
   }
 
   const chunks: Chunk[] = [];
+  /** Each chunk's tokens, pictures included. */
+  const sizes: number[] = [];
   let current: TextBlock[] = [];
   let tokens = 0;
   const flush = () => {
     if (current.length === 0) return;
     chunks.push({ text: current.map((b, i) => (i > 0 && current[i - 1]?.locator === b.locator ? b.text : `[${b.locator}]\n${b.text}`)).join('\n\n'), locator: rangeLocator(current) });
+    sizes.push(tokens);
     current = [];
     tokens = 0;
   };
   for (const piece of pieces) {
-    const t = estimateTokens(piece.text);
+    const t = blockTokens(piece);
     if (tokens + t > budget && tokens > 0) flush();
     current.push(piece);
     tokens += t;
@@ -69,7 +84,9 @@ export function chunkBlocks(blocks: TextBlock[], budget = PART_TOKENS): Chunk[] 
   // Fold a tiny trailing chunk into the previous one so no chunk is just a heading or a footer.
   const last = chunks[chunks.length - 1];
   const prev = chunks[chunks.length - 2];
-  if (last && prev && estimateTokens(last.text) < MIN_CHUNK_TOKENS && estimateTokens(prev.text) + estimateTokens(last.text) <= budget * 1.2) {
+  const lastSize = sizes[sizes.length - 1] ?? 0;
+  const prevSize = sizes[sizes.length - 2] ?? 0;
+  if (last && prev && lastSize < MIN_CHUNK_TOKENS && prevSize + lastSize <= budget * 1.2) {
     chunks.splice(chunks.length - 2, 2, { text: `${prev.text}\n\n${last.text}`, locator: joinLocators(prev.locator, last.locator) });
   }
   return chunks;

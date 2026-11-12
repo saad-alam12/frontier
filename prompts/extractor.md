@@ -48,10 +48,20 @@ An `example` is a concrete problem the source itself works through, with its own
 - `body`: the problem and every step of its solution in Markdown with LaTeX, complete enough to follow without the source;
 - `locator`: where it appears.
 
+## Page pictures
+
+Some pages come as pictures as well as text, because their meaning is in the picture: a scan, a slide that is mostly a diagram, a figure that takes much of a page. The message names them in the order the images are attached, by their markers (`p12`). Read each one as part of the text at its marker: what a diagram shows, what a plot says, a formula or a table set as an image is material like any sentence, and ideas taught only in a picture are ideas like any other. Cite the page as usual.
+
+Describe every picture once under `figures`:
+
+- `page`: its marker, as the message names it;
+- `shows`: two to four sentences on what is in the picture, for a tutor who will not see it: the parts and labels, what is connected to what, what the axes and the curve say, the formula in LaTeX. Plain description, not the idea's statement again. A picture with nothing to learn (a photo, a logo, a title page) is described in one sentence and gets no ideas;
+- `ideas`: the `tempId`s or exact ids of the ideas the picture shows, at most a few. A tutor shows the picture when it teaches these ideas.
+
 ## Graph so far
 
 A long source is read in parts. You receive the ideas earlier parts produced, with their ids. Reference them in chains and examples instead of extracting them again. If this text contradicts one of them, do not change it: report it under `conflicts` with the id and one sentence.
 
 ## Output
 
-Call the submit tool once with `nodes`, `chains`, `examples` and `conflicts`. If the text holds nothing worth learning, submit empty lists.
+Call the submit tool once with `nodes`, `chains`, `examples`, `conflicts` and, when page pictures came with the text, `figures`. If the text holds nothing worth learning, submit empty lists (and still describe each page picture).

@@ -68,6 +68,15 @@ export interface MaterialCandidate {
 
 export type { BackupInfo, PracticeLevel };
 
+/** A picture of a page the tutor shows (design §4.2, "Figures"). */
+export interface FigureView {
+  dataUrl: string;
+  /** The source and page, as the learner reads it. */
+  where: string;
+  width: number | null;
+  height: number | null;
+}
+
 export interface AppInfo {
   version: string;
   dataFolder: string;
@@ -220,6 +229,8 @@ export interface ApiMethods {
   'attachments.save': { input: ImageUpload; output: { name: string } };
   /** A stored answer image as a data URL, for thumbnails in history and Trails. */
   'attachments.read': { input: { name: string }; output: string };
+  /** A figure the tutor showed: its picture as a data URL, and where it is from. */
+  'figures.read': { input: { figureId: string }; output: FigureView };
   /** The flashcard review queue for every goal (null) or one: the card to show now and what is left. */
   'cards.queue': { input: { goalId: string | null }; output: CardQueueView };
   /** Rate a card on the Cards screen; returns the queue after it. */

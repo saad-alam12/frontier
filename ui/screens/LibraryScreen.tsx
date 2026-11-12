@@ -196,6 +196,11 @@ export function LibraryScreen() {
               </a>
             )}
             {delta && delta.total > 0 && <p className="t-lead m-0">{delta.sentence}</p>}
+            {current.readsIdeas && current.pictures > 0 && (
+              <p className="t-small m-0 text-secondary">
+                {current.pictures === 1 ? '1 page is mostly a figure: it was' : `${current.pictures} pages are mostly figures: they were`} read from {current.pictures === 1 ? 'its picture' : 'their pictures'}, and the tutor can show {current.pictures === 1 ? 'it' : 'them'} in a session.
+              </p>
+            )}
             {!current.readsIdeas && <p className="t-lead m-0">Kept as {current.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')} for your goals: used for style, scope and practice, not read into ideas.</p>}
             {current.readsIdeas && current.queued && (
               <p className="t-small m-0 text-secondary" role="status">

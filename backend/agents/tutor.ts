@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { unknownFigureRefs } from '../core/figureRefs';
 import { isGraded } from '../core/session';
 import type { Stage } from '../core/session';
 import type { LlmImage, LlmProvider } from '../llm/provider';
@@ -48,11 +49,20 @@ function gradeFor(cardIds: ReadonlySet<string>) {
   });
 }
 
-export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean, cardIds: ReadonlySet<string> = new Set()) {
+export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean, cardIds: ReadonlySet<string> = new Set(), figureIds: ReadonlySet<string> = new Set()) {
   const card = nextStage ? CardSchemas[nextStage] : z.null();
   const grade = expectGrade ? gradeFor(cardIds) : z.null();
-  return z.object({ grade, card });
+  return z.object({ grade, card }).superRefine((step, ctx) => {
+    for (const id of unknownFigureRefs(step.card, figureIds)) ctx.addIssue({ code: 'custom', path: ['card'], message: figureMessage(id, figureIds) });
+  });
 }
+
+function figureMessage(id: string, allowed: ReadonlySet<string>): string {
+  return `figure:${id} is not one of the figures listed${allowed.size ? ` (${[...allowed].join(', ')})` : '; there are none for this idea, so show no figure'}`;
+}
+
+/** Stages whose card explains: the figures' pictures go with the call that writes one, so the tutor sees what it shows. */
+export const FIGURE_STAGES: ReadonlySet<Stage> = new Set(['explain', 'support', 'reteach', 'index']);
 
 /** One answer field (answer and reasoning mixed, or empty for "no idea"), optional confidence, and extras some cards ask for. */
 export interface LearnerResponse {
@@ -84,7 +94,16 @@ export interface TutorGoal {
 }
 
 /** Everything about the idea, the learner and the goal that a tutor call starts from. */
-export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'cards' | 'nextStage' | 'retry'>;
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry'>;
+
+/** A picture of a page that shows the idea, from the learner's material, which the tutor can show. */
+export interface TutorFigure {
+  id: string;
+  /** The source and page, as the learner reads it. */
+  where: string;
+  /** What it shows, in the words of the extractor that saw it. */
+  shows: string;
+}
 
 export interface TutorStepInput {
   goal: TutorGoal;
@@ -100,11 +119,15 @@ export interface TutorStepInput {
   /** Worked examples from the sources for this node: material for worked-example cards and use tasks. */
   examples: { title: string; locator: string; body: string }[];
   excerpts: { locator: string; text: string }[];
+  /** Pictures of pages that show this idea; the tutor can show them in its cards. */
+  figures: TutorFigure[];
   /** Earlier cards and responses for this node, oldest first. */
   history: { stage: Stage; card: TutorCard; response: LearnerResponse | null; grade: Grade | null }[];
   previous: { stage: Stage; card: TutorCard; response: LearnerResponse } | null;
   /** The images attached to the previous response, sent with the message; earlier answers' images are not sent again. */
   images?: LlmImage[];
+  /** The pictures of the first figures, in their order, sent before the learner's images when the card to write explains. */
+  figureImages?: LlmImage[];
   /** Flashcards on this idea and the ideas it builds on, for the grade to say which facts the response recalled. */
   cards?: { id: string; front: string; back: string }[];
   nextStage: Stage | null;
@@ -144,6 +167,13 @@ function contextSections(input: TutorContext): string[] {
   if (input.bugs.length) sections.push(`## Open misconceptions for this node\n${input.bugs.map((b) => `- ${b}`).join('\n')}`);
   if (input.examples.length) sections.push(`## Worked examples from the sources\n${input.examples.map((e) => `### ${e.title} (${e.locator})\n${e.body}`).join('\n\n')}`);
   if (input.excerpts.length) sections.push(`## Source excerpts\n${input.excerpts.map((e) => `### ${e.locator}\n${e.text}`).join('\n\n')}`);
+  if (input.figures.length) {
+    sections.push(
+      `## Figures you can show\nPictures of pages from the learner's material that show this idea. To show one, put \`![a short caption](figure:ID)\` on a line of its own in a card's text, and refer to what it shows. Show one only where it helps, at most two in a card, and never invent an ID.\n${input.figures
+        .map((f) => `- [${f.id}] ${f.where}: ${f.shows}`)
+        .join('\n')}`,
+    );
+  }
   if (input.history.length) {
     sections.push(
       `## Earlier in this node\n${input.history
@@ -177,12 +207,23 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
       'The learner has failed this idea again after a worked example. Read everything above about this idea, work out the one misunderstanding that best explains all of their answers, and write a fresh explanation that starts from it.',
     );
   }
+  const figureImages = input.figureImages ?? [];
+  const learnerImages = input.images ?? [];
+  if (figureImages.length) {
+    const ids = input.figures.slice(0, figureImages.length).map((f) => f.id);
+    sections.push(`The first ${figureImages.length === 1 ? 'image attached is the picture of figure' : `${figureImages.length} images attached are the pictures of figures`} ${ids.join(', ')}${learnerImages.length ? "; the images after them are the learner's" : ''}.`);
+  }
+  const images = [...figureImages, ...learnerImages];
   const result = await provider.complete({
     // the fresh explanation after a worked example goes to the escalation model
     role: input.nextStage === 'reteach' ? 'tutorEscalation' : 'tutor',
     system: answerReadingPrompt('tutor'),
-    messages: [{ role: 'user', content: sections.join('\n\n'), images: input.images }],
-    submit: { name: 'submit_step', description: 'Submit the grade for the previous response (or null) and the next card (or null).', schema: buildStepSchema(input.nextStage, expectGrade, new Set(cards.map((c) => c.id))) },
+    messages: [{ role: 'user', content: sections.join('\n\n'), images: images.length ? images : undefined }],
+    submit: {
+      name: 'submit_step',
+      description: 'Submit the grade for the previous response (or null) and the next card (or null).',
+      schema: buildStepSchema(input.nextStage, expectGrade, new Set(cards.map((c) => c.id)), new Set(input.figures.map((f) => f.id))),
+    },
   });
   return result.data as TutorStepResult;
 }
@@ -241,9 +282,19 @@ export async function runTutorAside(provider: LlmProvider, input: TutorAsideInpu
     role: 'tutor',
     system: `${loadPrompt('tutor-ask')}\n\n${loadPrompt('answering')}`,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
-    submit: { name: 'submit_answer', description: 'Submit the answer to the learner, in Markdown.', schema: z.object({ answer: z.string().trim().min(1).max(6000) }) },
+    submit: {
+      name: 'submit_answer',
+      description: 'Submit the answer to the learner, in Markdown.',
+      schema: asideSchema(new Set(input.figures.map((f) => f.id))),
+    },
   });
   return (result.data as { answer: string }).answer;
+}
+
+function asideSchema(figureIds: ReadonlySet<string>) {
+  return z.object({ answer: z.string().trim().min(1).max(6000) }).superRefine((value, ctx) => {
+    for (const id of unknownFigureRefs(value.answer, figureIds)) ctx.addIssue({ code: 'custom', path: ['answer'], message: figureMessage(id, figureIds) });
+  });
 }
 
 const DEPTH_TEXT = [
