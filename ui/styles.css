@@ -43,6 +43,13 @@
   --bg-sidebar-translucent: rgba(24, 22, 19, 0.62);
   --hover: rgba(238, 234, 226, 0.05);
   --selected: rgba(238, 234, 226, 0.09);
+  /* Code in answers: muted, warm, never louder than the text around it. */
+  --code-keyword: #b4c2ff;
+  --code-builtin: #d6c08f;
+  --code-string: #a9c99a;
+  --code-number: #e0a988;
+  --code-decorator: #c7a6e8;
+  --code-comment: #6f6a60;
 }
 
 @theme inline {

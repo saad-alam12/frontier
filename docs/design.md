@@ -237,6 +237,8 @@ Answers are often dictated by a speech-to-text tool that types into the focused 
 
 In a session (teaching steps and the start and end recall) an answer may also carry **images** (pasted, dropped or picked: png, jpeg, gif or webp, at most 4 of 5 MB each) and **one quote**: the learner selects text in any earlier message and presses Reply, and the quote shows above the field. The same selection always offers **Make a flashcard**: the card writer drafts a card from the selection and its message, deciding whether the selection is the question or the answer (a selected formula becomes the answer to "State the ... formula and define its terms"), and the learner edits it before saving (section 2.6). A Make a flashcard button in the session asks "What should the card ask?" first. The tutor sees the images of the answer it judges and is told which part the learner replies to. An answer that is only images is an answer, not "no idea". Images are stored once each in the data folder's `attachments/` folder, named by their content hash; the session keeps only their names. Practice answers do not take images or quotes yet.
 
+**Code.** On a question (check, derive, use) and on a practice problem, an answer can carry Python code: "Answer with code" opens a code field under the answer field (the answer field stays for reasoning in words), and a question the tutor or the problem generator wrote to be answered in code (when the goal asks for practical application) opens it with starter code. The field colours Python, Tab indents, Enter keeps the indentation, ⇧⌘↵ runs and ⌘↵ submits the whole answer. Code runs only when the learner presses Run, with the Python already on their computer: Frontier finds it (the Python named in Settings, else the one the learner's login shell finds, else the usual places such as Homebrew, python.org, pyenv and conda) and makes an environment of its own from it in the data folder (`python/`, with the libraries already installed on the computer visible), so what Frontier installs never touches the system's Python; a Python that cannot make one is used as it is, with installs for this user. A run has two minutes (Stop ends it sooner, with anything it started), gets no keyboard input, and keeps the end of its output (4,000 characters per stream) and up to four matplotlib plots, stored like answer images; tracebacks name the learner's own file and lines. When the code needs a library that is missing, a well-known one (numpy, pandas, matplotlib, scikit-learn and some forty others, by the name pip knows them by) is installed and the code run again; any other is offered with an Install button and the command, since an unknown import name may be a typo or a lookalike. When an install fails, or there is no Python 3 at all, the learner gets the commands to run in Terminal (on a Mac, also a button that opens Apple's installer for its command line tools, which include Python 3). The answer goes with the code and its last run, when that run was of the code as sent; the tutor and the grader read the code, whether it ran, its output and its errors, and see its plots, and never take the output on trust. An answer of code alone is an answer, not "no idea".
+
 ---
 
 ### 4.5 Sessions you choose
@@ -368,7 +370,7 @@ A desktop app (macOS first, then Windows/Linux). The rail has the five places yo
 | Lookup | Search, node cards, derivation path |
 | Trails | Past sessions (a chosen one with what was asked), replay |
 | Library | Add sources (files, also dropped anywhere on the window; a link to a page or a PDF; or pasted text: notes, an article, a video's transcript, read like a file), see how many pages were read from their pictures, open a source's stored original, see about how long a source being read still takes and stop it (what was read stays, the rest waits for "Run again"), see the delta view and every idea in source order with its page citation and its chains (built on / leads to), ingestion progress |
-| Settings | Model provider and models, flashcards in sessions without a goal, reminders, data folder, backups (make one, restore one), the log, preferences |
+| Settings | Model provider and models, flashcards in sessions without a goal, reminders, the Python that runs code (found, or a path), data folder, backups (make one, restore one), the log, preferences |
 
 The interface uses cards and controls, not a raw chat log, wherever the step loop has structure.
 
@@ -440,8 +442,8 @@ Rules:
 | Tutor escalation | the whole history of one idea after a worked example did not help | a re-diagnosis and a fresh explanation (once per idea) |
 | Extractor | chunk + graph-so-far digest + the pictures of its picture pages | nodes and chains with citations; what each picture shows and the nodes it shows |
 | Matcher | extracted node + candidates | identity links |
-| Problem Generator | target nodes and chains, rung, cue, presentation, recent problems | statement, solution, rubric |
-| Grader | problem, solution, rubric, learner answer, the flashcards of its ideas | score 0–10 + reasoning, and the flashcards the answer recalled |
+| Problem Generator | target nodes and chains, rung, cue, presentation, recent problems | statement, solution, rubric, and starter code when it is answered in code |
+| Grader | problem, solution, rubric, learner answer (with its code, the code's last run and plots), the flashcards of its ideas | score 0–10 + reasoning, and the flashcards the answer recalled |
 | Librarian | query, matched node cards | short synthesized answer citing node ids |
 | Session maker | what the learner wants to learn, the goal (if any: level, scope, focus, background, context), the map's matching ideas, what the learner owns, minutes per aim | the session's ideas in order (existing ids or new ideas with premises), an aim and a why each, title, summary, level, missing background |
 | Card writer | a finished idea (what the session taught, the learner's answers, the goal's level, existing cards); or a selection with its message; or a request | 0–3 flashcards (front, back), or one draft |
@@ -456,6 +458,7 @@ Rules:
   sources/             original files the learner added
   attachments/         images attached to session answers, named by their content hash
   figures/             pictures of PDF pages that are mostly figures, named by their content hash
+  python/              Frontier's own Python environment for running the learner's code, made from the computer's Python
   models-cache/        the local embedding model
   agent/               working folder of the model process (nothing is read from it)
   exports/             optional Markdown export of nodes (Obsidian-readable)

@@ -61,6 +61,8 @@ const FIELDS = {
   reminderTime: z.string().refine((time) => clockMinutes(time) !== null, 'A time of day, like 18:00.'),
   /** Flashcards to review as a number on the app's icon. */
   iconBadge: z.boolean(),
+  /** The Python that runs the learner's code; empty means Frontier finds one (design §4.4, "Code"). */
+  pythonPath: z.string().max(1000),
 };
 
 export const SettingsSchema = z.object({
@@ -73,6 +75,7 @@ export const SettingsSchema = z.object({
   reminderDaily: FIELDS.reminderDaily.default(true),
   reminderTime: FIELDS.reminderTime.default(DEFAULT_REMINDER_TIME),
   iconBadge: FIELDS.iconBadge.default(true),
+  pythonPath: FIELDS.pythonPath.default(''),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -92,6 +95,7 @@ export const SettingsPatchSchema = z.strictObject({
   reminderDaily: FIELDS.reminderDaily.optional(),
   reminderTime: FIELDS.reminderTime.optional(),
   iconBadge: FIELDS.iconBadge.optional(),
+  pythonPath: FIELDS.pythonPath.optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
@@ -127,7 +131,7 @@ export function modelChoice(settings: Settings, role: Role): ModelChoice {
 export function salvageSettings(raw: unknown): Settings {
   const input = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   const kept: Record<string, unknown> = {};
-  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency', 'reminderDaily', 'reminderTime', 'iconBadge'] as const) {
+  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency', 'reminderDaily', 'reminderTime', 'iconBadge', 'pythonPath'] as const) {
     const parsed = FIELDS[key].safeParse(input[key]);
     if (parsed.success) kept[key] = parsed.data;
   }

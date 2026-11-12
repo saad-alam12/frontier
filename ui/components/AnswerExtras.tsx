@@ -230,7 +230,8 @@ export function ResponseExtras({ response }: { response: Pick<LearnerResponse, '
   );
 }
 
-function StoredImage({ name, alt }: { name: string; alt: string }) {
+/** An image kept in the attachments folder (an attached image, a plot of a code run). */
+export function StoredImage({ name, alt }: { name: string; alt: string }) {
   const [url, setUrl] = useState(urlCache.get(name) ?? null);
   const [missing, setMissing] = useState(false);
   useEffect(() => {

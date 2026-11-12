@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { ASIDE_MODES } from '../agents/tutor';
 import { activeSession } from '../store/sessions';
 import { z } from 'zod';
@@ -36,8 +38,13 @@ import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
+import { MAX_CODE_CHARS } from '../core/code';
 import { FigureRequestSchema, figureView } from '../services/figures';
 import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
+
+const execFileAsync = promisify(execFile);
+const CodeRunSchema = z.object({ source: z.string().max(MAX_CODE_CHARS, 'The code is too long to run.'), key: z.string().min(1).max(80) });
+const CodeInstallSchema = z.object({ package: z.string().min(1).max(100), key: z.string().min(1).max(80) });
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
@@ -300,7 +307,25 @@ export function buildHandlers(ctx: AppContext): Handlers {
         kind,
         focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
       }),
-    'practice.submit': ({ problemId, answer, confidence }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence),
+    'practice.submit': ({ problemId, answer, confidence, code }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code }),
+    'code.run': (input) => {
+      const { source, key } = CodeRunSchema.parse(input);
+      return ctx.codeRunner().run(source, key);
+    },
+    'code.stop': ({ key }) => ({ stopped: ctx.codeRunner().stop(String(key)) }),
+    'code.install': (input) => {
+      const { package: pkg, key } = CodeInstallSchema.parse(input);
+      return ctx.codeRunner().install(pkg, key);
+    },
+    'code.python': async ({ lookAgain }) => {
+      if (lookAgain) ctx.codeRunner().lookAgain();
+      return ctx.codeRunner().info();
+    },
+    'code.installPython': async () => {
+      if (process.platform !== 'darwin') throw new Error('Install Python 3 for your system, then press Run again.');
+      await execFileAsync('xcode-select', ['--install']).catch(() => undefined);
+      return { message: "Apple's installer is open. When it has finished, press Run again." };
+    },
     'map.view': () => mapView(ctx.db()),
     'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),
     'map.erasePreview': (request) => previewErase(ctx.db(), EraseRequestSchema.parse(request)),

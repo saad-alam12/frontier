@@ -66,6 +66,8 @@ export function dataPaths(dataFolder: string) {
     agentCwd: join(dataFolder, 'agent'),
     attachments: join(dataFolder, 'attachments'),
     figures: join(dataFolder, 'figures'),
+    /** Frontier's own Python environment, made from the Python on the computer, for running the learner's code. */
+    python: join(dataFolder, 'python'),
     backups: join(dataFolder, 'backups'),
   };
 }

@@ -189,7 +189,7 @@ describe('erase service', () => {
       kind: 'compound',
       goalId: null,
       sessionId: null,
-      problems: [{ nodeIds: [nash], rung: 1, cue: 0, presentation: 'theory', statement: 'Find the equilibrium.', solution: 'Both defect.', rubric: [] }],
+      problems: [{ nodeIds: [nash], rung: 1, cue: 0, presentation: 'theory', statement: 'Find the equilibrium.', solution: 'Both defect.', rubric: [], code: null }],
     });
     const session = createSession(db, null, { plan: { title: 'Equilibria', orientation: '', steps: [{ nodeId: nash, name: 'Nash equilibrium' }] }, nodeStatus: { [nash]: 'done' } });
     appendSessionEvent(db, session.id, 'node-done', { nodeId: nash });

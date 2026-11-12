@@ -31,6 +31,8 @@ import type { StatsFilter, StatsRange, StatsView } from '../services/stats';
 import type { EraseRequest, ErasePreview, EraseResult, EraseScope } from '../services/erase';
 export type { EraseRequest, ErasePreview, EraseResult, EraseScope, Aside, AsideMode };
 import type { GoalBudget } from '../core/types';
+import type { CodeAnswer } from '../core/code';
+import type { InstallOutcome, PythonInfo, RunOutcome } from '../services/codeRunner';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
 import type { CardText } from '../agents/cardWriter';
@@ -76,6 +78,9 @@ export interface FigureView {
   width: number | null;
   height: number | null;
 }
+
+export type { CodeAnswer, CodeRun, CodeStarter } from '../core/code';
+export type { InstallOutcome, PythonInfo, RunOutcome };
 
 export interface AppInfo {
   version: string;
@@ -203,7 +208,7 @@ export interface ApiMethods {
   /** A set over what is fading, a mock exam, or (with `nodeIds`) practice the learner asked for on those ideas at a level. */
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
-  'practice.submit': { input: { problemId: string; answer: string; confidence: number | null }; output: PracticeView };
+  'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer }; output: PracticeView };
   /** Leave a set as it stands: answered problems count, the rest write nothing. */
   'practice.end': { input: { setId: string }; output: null };
   'map.view': { input: undefined; output: MapView };
@@ -229,6 +234,15 @@ export interface ApiMethods {
   'attachments.save': { input: ImageUpload; output: { name: string } };
   /** A stored answer image as a data URL, for thumbnails in history and Trails. */
   'attachments.read': { input: { name: string }; output: string };
+  /** Run the learner's Python (design §4.4, "Code"); `key` lets code.stop end it. A well-known missing library is installed first. */
+  'code.run': { input: { source: string; key: string }; output: RunOutcome };
+  'code.stop': { input: { key: string }; output: { stopped: boolean } };
+  /** Install a library the code needs, after the learner pressed Install. */
+  'code.install': { input: { package: string; key: string }; output: InstallOutcome };
+  /** The Python Frontier uses, for Settings; `lookAgain` forgets the one found. */
+  'code.python': { input: { lookAgain?: boolean }; output: PythonInfo };
+  /** On a Mac with no Python: open Apple's installer for its command line tools, which include Python 3. */
+  'code.installPython': { input: undefined; output: { message: string } };
   /** A figure the tutor showed: its picture as a data URL, and where it is from. */
   'figures.read': { input: { figureId: string }; output: FigureView };
   /** The flashcard review queue for every goal (null) or one: the card to show now and what is left. */

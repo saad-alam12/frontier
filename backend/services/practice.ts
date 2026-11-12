@@ -13,7 +13,11 @@ import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, Schedul
 import { OWNED_DEPTH, PASS_SCORE } from '../core/types';
 import type { Depth } from '../core/types';
 import { listEvidenceForNode } from '../store/evidence';
-import type { LlmProvider } from '../llm/provider';
+import type { LlmImage, LlmProvider } from '../llm/provider';
+import { ResponseExtrasSchema } from '../core/attachments';
+import type { ResponseExtras } from '../core/attachments';
+import type { CodeAnswer, CodeStarter } from '../core/code';
+import { attachmentExists, readAttachment } from '../store/attachments';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
 import { logEvent } from '../store/activity';
@@ -33,6 +37,8 @@ import { candidatesForGoal } from './planner';
 export interface PracticeDeps {
   db: Database;
   provider: LlmProvider;
+  /** Where answer images and the plots of code runs are kept; needed only when an answer has some. */
+  attachmentsDir?: string;
   /** Told when a grade lands, so the screen can show it. */
   onGraded?: (event: { setId: string; problemId: string }) => void;
   onError?: (message: string) => void;
@@ -149,7 +155,9 @@ export interface PracticeProblemView {
   rung: number;
   cue: number;
   presentation: Presentation;
-  answer: { text: string; confidence: number | null } | null;
+  answer: { text: string; confidence: number | null; code: CodeAnswer | null } | null;
+  /** Starter code when the problem is answered in code. */
+  code: CodeStarter | null;
   solution: string | null;
   /** Null until graded. Score 0–10. */
   grade: { score: number; feedback: string } | null;
@@ -171,7 +179,8 @@ export function practiceView(db: Database, setId: string): PracticeView {
       rung: p.rung,
       cue: p.cue,
       presentation: p.presentation,
-      answer: answer ? { text: answer.answer, confidence: answer.confidence } : null,
+      answer: answer ? { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null } : null,
+      code: p.code,
       solution: answer ? p.solution : null,
       grade: answer && answer.score !== null ? { score: Math.round(answer.score * 100) / 10, feedback: answer.feedback ?? '' } : null,
       ideas: answer ? p.nodeIds.map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id, score: ideaScores.get(id) ?? null })) : null,
@@ -271,7 +280,7 @@ export async function startPractice(deps: PracticeDeps, goalId: string, options:
     sessionId: options.sessionId ?? null,
     problems: problems.map((p) => {
       const spec = specs[p.index] as ProblemSpec;
-      return { nodeIds: spec.nodeIds, rung: spec.rung, cue: spec.cue, presentation: spec.presentation, statement: p.statement, solution: p.solution, rubric: p.rubric };
+      return { nodeIds: spec.nodeIds, rung: spec.rung, cue: spec.cue, presentation: spec.presentation, statement: p.statement, solution: p.solution, rubric: p.rubric, code: p.code ?? null };
     }),
   });
   return practiceView(db, set.id);
@@ -308,14 +317,24 @@ export async function settleGrading(): Promise<void> {
  * One attempt: store the answer and reveal the solution at once; the grade arrives in the
  * background. A second submit for the same problem changes nothing.
  */
-export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answer: string, confidence: number | null): PracticeView {
+export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answer: string, confidence: number | null, extras: { code?: CodeAnswer } = {}): PracticeView {
   const problem = getProblem(deps.db, problemId);
   if (!problem) throw new Error(`unknown problem ${problemId}`);
   if (!answerFor(deps.db, problemId)) {
-    const record = insertAnswer(deps.db, problemId, answer, confidence);
+    const record = insertAnswer(deps.db, problemId, answer, confidence, checkedExtras(deps, extras));
     track(deps, record);
   }
   return practiceView(deps.db, problem.setId);
+}
+
+/** What the renderer sends besides the text is checked here: the code must fit and its plots must be stored images. */
+function checkedExtras(deps: PracticeDeps, extras: { code?: CodeAnswer }): ResponseExtras {
+  const parsed = ResponseExtrasSchema.safeParse({ code: extras.code?.source.trim() ? extras.code : undefined });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'The code is not valid.');
+  const plots = parsed.data.code?.run?.plots ?? [];
+  const dir = deps.attachmentsDir;
+  if (plots.length && (!dir || !plots.every((name) => attachmentExists(dir, name)))) throw new Error('A plot of the run was not saved. Run the code again.');
+  return parsed.data.code ? { code: parsed.data.code } : {};
 }
 
 function track(deps: PracticeDeps, record: AnswerRecord): void {
@@ -358,6 +377,8 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     ideas: problem.nodeIds.filter((id) => view.nodes.has(id)).map((id) => ({ id, name: view.nodes.get(id)?.name ?? id })),
     answer: answer.answer,
     confidence: answer.confidence,
+    code: answer.extras.code,
+    plots: plotsOf(deps, answer.extras.code),
     cards: cardsToJudge(db, withPremises(problem.nodeIds, view)),
   });
   transaction(db, () => {
@@ -389,6 +410,14 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     }
   });
   deps.onGraded?.({ setId: problem.setId, problemId: problem.id });
+}
+
+/** The plots a run of the answer's code drew, for the grader to see; a missing file is left out. */
+function plotsOf(deps: PracticeDeps, code: CodeAnswer | undefined): LlmImage[] | undefined {
+  const dir = deps.attachmentsDir;
+  const names = code?.run?.plots ?? [];
+  if (!dir || names.length === 0) return undefined;
+  return names.filter((name) => attachmentExists(dir, name)).map((name) => readAttachment(dir, name));
 }
 
 /** The problem's ideas, then the ideas they are built on directly: whose flashcards a grade may find recalled. */

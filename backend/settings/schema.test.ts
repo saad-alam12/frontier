@@ -75,7 +75,7 @@ describe('a settings file with a bad field', () => {
     const written = JSON.stringify({ provider: 'anthropicApi', apiKey: 'sk-test', dataFolder: '/my/folder', concurrency: 12, models: { tutor: 'claude-sonnet-5-5', retiredRole: 'x' }, efforts: { planner: 'low', tutor: 'huge' } });
     writeFileSync(path, written);
     const settings = new SettingsStore(path, '/default').get();
-    expect(settings).toEqual({ reminderDaily: true, reminderTime: '18:00', iconBadge: true, provider: 'anthropicApi', apiKey: 'sk-test', dataFolder: '/my/folder', concurrency: 3, models: { tutor: 'claude-sonnet-5-5' }, efforts: { planner: 'low' } });
+    expect(settings).toEqual({ reminderDaily: true, reminderTime: '18:00', iconBadge: true, pythonPath: '', provider: 'anthropicApi', apiKey: 'sk-test', dataFolder: '/my/folder', concurrency: 3, models: { tutor: 'claude-sonnet-5-5' }, efforts: { planner: 'low' } });
     expect(readFileSync(join(dir, 'settings.unreadable.json'), 'utf8')).toBe(written);
   });
 

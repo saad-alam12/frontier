@@ -9,6 +9,8 @@ import { Button, Empty, Notice, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
 import { Markdown } from '../components/Markdown';
 import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
+import { CodeAnswer, SentCode, codeOf } from '../components/CodeAnswer';
+import type { CodeDraft } from '../components/CodeAnswer';
 import { ResponseExtras, clearAnswerExtras, useAnswerExtras, withExtras } from '../components/AnswerExtras';
 import { AskTutor, Asides } from '../components/AskTutor';
 import { QuoteReply } from '../components/QuoteReply';
@@ -26,8 +28,8 @@ import type { ChooseInit } from '../components/ChooseSheet';
 
 const EFFORT_LABELS = ['Easy', 'Fine', 'Took effort', 'Hard', 'Lost me'];
 
-type CardDraft = { answer: string; confidence: number | null; handle: string };
-const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '' };
+type CardDraft = { answer: string; confidence: number | null; handle: string; code?: CodeDraft | null };
+const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '', code: null };
 
 /** The answer just sent, shown in the conversation while the tutor works. */
 type Pending = { card: PublicCard | null; stage: Stage | null; response: LearnerResponse } | null;
@@ -421,9 +423,10 @@ function Exchange({ id, item, thinking, onStop }: { id: string; item: HistoryIte
           <ResponseExtras response={item.response} />
           {item.response.answer.trim() ? (
             <div className="learner-text whitespace-pre-wrap">{item.response.answer}</div>
-          ) : item.response.attachments?.length ? null : (
+          ) : item.response.attachments?.length || item.response.code ? null : (
             <div className="learner-text text-muted">{item.response.testMe ? 'I know this, test me' : 'No idea'}</div>
           )}
+          {item.response.code && <SentCode code={item.response.code} />}
           {meta && <div className="t-caption text-muted">{meta}</div>}
         </div>
       )}
@@ -535,7 +538,7 @@ function PhaseView({ snap, busy, refocus, onSend, onAsk, onDone }: { snap: Sessi
             <h2 className="t-heading m-0">Before we close: practice</h2>
             <p className="m-0 text-soft">A few ideas from earlier sessions are starting to fade. These problems use them together; they never say which.</p>
           </div>
-          <PracticeFlow view={snap.practice} revealedId={snap.practiceRevealed} busy={busy} onSubmit={(_id, answer, confidence) => onSend({ answer, confidence: confidence ?? undefined })} onNext={() => onSend({ answer: '' })} />
+          <PracticeFlow view={snap.practice} revealedId={snap.practiceRevealed} busy={busy} onSubmit={(_id, answer, confidence, code) => onSend({ answer, confidence: confidence ?? undefined, ...(code ? { code } : {}) })} onNext={() => onSend({ answer: '' })} />
         </section>
       ) : null;
     case 'close':
@@ -610,9 +613,11 @@ function TeachStep({ snap, busy, refocus, onSend, onAsk }: { snap: SessionSnapsh
   if (!card || !current) return <p className="t-small m-0 text-muted">Preparing the next step…</p>;
 
   const set = (patch: Partial<CardDraft>) => drafts.set(draftKey, { ...draft, ...patch });
-  const send = (answer: string) => {
+  /** "No idea" sends nothing else; an answer goes with its code (and the code's last run). */
+  const send = (answer: string, noIdea = false) => {
     if (busy) return;
-    onSend(withExtras({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined }, extras), draftKey);
+    const code = noIdea ? undefined : codeOf(draft.code);
+    onSend(withExtras({ answer, confidence: draft.confidence ?? undefined, handle: draft.handle.trim() || undefined, ...(code ? { code } : {}) }, extras), draftKey);
   };
 
   const testMe = current.canTestOut ? () => onSend({ answer: '', testMe: true }) : undefined;
@@ -676,8 +681,11 @@ function TeachStep({ snap, busy, refocus, onSend, onAsk }: { snap: SessionSnapsh
         {card.stage === 'compress' && (
           <input className="input" aria-label="Handle" placeholder="A handle, if you like: a short phrase, image or mnemonic" value={draft.handle} onChange={(e) => set({ handle: e.target.value })} />
         )}
+        {(card.stage === 'check' || card.stage === 'derive' || card.stage === 'use') && (
+          <CodeAnswer draft={draft.code ?? null} onChange={(code) => set({ code })} starter={card.code?.starter} disabled={busy} onSubmit={() => send(draft.answer)} />
+        )}
       </div>
-      <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} onTestMe={testMe} disabled={busy} />
+      <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('', true)} onTestMe={testMe} disabled={busy} />
       <AskTutor explains={false} hints={current.hintsLeft > 0 || hintCount(snap.asides) > 0 ? { taken: hintCount(snap.asides), left: current.hintsLeft } : undefined} busy={busy} onAsk={onAsk} />
     </section>
   );

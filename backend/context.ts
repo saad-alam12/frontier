@@ -16,6 +16,7 @@ import { GoalWorker, nextGoalStep } from './services/goalWorker';
 import { upgradeDerivedStates, upgradeTimeOwners } from './services/knowledge';
 import { SessionWork } from './services/sessionWork';
 import { SessionMaker } from './services/sessionMaker';
+import { CodeRunner } from './services/codeRunner';
 import { listGoals } from './store/goals';
 import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
@@ -45,6 +46,7 @@ export class AppContext {
   private cachedEmbedder: Embedder | null = null;
   private cachedIngestion: IngestionService | null = null;
   private cachedGoalWorker: GoalWorker | null = null;
+  private cachedCodeRunner: CodeRunner | null = null;
 
   constructor(
     readonly version: string,
@@ -123,7 +125,12 @@ export class AppContext {
     return this.cachedGoalWorker;
   }
 
-  /** After a restart, pick up goals whose material was still being read, profiled or compiled. */
+  /** Runs the learner's code with the Python on this computer, only when they press Run. */
+  codeRunner(): CodeRunner {
+    this.cachedCodeRunner ??= new CodeRunner({ envDir: this.paths().python, attachmentsDir: this.paths().attachments, pythonPath: () => this.settings.get().pythonPath });
+    return this.cachedCodeRunner;
+  }
+
   /** What sessions and practice need to run and grade; grades are announced to the renderer. */
   practiceDeps() {
     return {
@@ -205,12 +212,14 @@ export class AppContext {
     this.afterSettings();
     this.cachedProvider?.reconfigure(createInnerProvider(next, this.paths().agentCwd), next.concurrency);
     this.cachedIngestion?.setConcurrency(next.concurrency);
+    if (next.pythonPath !== previous.pythonPath) this.cachedCodeRunner?.lookAgain();
     if (next.dataFolder === previous.dataFolder) return;
     if (this.cachedDb) this.retiredDbs.push(this.cachedDb);
     this.cachedDb = null;
     this.cachedEmbedder = null;
     this.cachedIngestion = null;
     this.cachedGoalWorker = null;
+    this.cachedCodeRunner = null;
     this.ensureFolders();
   }
 

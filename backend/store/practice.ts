@@ -1,4 +1,6 @@
 /** Practice sets (compound practice and mock exams): problems with committed solutions, and answers. */
+import type { ResponseExtras } from '../core/attachments';
+import type { CodeStarter } from '../core/code';
 import type { Presentation } from '../core/scheduler';
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
@@ -25,6 +27,8 @@ export interface ProblemRecord {
   statement: string;
   solution: string;
   rubric: string[];
+  /** Starter code when the problem is answered in code. */
+  code: CodeStarter | null;
   createdAt: string;
 }
 
@@ -34,6 +38,8 @@ export interface AnswerRecord {
   submittedAt: string;
   answer: string;
   confidence: number | null;
+  /** What the answer carries besides its text (code with its last run). */
+  extras: ResponseExtras;
   score: number | null;
   feedback: string | null;
   gradedAt: string | null;
@@ -57,6 +63,7 @@ interface ProblemRow {
   statement: string;
   solution: string;
   rubric: string;
+  code: string | null;
   created_at: string;
 }
 interface AnswerRow {
@@ -65,6 +72,7 @@ interface AnswerRow {
   submitted_at: string;
   answer: string;
   confidence: number | null;
+  extras: string | null;
   score: number | null;
   feedback: string | null;
   graded_at: string | null;
@@ -81,6 +89,7 @@ const toProblem = (r: ProblemRow): ProblemRecord => ({
   statement: r.statement,
   solution: r.solution,
   rubric: parseJson<string[]>(r.rubric, []),
+  code: r.code ? parseJson<CodeStarter | null>(r.code, null) : null,
   createdAt: r.created_at,
 });
 const toAnswer = (r: AnswerRow): AnswerRecord => ({
@@ -89,6 +98,7 @@ const toAnswer = (r: AnswerRow): AnswerRecord => ({
   submittedAt: r.submitted_at,
   answer: r.answer,
   confidence: r.confidence,
+  extras: r.extras ? parseJson<ResponseExtras>(r.extras, {}) : {},
   score: r.score,
   feedback: r.feedback,
   gradedAt: r.graded_at,
@@ -103,8 +113,8 @@ export function createPracticeSet(
   const at = nowIso();
   const nodeIds = [...new Set(input.problems.flatMap((p) => p.nodeIds))];
   db.prepare("INSERT INTO practice_sets (id, created_at, kind, goal_id, node_ids, status, session_id) VALUES (?, ?, ?, ?, ?, 'open', ?)").run(id, at, input.kind, input.goalId, JSON.stringify(nodeIds), input.sessionId);
-  const insert = db.prepare('INSERT INTO problems (id, set_id, session_id, created_at, node_ids, rung, cue, presentation, statement, solution, rubric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  for (const p of input.problems) insert.run(newId('prob'), id, input.sessionId, at, JSON.stringify(p.nodeIds), p.rung, p.cue, p.presentation, p.statement, p.solution, JSON.stringify(p.rubric));
+  const insert = db.prepare('INSERT INTO problems (id, set_id, session_id, created_at, node_ids, rung, cue, presentation, statement, solution, rubric, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const p of input.problems) insert.run(newId('prob'), id, input.sessionId, at, JSON.stringify(p.nodeIds), p.rung, p.cue, p.presentation, p.statement, p.solution, JSON.stringify(p.rubric), p.code ? JSON.stringify(p.code) : null);
   return { id, kind: input.kind, goalId: input.goalId, sessionId: input.sessionId, createdAt: at, status: 'open' };
 }
 
@@ -148,9 +158,10 @@ export function getProblem(db: Database, id: string): ProblemRecord | undefined 
   return row ? toProblem(row) : undefined;
 }
 
-export function insertAnswer(db: Database, problemId: string, answer: string, confidence: number | null): AnswerRecord {
-  const record: AnswerRecord = { id: newId('ans'), problemId, submittedAt: nowIso(), answer, confidence, score: null, feedback: null, gradedAt: null };
-  db.prepare('INSERT INTO answers (id, problem_id, submitted_at, answer, confidence) VALUES (?, ?, ?, ?, ?)').run(record.id, problemId, record.submittedAt, answer, confidence);
+export function insertAnswer(db: Database, problemId: string, answer: string, confidence: number | null, extras: ResponseExtras = {}): AnswerRecord {
+  const record: AnswerRecord = { id: newId('ans'), problemId, submittedAt: nowIso(), answer, confidence, extras, score: null, feedback: null, gradedAt: null };
+  const stored = Object.keys(extras).length ? JSON.stringify(extras) : null;
+  db.prepare('INSERT INTO answers (id, problem_id, submitted_at, answer, confidence, extras) VALUES (?, ?, ?, ?, ?, ?)').run(record.id, problemId, record.submittedAt, answer, confidence, stored);
   return record;
 }
 

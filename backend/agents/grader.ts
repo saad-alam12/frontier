@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { confidenceLabel } from '../core/types';
-import type { LlmProvider } from '../llm/provider';
+import { codeForModel } from '../core/code';
+import type { CodeAnswer } from '../core/code';
+import type { LlmImage, LlmProvider } from '../llm/provider';
 import { answerReadingPrompt } from './prompts';
 
 export interface GradeInput {
@@ -10,6 +12,9 @@ export interface GradeInput {
   ideas: { id: string; name: string }[];
   answer: string;
   confidence: number | null;
+  /** Code the learner wrote for the answer, with its last run; its plots go with the call as images. */
+  code?: CodeAnswer;
+  plots?: LlmImage[];
   /** Flashcards on the problem's ideas and what they build on, for the grade to say which facts the answer recalled. */
   cards?: { id: string; front: string; back: string }[];
 }
@@ -43,7 +48,7 @@ export type PracticeGrade = z.infer<ReturnType<typeof buildPracticeGradeSchema>>
  * the solution is already on screen, so there is nothing for a grader to add.
  */
 export async function gradePractice(provider: LlmProvider, input: GradeInput): Promise<PracticeGrade> {
-  if (!input.answer.trim()) {
+  if (!input.answer.trim() && !input.code?.source.trim()) {
     return { score: 0, feedback: 'No answer this time. The solution shows what it needed.', ideas: input.ideas.map((i) => ({ nodeId: i.id, score: 0 })), misconception: null, recalledCards: [] };
   }
   const cards = input.cards ?? [];
@@ -53,12 +58,13 @@ export async function gradePractice(provider: LlmProvider, input: GradeInput): P
     `## Rubric\n${input.rubric.map((r) => `- ${r}`).join('\n')}`,
     `## Ideas the problem needs (score each)\n${input.ideas.map((i) => `- [${i.id}] ${i.name}`).join('\n')}`,
     ...(cards.length ? [`## The learner's flashcards on these ideas\n${cards.map((c) => `- [${c.id}] ${c.front}\n  Answer: ${c.back.replace(/\n/g, ' ')}`).join('\n')}`] : []),
-    `## Learner's answer${input.confidence === null ? '' : ` (confidence: ${confidenceLabel(input.confidence)})`}\n${input.answer}`,
+    `## Learner's answer${input.confidence === null ? '' : ` (confidence: ${confidenceLabel(input.confidence)})`}\n${input.answer.trim() || '(no text: the answer is the code below)'}`,
+    ...(input.code?.source.trim() ? [codeForModel(input.code)] : []),
   ].join('\n\n');
   const result = await provider.complete({
     role: 'grader',
     system: answerReadingPrompt('grader'),
-    messages: [{ role: 'user', content }],
+    messages: [{ role: 'user', content, images: input.plots?.length ? input.plots : undefined }],
     submit: { name: 'submit_grade', description: 'Submit the grade, feedback and a score per idea.', schema: buildPracticeGradeSchema(new Set(input.ideas.map((i) => i.id)), new Set(cards.map((c) => c.id))) },
   });
   return result.data;

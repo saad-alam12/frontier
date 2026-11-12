@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../api';
-import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, Role, Settings, SettingsPatch } from '../../backend/api/contract';
+import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, PythonInfo, Role, Settings, SettingsPatch } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
 import { Button, Notice, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
@@ -146,6 +146,8 @@ export function SettingsScreen() {
         </div>
       </Section>
 
+      <RunningCode settings={settings} onChange={(pythonPath) => void update({ pythonPath })} />
+
       <Section title="Data" gap={14}>
         <div className="settings-group">
           <SettingRow label="Data folder" hint="Holds the database, the sources you add and exports. Changing it does not move existing data.">
@@ -168,6 +170,53 @@ export function SettingsScreen() {
 
       <EraseMap />
     </Screen>
+  );
+}
+
+/**
+ * Which Python runs the learner's code (design §4.4, "Code"). Looking for it starts Python, so it
+ * happens when the learner asks, not each time Settings opens.
+ */
+function RunningCode({ settings, onChange }: { settings: Settings; onChange: (pythonPath: string) => void }) {
+  const [info, setInfo] = useState<PythonInfo | null>(null);
+  const [looking, setLooking] = useState(false);
+  const [path, setPath] = useState(settings.pythonPath);
+  const look = async () => {
+    setLooking(true);
+    try {
+      setInfo(await call('code.python', { lookAgain: true }));
+    } finally {
+      setLooking(false);
+    }
+  };
+  const found = info ? (info.python ? `${info.python}${info.version ? ` (Python ${info.version})` : ''}` : 'No Python 3 found. Run a piece of code in a session to see how to install it.') : null;
+  return (
+    <Section title="Running code" gap={14}>
+      <div className="settings-group">
+        <SettingRow
+          label="Python"
+          htmlFor="python-path"
+          hint={`Code in your answers runs with the Python on this computer, only when you press Run. Libraries it needs are installed into Frontier's own environment in the data folder, never into the system's Python. Leave the path empty to let Frontier find Python.`}
+        >
+          <input
+            id="python-path"
+            className="input"
+            value={path}
+            placeholder="Found by Frontier"
+            spellCheck={false}
+            onChange={(e) => setPath(e.target.value)}
+            onBlur={() => {
+              if (path.trim() !== settings.pythonPath) onChange(path.trim());
+            }}
+          />
+        </SettingRow>
+        <SettingRow label="Python in use" hint={found ?? 'Not looked for yet.'}>
+          <Button onClick={() => void look()} disabled={looking}>
+            {looking ? 'Looking…' : info ? 'Look again' : 'Find Python'}
+          </Button>
+        </SettingRow>
+      </div>
+    </Section>
   );
 }
 

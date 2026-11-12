@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CodeStarterSchema } from '../core/code';
 import type { ProblemSpec } from '../core/scheduler';
 import type { Assessment } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
@@ -36,6 +37,8 @@ export const GeneratedProblemSchema = z.object({
   statement: z.string().trim().min(20).max(4000),
   solution: z.string().trim().min(10).max(6000),
   rubric: z.array(z.string().trim().min(3).max(300)).min(2).max(6),
+  /** When the problem is answered in code: starter code for the learner's editor. */
+  code: CodeStarterSchema.nullable().optional(),
 });
 export type GeneratedProblem = z.infer<typeof GeneratedProblemSchema>;
 

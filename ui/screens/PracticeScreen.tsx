@@ -1,6 +1,6 @@
 import { plainError } from '../lib/errors';
 import { useCallback, useEffect, useState } from 'react';
-import type { PracticeView } from '../../backend/api/contract';
+import type { CodeAnswer, PracticeView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, Notice } from '../components/controls';
@@ -29,11 +29,11 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
     });
   }, [refresh, setId]);
 
-  const submit = async (problemId: string, answer: string, confidence: number | null) => {
+  const submit = async (problemId: string, answer: string, confidence: number | null, code?: CodeAnswer) => {
     setBusy(true);
     setError(null);
     try {
-      setView(await call('practice.submit', { problemId, answer, confidence }));
+      setView(await call('practice.submit', { problemId, answer, confidence, ...(code ? { code } : {}) }));
       setRevealed(problemId);
     } catch (e) {
       setError(plainError(e instanceof Error ? e.message : String(e)));
@@ -112,7 +112,7 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
         </div>
       </div>
       {error && <Notice error>{error}</Notice>}
-      <PracticeFlow view={view} revealedId={revealed} busy={busy} onSubmit={(id, a, c) => void submit(id, a, c)} onNext={() => setRevealed(null)} />
+      <PracticeFlow view={view} revealedId={revealed} busy={busy} onSubmit={(id, a, c, code) => void submit(id, a, c, code)} onNext={() => setRevealed(null)} />
       {!finished && (
         <div className="button-row border-t border-line pt-[18px]">
           <Button kind="quiet" disabled={busy} onClick={() => void stop()}>

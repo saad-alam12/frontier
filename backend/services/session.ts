@@ -17,6 +17,7 @@ import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import { attachmentExists, readAttachment } from '../store/attachments';
 import { figuresForNode, getFigure } from '../store/figures';
+import type { CodeStarter } from '../core/code';
 import type { Database } from '../store/db';
 import { nowIso } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
@@ -223,9 +224,9 @@ const SESSION_PRACTICE_PROBLEMS = 2;
 export type PublicCard =
   | { stage: 'predict' | 'connect' | 'compress'; prompt: string }
   | { stage: 'explain' | 'support' | 'reteach'; markdown: string }
-  | { stage: 'check'; question: string }
-  | { stage: 'derive'; prompt: string }
-  | { stage: 'use'; task: string }
+  | { stage: 'check'; question: string; code?: CodeStarter }
+  | { stage: 'derive'; prompt: string; code?: CodeStarter }
+  | { stage: 'use'; task: string; code?: CodeStarter }
   | { stage: 'index'; gist: string; placement: string; question: string };
 
 export interface SessionDeps extends Pick<PracticeDeps, 'onGraded' | 'onError'> {
@@ -374,19 +375,21 @@ export async function respond(deps: SessionDeps, sessionId: string, response: Le
 }
 
 /**
- * The renderer is not trusted with what reaches the model: attachments must be names of stored
- * files (at most four) and the quote must fit. Empty extras are dropped so stored answers stay plain.
+ * The renderer is not trusted with what reaches the model: attachments (and the plots of a code run)
+ * must be names of stored files (at most four) and the quote and the code must fit. Empty extras are
+ * dropped so stored answers stay plain.
  */
 function checkExtras(deps: SessionDeps, response: LearnerResponse): LearnerResponse {
-  const { attachments, quote, ...rest } = response;
-  const parsed = ResponseExtrasSchema.safeParse({ attachments: attachments?.length ? attachments : undefined, quote: quote?.trim() ? quote : undefined });
+  const { attachments, quote, code, ...rest } = response;
+  const parsed = ResponseExtrasSchema.safeParse({ attachments: attachments?.length ? attachments : undefined, quote: quote?.trim() ? quote : undefined, code: code?.source.trim() ? code : undefined });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'The attachments are not valid.');
   const extras = parsed.data;
-  if (extras.attachments) {
+  const stored = [...(extras.attachments ?? []), ...(extras.code?.run?.plots ?? [])];
+  if (stored.length) {
     const dir = deps.attachmentsDir;
-    if (!dir || !extras.attachments.every((name) => attachmentExists(dir, name))) throw new Error('An attached image was not saved. Attach it again.');
+    if (!dir || !stored.every((name) => attachmentExists(dir, name))) throw new Error('An attached image was not saved. Attach it again.');
   }
-  return { ...rest, ...(extras.attachments ? { attachments: extras.attachments } : {}), ...(extras.quote ? { quote: extras.quote } : {}) };
+  return { ...rest, ...(extras.attachments ? { attachments: extras.attachments } : {}), ...(extras.quote ? { quote: extras.quote } : {}), ...(extras.code ? { code: extras.code } : {}) };
 }
 
 /** Figures whose pictures go with a call that writes an explaining card: the first two the idea has. */
@@ -409,11 +412,12 @@ function figureImagesOf(deps: SessionDeps, figures: TutorFigure[]): LlmImage[] |
   return images.length ? images : undefined;
 }
 
-/** The images of the response being judged, read from disk for the model call. */
+/** The images of the response being judged (attached, then the plots its code drew), read from disk for the model call. */
 function imagesOf(deps: SessionDeps, response: LearnerResponse): LlmImage[] | undefined {
   const dir = deps.attachmentsDir;
-  if (!response.attachments?.length || !dir) return undefined;
-  return response.attachments.map((name) => readAttachment(dir, name));
+  const names = [...(response.attachments ?? []), ...(response.code?.run?.plots ?? [])];
+  if (!names.length || !dir) return undefined;
+  return names.map((name) => readAttachment(dir, name));
 }
 
 /** A free recall or an answer to a graded card: the learner may stop it and edit. */
@@ -503,7 +507,7 @@ async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionS
         state.phase = 'close';
         break;
       }
-      submitPracticeAnswer(deps, problem.id, response.answer, response.confidence ?? null);
+      submitPracticeAnswer(deps, problem.id, response.answer, response.confidence ?? null, { code: response.code });
       state.practiceRevealed = problem.id;
       appendSessionEvent(db, sessionId, 'practice-answer', { setId, problemId: problem.id });
       break;
@@ -976,11 +980,11 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
     case 'reteach':
       return { stage: card.stage, markdown: card.markdown };
     case 'check':
-      return { stage: 'check', question: card.question };
+      return { stage: 'check', question: card.question, ...(card.code ? { code: card.code } : {}) };
     case 'derive':
-      return { stage: 'derive', prompt: card.prompt };
+      return { stage: 'derive', prompt: card.prompt, ...(card.code ? { code: card.code } : {}) };
     case 'use':
-      return { stage: 'use', task: card.task };
+      return { stage: 'use', task: card.task, ...(card.code ? { code: card.code } : {}) };
     case 'index':
       return { stage: 'index', gist: card.gist, placement: card.placement, question: card.question };
   }

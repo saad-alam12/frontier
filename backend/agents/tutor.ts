@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { CodeStarterSchema, codeForModel } from '../core/code';
+import type { CodeAnswer } from '../core/code';
 import { unknownFigureRefs } from '../core/figureRefs';
 import { isGraded } from '../core/session';
 import type { Stage } from '../core/session';
@@ -13,11 +15,11 @@ const Rubric = z.array(z.string().trim().min(2).max(300)).min(1).max(6);
 export const CardSchemas = {
   predict: z.object({ stage: z.literal('predict'), prompt: md(1500) }),
   explain: z.object({ stage: z.literal('explain'), markdown: md(6000) }),
-  check: z.object({ stage: z.literal('check'), question: md(1500), answerKey: md(2000), rubric: Rubric }),
-  derive: z.object({ stage: z.literal('derive'), prompt: md(1500), answerKey: md(3000), rubric: Rubric }),
+  check: z.object({ stage: z.literal('check'), question: md(1500), answerKey: md(2000), rubric: Rubric, code: CodeStarterSchema.nullable().optional() }),
+  derive: z.object({ stage: z.literal('derive'), prompt: md(1500), answerKey: md(3000), rubric: Rubric, code: CodeStarterSchema.nullable().optional() }),
   connect: z.object({ stage: z.literal('connect'), prompt: md(1500) }),
   compress: z.object({ stage: z.literal('compress'), prompt: md(1000) }),
-  use: z.object({ stage: z.literal('use'), task: md(2500), answerKey: md(3000), rubric: Rubric }),
+  use: z.object({ stage: z.literal('use'), task: md(2500), answerKey: md(3000), rubric: Rubric, code: CodeStarterSchema.nullable().optional() }),
   index: z.object({ stage: z.literal('index'), gist: md(2000), placement: md(600), question: md(800), answerKey: md(1000) }),
   support: z.object({ stage: z.literal('support'), markdown: md(6000) }),
   reteach: z.object({ stage: z.literal('reteach'), markdown: md(6000) }),
@@ -79,6 +81,8 @@ export interface LearnerResponse {
   attachments?: string[];
   /** The part of an earlier message the learner selected and is replying to. */
   quote?: string;
+  /** Python the learner wrote for this answer, and what its last run printed. */
+  code?: CodeAnswer;
 }
 
 export interface TutorGoal {
@@ -356,8 +360,9 @@ export function cardText(card: TutorCard): string {
 export function responseText(r: LearnerResponse): string {
   const pictures = r.attachments?.length ?? 0;
   const parts = r.quote ? [`The learner is replying to this part: "${r.quote}"`] : [];
-  parts.push(r.answer.trim() ? r.answer : pictures ? '(no text: the answer is in the attached images)' : '(empty: the learner has no idea)');
+  parts.push(r.answer.trim() ? r.answer : pictures ? '(no text: the answer is in the attached images)' : r.code?.source.trim() ? '(no text: the answer is the code below)' : '(empty: the learner has no idea)');
   if (pictures) parts.push(`attached images: ${pictures}`);
+  if (r.code?.source.trim()) parts.push(codeForModel(r.code));
   if (r.confidence !== undefined) parts.push(`confidence: ${confidenceLabel(r.confidence)}`);
   if (r.handle) parts.push(`handle: ${r.handle}`);
   if (r.effort !== undefined) parts.push(`effort ${r.effort}/5`);

@@ -1,0 +1,167 @@
+/* Code in an answer: a mono field with colours under a transparent textarea, then what a run printed. */
+.code-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.code-field {
+  position: relative;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.code-field:focus-within {
+  box-shadow: inset 0 0 0 1px var(--ring), 0 0 0 3px var(--accent-halo);
+}
+.code-layer,
+.code-input {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+  white-space: pre;
+  height: calc(var(--code-lines, 8) * 13px * 1.6 + 24px);
+}
+.code-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text-soft);
+}
+.code-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: auto;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+.code-input::placeholder {
+  color: var(--text-faint);
+}
+.code-input::selection {
+  background: var(--accent-tint);
+  color: transparent;
+}
+.tok-keyword {
+  color: var(--code-keyword);
+}
+.tok-builtin {
+  color: var(--code-builtin);
+}
+.tok-string {
+  color: var(--code-string);
+}
+.tok-number {
+  color: var(--code-number);
+}
+.tok-decorator {
+  color: var(--code-decorator);
+}
+.tok-comment {
+  color: var(--code-comment);
+}
+.tok-definition {
+  color: var(--text);
+}
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.code-toolbar-end {
+  margin-left: auto;
+}
+.code-output {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.code-output.is-stale {
+  opacity: 0.6;
+}
+.code-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-muted);
+}
+.code-stream {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-soft);
+}
+.code-stream.is-error {
+  color: var(--danger-text);
+}
+.code-plots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.code-plots img {
+  display: block;
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.code-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 14px;
+}
+.code-command {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.code-command code {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.code-sent {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text-soft);
+}

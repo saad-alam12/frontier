@@ -3,6 +3,7 @@
  * schemas here are shared by the renderer (to refuse early) and the backend (to refuse for real).
  */
 import { z } from 'zod';
+import { CodeAnswerSchema } from './code';
 
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
 export type ImageMediaType = (typeof IMAGE_TYPES)[number];
@@ -69,5 +70,7 @@ export type ImageUpload = z.infer<typeof ImageUploadSchema>;
 export const ResponseExtrasSchema = z.object({
   attachments: z.array(AttachmentNameSchema).max(MAX_IMAGES, `At most ${MAX_IMAGES} images per answer.`).optional(),
   quote: z.string().trim().min(1).max(MAX_QUOTE_CHARS).optional(),
+  /** Python the learner wrote, with the last run of it (design §4.4, "Code"). */
+  code: CodeAnswerSchema.optional(),
 });
 export type ResponseExtras = z.infer<typeof ResponseExtrasSchema>;

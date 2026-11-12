@@ -449,6 +449,15 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX figure_ideas_node ON figure_ideas(node_id);
     `,
   },
+  {
+    version: 17,
+    // A practice problem may be answered in code (its starter code), and an answer may carry more than
+    // text: the code and the output of its last run (JSON, design §4.4).
+    sql: `
+      ALTER TABLE problems ADD COLUMN code TEXT;
+      ALTER TABLE answers ADD COLUMN extras TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

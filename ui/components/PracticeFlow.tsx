@@ -1,12 +1,18 @@
 import type { PracticeProblemView, PracticeView } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
+import type { CodeAnswer as CodeAnswerValue } from '../../backend/api/contract';
 import { AnswerActions, AnswerSurface } from './AnswerSurface';
+import { CodeAnswer, SentCode, codeOf } from './CodeAnswer';
+import type { CodeDraft } from './CodeAnswer';
 import { Button } from './controls';
 import { Markdown } from './Markdown';
 import { useDrafts } from '../hooks/useDrafts';
 
-type Draft = { answer: string; confidence: number | null };
-const EMPTY: Draft = { answer: '', confidence: null };
+type Draft = { answer: string; confidence: number | null; code?: CodeDraft | null };
+const EMPTY: Draft = { answer: '', confidence: null, code: null };
+
+/** An answer to a practice problem as the screens send it. */
+export type PracticeSubmit = (problemId: string, answer: string, confidence: number | null, code?: CodeAnswerValue) => void;
 
 const RUNG_LABEL = ['Worked example', 'Finish the solution', 'Exercise', 'Several ideas at once', 'Find the way in'];
 
@@ -26,7 +32,7 @@ export function PracticeFlow({
   /** The problem whose solution was just revealed; "Next" moves on. */
   revealedId: string | null;
   busy: boolean;
-  onSubmit: (problemId: string, answer: string, confidence: number | null) => void;
+  onSubmit: PracticeSubmit;
   onNext: () => void;
 }) {
   const answered = view.problems.filter((p) => p.answer !== null);
@@ -59,14 +65,15 @@ function ProblemHead({ problem, index, total }: { problem: PracticeProblemView; 
   );
 }
 
-function OpenProblem({ problem, index, total, busy, onSubmit }: { problem: PracticeProblemView; index: number; total: number; busy: boolean; onSubmit: (problemId: string, answer: string, confidence: number | null) => void }) {
+function OpenProblem({ problem, index, total, busy, onSubmit }: { problem: PracticeProblemView; index: number; total: number; busy: boolean; onSubmit: PracticeSubmit }) {
   const key = `practice:${problem.id}`;
   const drafts = useDrafts<Draft>([key], EMPTY);
   const draft = drafts.values[key] ?? EMPTY;
-  const send = (answer: string) => {
+  /** "No idea" sends nothing else; an answer goes with its code and the code's last run. */
+  const send = (answer: string, noIdea = false) => {
     if (busy) return;
     drafts.set(key, EMPTY);
-    onSubmit(problem.id, answer, draft.confidence);
+    onSubmit(problem.id, answer, draft.confidence, noIdea ? undefined : codeOf(draft.code));
   };
   return (
     <section className="flex flex-col gap-[32px]">
@@ -83,8 +90,9 @@ function OpenProblem({ problem, index, total, busy, onSubmit }: { problem: Pract
         rows={5}
         disabled={busy}
       />
+      <CodeAnswer draft={draft.code ?? null} onChange={(code) => drafts.set(key, { ...draft, code })} starter={problem.code?.starter} disabled={busy} onSubmit={() => send(draft.answer)} />
       <div className="flex flex-col gap-[10px]">
-        <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('')} disabled={busy} />
+        <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('', true)} disabled={busy} />
         <p className="t-small m-0 text-muted">One attempt. The solution appears as soon as you submit.</p>
       </div>
     </section>
@@ -99,7 +107,8 @@ function AnsweredProblem({ problem, index, total }: { problem: PracticeProblemVi
       <Markdown text={problem.statement} className="text-[15px]" />
       {answer && (
         <div className="answer-block flex flex-col gap-[8px]">
-          {answer.text.trim() ? <div className="learner-text whitespace-pre-wrap">{answer.text}</div> : <div className="learner-text text-muted">No idea</div>}
+          {answer.text.trim() ? <div className="learner-text whitespace-pre-wrap">{answer.text}</div> : answer.code ? null : <div className="learner-text text-muted">No idea</div>}
+          {answer.code && <SentCode code={answer.code} />}
           {answer.confidence !== null && <div className="t-caption text-muted">{capitalize(confidenceLabel(answer.confidence))}</div>}
         </div>
       )}
