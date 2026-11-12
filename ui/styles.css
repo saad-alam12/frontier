@@ -4042,3 +4042,18 @@ button.map-label:hover {
   justify-content: space-between;
   gap: 16px;
 }
+
+/* Watched folders (Library). */
+.watched-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.watched-folder {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}

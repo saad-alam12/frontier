@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call, onEvent } from '../api';
 import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../../backend/api/contract';
+import { WatchedFolders } from '../components/WatchedFolders';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
@@ -155,7 +156,8 @@ export function LibraryScreen() {
           <p className="t-lead m-0">The material your maps are built from.</p>
         </div>
         {notice && <Notice error>{notice}</Notice>}
-        <Empty action={addButton}>Add a lecture PDF or notes, a web page by its link, or paste text. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+        <Empty action={addButton}>Add a lecture PDF, slides, a Word document, an EPUB book, a notebook or notes, a web page by its link, or paste text. Each is read into ideas and the reasoning between them, then compared with what you know.</Empty>
+        <WatchedFolders onChanged={() => void refresh()} />
         {pasteSheet}
       </Screen>
     );
@@ -179,6 +181,7 @@ export function LibraryScreen() {
           </li>
         ))}
       </ul>
+      <WatchedFolders onChanged={() => void refresh()} />
     </>
   );
 

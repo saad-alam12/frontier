@@ -119,7 +119,7 @@ export class IngestionService {
   async addDocument(input: { kind: SourceKind; name: string; bytes: Buffer; origin?: string | null }): Promise<{ source: Source; existed: boolean }> {
     const { kind, name, bytes } = input;
     const result = await readBytes(kind, bytes, basename(name, extname(name)), { pictures: this.makesPictures });
-    if (hasNoText(result)) throw new Error(kind === 'pdf' && !this.makesPictures ? `${name} has no text to read: it looks like a scan or pictures of pages, which only the app can read.` : `${name} has no text to read.`);
+    if (hasNoText(result)) throw new Error(nothingToRead(kind, name, bytes.length, this.makesPictures));
     const hash = sha256(bytes);
     const existing = findSourceByHash(this.db, hash);
     if (existing) return { source: existing, existed: true };
@@ -455,6 +455,21 @@ export class IngestionService {
     const s = getSource(this.db, sourceId);
     if (!s) return;
     this.options.onProgress?.({ sourceId, status: s.status, chunkCount: s.chunkCount, chunksDone: s.chunksDone, ...extra });
+  }
+}
+
+/** Why a file gave nothing to read, said so the learner knows what to do about it. */
+export function nothingToRead(kind: SourceKind, name: string, size: number, pictures: boolean): string {
+  if (size === 0) return `${name} is empty: the file has nothing in it.`;
+  switch (kind) {
+    case 'pdf':
+      return pictures ? `${name} has no text and no pictures to read: its pages look blank.` : `${name} has no text to read: it looks like a scan or pictures of pages, which only the app can read.`;
+    case 'docx':
+    case 'pptx':
+    case 'epub':
+      return `${name} has no text: what it shows may be pictures. Save or export it as a PDF and add that: pages that are pictures are read from a PDF.`;
+    default:
+      return `${name} has no text to read.`;
   }
 }
 

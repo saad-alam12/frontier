@@ -5,6 +5,7 @@ import type { ReadResult } from '../types';
 import { readHtml } from './html';
 import { readMarkdown } from './markdown';
 import { readPdf } from './pdf';
+import { readDocx, readEpub, readNotebook, readPptx } from './office';
 
 export function kindForFile(path: string): SourceKind | null {
   switch (extname(path).toLowerCase()) {
@@ -18,12 +19,20 @@ export function kindForFile(path: string): SourceKind | null {
     case '.html':
     case '.htm':
       return 'html';
+    case '.docx':
+      return 'docx';
+    case '.pptx':
+      return 'pptx';
+    case '.epub':
+      return 'epub';
+    case '.ipynb':
+      return 'notebook';
     default:
       return null;
   }
 }
 
-export const SUPPORTED_EXTENSIONS = ['pdf', 'md', 'markdown', 'txt', 'html', 'htm'];
+export const SUPPORTED_EXTENSIONS = ['pdf', 'md', 'markdown', 'txt', 'html', 'htm', 'docx', 'pptx', 'epub', 'ipynb'];
 
 /** What a reader is asked for: `pictures: false` when no pictures of pages can be made, so a PDF's picture pages are left out. */
 export interface ReadOptions {
@@ -45,6 +54,14 @@ export async function readBytes(kind: SourceKind, bytes: Buffer, fallbackTitle: 
       return readPdf(new Uint8Array(bytes), fallbackTitle, options);
     case 'html':
       return readHtml(decodeText(bytes), fallbackTitle);
+    case 'docx':
+      return readDocx(new Uint8Array(bytes), fallbackTitle);
+    case 'pptx':
+      return readPptx(new Uint8Array(bytes), fallbackTitle);
+    case 'epub':
+      return readEpub(new Uint8Array(bytes), fallbackTitle);
+    case 'notebook':
+      return readNotebook(decodeText(bytes), fallbackTitle);
     case 'markdown':
     case 'text':
     case 'session':

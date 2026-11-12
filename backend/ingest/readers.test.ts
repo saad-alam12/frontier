@@ -82,7 +82,8 @@ describe('file kinds', () => {
     expect(kindForFile('/x/a.PDF')).toBe('pdf');
     expect(kindForFile('a.md')).toBe('markdown');
     expect(kindForFile('a.htm')).toBe('html');
-    expect(kindForFile('a.docx')).toBeNull();
+    expect(kindForFile('a.docx')).toBe('docx');
+    expect(kindForFile('a.doc')).toBeNull();
   });
 });
 

@@ -10,6 +10,7 @@ import { cheatSheetView, exportGoalNotes, goalNotesView, NOTE_CHARS, noteFor, sa
 import { notesPdfName } from '../core/notes';
 import { editIdea, mergeCandidates, mergeIdeas, NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
 import { weekReview } from '../services/weekReview';
+import { watchedFolderViews } from '../services/folderWatch';
 import { misconceptionsView } from '../services/misconceptions';
 import { dismissMisconception } from '../services/bugs';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
@@ -170,6 +171,25 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
+    'library.watchedFolders': () => watchedFolderViews(ctx.db()),
+    'library.watchFolder': async ({ goalId }) => {
+      const goal = z.string().min(1).nullable().parse(goalId ?? null);
+      const window = ctx.window();
+      const options: Electron.OpenDialogOptions = { title: 'Choose a folder to watch', properties: ['openDirectory'] };
+      const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+      const path = result.filePaths[0];
+      if (result.canceled || !path) return null;
+      const added = await ctx.folderWatcher().add(path, goal);
+      return { added, folders: await watchedFolderViews(ctx.db()) };
+    },
+    'library.unwatchFolder': async ({ path }) => {
+      ctx.folderWatcher().remove(z.string().min(1).parse(path));
+      return watchedFolderViews(ctx.db());
+    },
+    'library.scanFolders': async () => {
+      const added = await ctx.folderWatcher().scanAll();
+      return { added, folders: await watchedFolderViews(ctx.db()) };
+    },
     'goals.list': () => listGoals(ctx.db()).map((g) => detail(g.id)),
     'goals.get': ({ goalId }) => detail(goalId),
     'goals.exportNotes': async ({ goalId }) => {

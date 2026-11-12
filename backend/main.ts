@@ -165,6 +165,8 @@ void app.whenReady().then(() => {
   ctx.window = () => mainWindow;
   registerIpc(ctx, (url) => isAppPage(url, appUrl()));
   createWindow();
+  // course folders the learner watches: new lectures arrive on their own
+  ctx.folderWatcher().start();
   ctx.backupIfDue();
   setInterval(() => ctx.backupIfDue(), BACKUP_CHECK_MS).unref();
   updateBadge(ctx);

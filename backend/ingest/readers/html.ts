@@ -20,19 +20,24 @@ function parse(html: string): Doc {
   return (parseHTML(html) as unknown as { document: Doc }).document;
 }
 
-/** Main-content extraction (readability style) with headings as locators; falls back to visible text. */
-export function readHtml(html: string, fallbackTitle: string): ReadResult {
+/**
+ * Main-content extraction (readability style) with headings as locators; falls back to visible text.
+ * `article: false` reads the whole body, as for a book's chapter, where article extraction would cut parts.
+ */
+export function readHtml(html: string, fallbackTitle: string, options: { article?: boolean } = {}): ReadResult {
   const document = parse(html);
   let title = document.querySelector('title')?.textContent?.trim() || fallbackTitle;
   let root: El | null = null;
-  try {
-    const parsed = new Readability(document as unknown as Document).parse();
-    if (parsed?.content) {
-      if (parsed.title?.trim()) title = parsed.title.trim();
-      root = parse(`<html><body>${parsed.content}</body></html>`).body;
+  if (options.article !== false) {
+    try {
+      const parsed = new Readability(document as unknown as Document).parse();
+      if (parsed?.content) {
+        if (parsed.title?.trim()) title = parsed.title.trim();
+        root = parse(`<html><body>${parsed.content}</body></html>`).body;
+      }
+    } catch {
+      root = null;
     }
-  } catch {
-    root = null;
   }
   if (!root) {
     for (const el of document.querySelectorAll('script, style, nav, footer, header, noscript')) el.remove();

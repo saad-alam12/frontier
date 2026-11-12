@@ -12,6 +12,8 @@ import { crc32, deflateSync } from 'node:zlib';
 import { saveImageFile } from '../backend/store/attachments';
 import { describeFigure, listFigures, setFigurePicture, syncFigurePages } from '../backend/store/figures';
 import { createSource } from '../backend/store/sources';
+import { addWatchedFolder } from '../backend/store/watchedFolders';
+import { strToU8, zipSync } from 'fflate';
 import { FakeProvider } from '../backend/llm/FakeProvider';
 import { stageAsked } from '../backend/llm/fakeTutor';
 import type { CompleteRequest } from '../backend/llm/provider';
@@ -309,6 +311,18 @@ if (flags.includes('--talk')) {
   const examiner = new FakeProvider({ examiner: [{ say: questions[0], done: false, verdict: null }, { say: questions[1], done: false, verdict: null }] });
   const talk = await startDialogue({ db, provider: examiner }, exam.id, 'oral');
   await answerDialogue({ db, provider: examiner }, talk.id, 'Each player is already playing a best response to the other, so neither gains by changing alone.');
+}
+
+// a watched course folder with a Word document and a notebook, looked through when the app starts (`--watch`)
+if (flags.includes('--watch')) {
+  const course = join(folder, 'Course folder');
+  mkdirSync(course, { recursive: true });
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const p = (text: string, style = '') => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+  const docx = zipSync({ 'word/document.xml': strToU8(`<w:document ${W}><w:body>${p('Lecture 6: Repeated games', 'Title')}${p('Why cooperation can last', 'Heading1')}${p('In a game played again and again, the threat of punishment tomorrow can keep players cooperating today.')}</w:body></w:document>`) });
+  writeFileSync(join(course, 'Lecture 6.docx'), docx);
+  writeFileSync(join(course, 'Price war.ipynb'), JSON.stringify({ cells: [{ cell_type: 'markdown', source: '# Simulating a price war' }, { cell_type: 'code', source: 'prices = [10, 15]' }] }));
+  addWatchedFolder(db, course, null);
 }
 
 // an open session at its recall, which opens with the question the last session left (`--recall`)

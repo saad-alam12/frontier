@@ -317,7 +317,7 @@ export type GoalFocus = (typeof GOAL_FOCUS)[number];
 /** Does the goal's material cover the whole goal, part of it, or only a fragment (design §3.2)? */
 export type Coverage = 'complete' | 'partial' | 'fragment';
 
-export type SourceKind = 'pdf' | 'markdown' | 'text' | 'html' | 'session';
+export type SourceKind = 'pdf' | 'markdown' | 'text' | 'html' | 'docx' | 'pptx' | 'epub' | 'notebook' | 'session';
 
 export interface Source {
   id: string;

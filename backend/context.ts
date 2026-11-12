@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { EventSink } from './api/handlers';
 import { TransformersEmbedder } from './ingest/embedder';
 import type { Embedder } from './ingest/embedder';
@@ -17,7 +17,9 @@ import { upgradeDerivedStates, upgradeTimeOwners } from './services/knowledge';
 import { SessionWork } from './services/sessionWork';
 import { SessionMaker } from './services/sessionMaker';
 import { CodeRunner } from './services/codeRunner';
-import { listGoals } from './store/goals';
+import { FolderWatcher } from './services/folderWatch';
+import { guessRole, updateGoalFromForm } from './services/goals';
+import { listGoals, listMaterials } from './store/goals';
 import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
 import { dailyBackup, isBackupName, listBackups, manualBackup, restoreBackup as saveBeforeRestore } from './store/backup';
@@ -50,6 +52,7 @@ export class AppContext {
   private cachedIngestion: IngestionService | null = null;
   private cachedGoalWorker: GoalWorker | null = null;
   private cachedCodeRunner: CodeRunner | null = null;
+  private cachedFolderWatcher: FolderWatcher | null = null;
 
   constructor(
     readonly version: string,
@@ -151,6 +154,33 @@ export class AppContext {
     return this.cachedCodeRunner;
   }
 
+  /**
+   * Watched folders: a file of a goal's folder becomes that goal's material (its role guessed, read as
+   * the goal needs it); a file of a folder with no goal goes to the Library and is read.
+   */
+  folderWatcher(): FolderWatcher {
+    this.cachedFolderWatcher ??= new FolderWatcher({
+      db: () => this.db(),
+      addFile: async (path, goalId) => {
+        const added = await this.ingestion().addFile(path);
+        const { source } = added;
+        if (goalId) {
+          const materials = listMaterials(this.db(), goalId);
+          if (!materials.some((m) => m.sourceId === source.id)) {
+            const guess = await guessRole(this.db(), this.provider(), source.id).catch(() => ({ role: 'teaching' as const }));
+            updateGoalFromForm(this.db(), goalId, { materials: [...materials.map((m) => ({ sourceId: m.sourceId, role: m.role })), { sourceId: source.id, role: guess.role }] });
+            this.goalWorker().refresh(goalId);
+            this.emit('goals.changed', { goalId });
+          }
+        } else if (source.status !== 'done') this.ingestion().start(source.id);
+        return added;
+      },
+      onAdded: (folder, titles) =>
+        this.emit('app.toast', { kind: 'info', message: titles.length === 1 ? `${titles[0]} arrived in ${basename(folder)} and was added.` : `${titles.length} new files arrived in ${basename(folder)} and were added.` }),
+    });
+    return this.cachedFolderWatcher;
+  }
+
   /** What sessions and practice need to run and grade; grades are announced to the renderer. */
   practiceDeps() {
     return {
@@ -215,6 +245,7 @@ export class AppContext {
     for (const leftover of [`${paths.db}-wal`, `${paths.db}-shm`]) rmSync(leftover, { force: true });
     copyFileSync(join(paths.backups, file), paths.db);
     this.db();
+    this.cachedFolderWatcher?.start();
   }
 
   resumeGoalWork(): void {
@@ -241,9 +272,12 @@ export class AppContext {
     this.cachedGoalWorker = null;
     this.cachedCodeRunner = null;
     this.ensureFolders();
+    // the other data folder has folders of its own to watch
+    this.cachedFolderWatcher?.start();
   }
 
   close(): void {
+    this.cachedFolderWatcher?.stop();
     for (const db of [this.cachedDb, ...this.retiredDbs]) db?.close();
     this.cachedDb = null;
     this.retiredDbs.length = 0;

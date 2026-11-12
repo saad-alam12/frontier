@@ -528,6 +528,26 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       INSERT INTO chunk_search(chunk_search) VALUES ('rebuild');
     `,
   },
+  {
+    version: 23,
+    // Folders the learner asked to watch (a course folder): new files in them are added on their own.
+    sql: `
+      CREATE TABLE watched_folders (
+        path TEXT PRIMARY KEY,
+        goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+        added_at TEXT NOT NULL
+      );
+      CREATE TABLE watched_files (
+        path TEXT PRIMARY KEY,
+        folder TEXT NOT NULL REFERENCES watched_folders(path) ON DELETE CASCADE,
+        size INTEGER NOT NULL,
+        mtime_ms REAL NOT NULL,
+        source_id TEXT,
+        error TEXT,
+        seen_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

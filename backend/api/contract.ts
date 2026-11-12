@@ -38,6 +38,7 @@ import type { DialogueView } from '../services/dialogue';
 import type { CheatSheetView, GoalNotesView } from '../services/notes';
 import type { MergeCandidate } from '../services/mapEdit';
 import type { WeekReviewView } from '../services/weekReview';
+import type { WatchedFolderView } from '../services/folderWatch';
 import type { MisconceptionView } from '../services/misconceptions';
 import type { DialogueKind } from '../store/dialogues';
 import type { ImageUpload } from '../core/attachments';
@@ -94,6 +95,7 @@ export type { DialogueKind, DialogueView };
 export type { CheatSheetView, GoalNotesView, NoteIdeaView } from '../services/notes';
 export type { MergeCandidate } from '../services/mapEdit';
 export type { WeekReviewView } from '../services/weekReview';
+export type { WatchedFolderView } from '../services/folderWatch';
 export type { MisconceptionView } from '../services/misconceptions';
 export type { Suggestion, SuggestionKind } from '../core/weekReview';
 
@@ -137,6 +139,13 @@ export interface ApiMethods {
   /** Read a source again into lesson-sized ideas; returns how many of its old ideas were retired. */
   'library.reread': { input: { sourceId: string }; output: { retired: number } };
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
+  /** Folders watched for new files (a course folder), with how many of their files are in the Library. */
+  'library.watchedFolders': { input: undefined; output: WatchedFolderView[] };
+  /** Choose a folder to watch, for a goal or for the Library; its files are added at once. Null when cancelled. */
+  'library.watchFolder': { input: { goalId: string | null }; output: { added: number; folders: WatchedFolderView[] } | null };
+  'library.unwatchFolder': { input: { path: string }; output: WatchedFolderView[] };
+  /** Look through every watched folder now. */
+  'library.scanFolders': { input: undefined; output: { added: number; folders: WatchedFolderView[] } };
   'goals.list': { input: undefined; output: GoalDetail[] };
   'goals.get': { input: { goalId: string }; output: GoalDetail };
   /** Save the goal as Markdown notes where the learner chooses; null when they cancel. */
