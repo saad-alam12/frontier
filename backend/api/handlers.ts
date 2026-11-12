@@ -25,7 +25,7 @@ import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession, askTutor, ASIDE_MAX_CHARS } from '../services/session';
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { refreshGoalFields } from '../services/knowledge';
-import { currentPractice, practiceView, startPractice, submitPracticeAnswer, endPracticeSet, resumeGrading } from '../services/practice';
+import { currentPractice, endPracticeSet, handInExam, practiceView, resumeGrading, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
 import { EraseRequestSchema, eraseFromMap, previewErase, removeSource } from '../services/erase';
@@ -309,6 +309,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
         maxProblems: problems === undefined ? undefined : z.number().int().min(1).max(8).parse(problems),
         focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
       }),
+    'practice.handIn': ({ setId }) => handInExam(ctx.db(), String(setId)),
     'practice.submit': ({ problemId, answer, confidence, code }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code }),
     'code.run': (input) => {
       const { source, key } = CodeRunSchema.parse(input);

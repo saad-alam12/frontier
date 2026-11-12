@@ -35,14 +35,16 @@ export function PracticeFlow({
   onSubmit: PracticeSubmit;
   onNext: () => void;
 }) {
-  const answered = view.problems.filter((p) => p.answer !== null);
+  // an exam that is over shows every problem with its solution, answered or not
+  const answered = view.exam?.over ? view.problems : view.problems.filter((p) => p.answer !== null);
   const current = view.currentIndex === null || revealedId ? null : (view.problems[view.currentIndex] ?? null);
   const total = view.problems.length;
   const isLast = view.currentIndex === null;
+  const examOpen = Boolean(view.exam && !view.exam.over);
   return (
     <div className="flex flex-col gap-[48px]">
       {answered.map((p) => (
-        <AnsweredProblem key={p.id} problem={p} index={view.problems.indexOf(p)} total={total} />
+        <AnsweredProblem key={p.id} problem={p} index={view.problems.indexOf(p)} total={total} examOpen={examOpen} />
       ))}
       {revealedId && (
         <div className="button-row">
@@ -51,7 +53,7 @@ export function PracticeFlow({
           </Button>
         </div>
       )}
-      {current && <OpenProblem key={current.id} problem={current} index={view.currentIndex ?? 0} total={total} busy={busy} onSubmit={onSubmit} />}
+      {current && <OpenProblem key={current.id} problem={current} index={view.currentIndex ?? 0} total={total} busy={busy} onSubmit={onSubmit} exam={examOpen} />}
     </div>
   );
 }
@@ -65,7 +67,7 @@ function ProblemHead({ problem, index, total }: { problem: PracticeProblemView; 
   );
 }
 
-function OpenProblem({ problem, index, total, busy, onSubmit }: { problem: PracticeProblemView; index: number; total: number; busy: boolean; onSubmit: PracticeSubmit }) {
+function OpenProblem({ problem, index, total, busy, onSubmit, exam }: { problem: PracticeProblemView; index: number; total: number; busy: boolean; onSubmit: PracticeSubmit; exam?: boolean }) {
   const key = `practice:${problem.id}`;
   const drafts = useDrafts<Draft>([key], EMPTY);
   const draft = drafts.values[key] ?? EMPTY;
@@ -93,18 +95,19 @@ function OpenProblem({ problem, index, total, busy, onSubmit }: { problem: Pract
       <CodeAnswer draft={draft.code ?? null} onChange={(code) => drafts.set(key, { ...draft, code })} starter={problem.code?.starter} disabled={busy} onSubmit={() => send(draft.answer)} />
       <div className="flex flex-col gap-[10px]">
         <AnswerActions onSubmit={() => send(draft.answer)} onNoIdea={() => send('', true)} disabled={busy} />
-        <p className="t-small m-0 text-muted">One attempt. The solution appears as soon as you submit.</p>
+        <p className="t-small m-0 text-muted">{exam ? 'One attempt. Solutions and grades show when you hand in the exam.' : 'One attempt. The solution appears as soon as you submit.'}</p>
       </div>
     </section>
   );
 }
 
-function AnsweredProblem({ problem, index, total }: { problem: PracticeProblemView; index: number; total: number }) {
+function AnsweredProblem({ problem, index, total, examOpen }: { problem: PracticeProblemView; index: number; total: number; examOpen?: boolean }) {
   const answer = problem.answer;
   return (
     <article className="flex flex-col gap-[16px]" id={`problem-${problem.id}`}>
       <ProblemHead problem={problem} index={index} total={total} />
       <Markdown text={problem.statement} className="text-[15px]" />
+      {!answer && !examOpen && <div className="answer-block learner-text text-muted">Not answered</div>}
       {answer && (
         <div className="answer-block flex flex-col gap-[8px]">
           {answer.text.trim() ? <div className="learner-text whitespace-pre-wrap">{answer.text}</div> : answer.code ? null : <div className="learner-text text-muted">No idea</div>}
@@ -123,10 +126,12 @@ function AnsweredProblem({ problem, index, total }: { problem: PracticeProblemVi
           <span className="font-medium">{formatScore(problem.grade.score)}/10</span>
           <Markdown text={problem.grade.feedback} className="text-soft" />
         </div>
-      ) : (
+      ) : examOpen ? null : answer ? (
         <p className="t-small m-0 text-muted" aria-live="polite">
           Grading…
         </p>
+      ) : (
+        <span className="font-medium">0/10</span>
       )}
       {problem.ideas && problem.ideas.length > 0 && (
         <div className="idea-chips" aria-label="Ideas this drew on">

@@ -10,7 +10,7 @@ import { getPracticeSet, listProblems } from '../store/practice';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { recordEvidence } from './evidence';
 import { refreshGoalFields } from './knowledge';
-import { currentPractice, endPracticeSet, goalSchedule, missedInPractice, resumeGrading, settleGrading, startPractice, submitPracticeAnswer } from './practice';
+import { currentPractice, endPracticeSet, goalSchedule, handInExam, missedInPractice, practiceView, resumeGrading, settleGrading, startPractice, submitPracticeAnswer } from './practice';
 import type { PracticeDeps } from './practice';
 import { todayView } from './today';
 import { reviewsByCard } from '../store/cards';
@@ -295,5 +295,42 @@ describe('Today: the time the learner has (R7 A4)', () => {
     // the goal's ideas are fading, so practice comes before new ideas
     expect(half[1]).toMatchObject({ kind: 'practice', goalId: goal.id });
     expect(view.streak).toBe(0);
+  });
+});
+
+describe('exam mode (R7 B7)', () => {
+  it('a mock exam is timed, shows nothing until it is handed in, then the solutions and a report per skill', async () => {
+    const { db, goal, deps } = setup(6);
+    const exam = await startPractice(deps, goal.id, { kind: 'mock' });
+    expect(exam?.exam).toMatchObject({ over: false, report: null });
+    expect(exam?.exam?.minutes).toBe(Math.round(((exam?.problems.length ?? 0) * 12) / 5) * 5);
+    const first = exam?.problems[0];
+    let view = submitPracticeAnswer(deps, first?.id ?? '', 'Both undercut until (1,1).', 0.66);
+    await settleGrading();
+    view = practiceView(db, exam?.id ?? '');
+    // graded in the background, but nothing shows yet
+    expect(view.problems[0]).toMatchObject({ solution: null, grade: null, ideas: null });
+    expect(view.problems[0]?.answer?.text).toBe('Both undercut until (1,1).');
+    expect(view.currentIndex).toBe(1);
+
+    view = handInExam(db, exam?.id ?? '');
+    expect(view.exam?.over).toBe(true);
+    expect(view.problems.every((p) => p.solution !== null)).toBe(true);
+    expect(view.problems[0]?.grade?.score).toBe(6);
+    const report = view.exam?.report;
+    expect(report?.answered).toBe(1);
+    expect(report?.points).toBe(6);
+    expect(report?.skills.some((s) => s.score !== null)).toBe(true);
+    // every answer it got is graded, so the exam is done; nothing more can be answered
+    expect(view.status).toBe('done');
+    expect(() => submitPracticeAnswer(deps, view.problems[1]?.id ?? '', 'late', null)).toThrow('This exam is over');
+  });
+
+  it('an exam whose time ran out is no longer in progress on Today', async () => {
+    const { goal, deps } = setup(6);
+    const exam = await startPractice(deps, goal.id, { kind: 'mock' });
+    expect(currentPractice(deps.db)?.id).toBe(exam?.id);
+    deps.db.prepare("UPDATE practice_sets SET created_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(exam?.id ?? '');
+    expect(currentPractice(deps.db)).toBeNull();
   });
 });

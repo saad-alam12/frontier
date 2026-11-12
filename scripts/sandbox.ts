@@ -30,6 +30,7 @@ import { startFreeSession } from '../backend/services/freeSession';
 import { proposeAddition, requestAddition } from '../backend/services/addition';
 import { SessionMaker } from '../backend/services/sessionMaker';
 import { SessionWork } from '../backend/services/sessionWork';
+import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
 
 const [folderArg, ...flags] = process.argv.slice(2);
 if (!folderArg) {
@@ -227,6 +228,29 @@ const adding = new FakeProvider({
 });
 await proposeAddition({ db, provider: adding }, pricing.id);
 refreshGoalFields(db);
+
+// a mock exam under way, one problem answered and graded in the background (`--exam`)
+if (flags.includes('--exam')) {
+  const examProvider = new FakeProvider({
+    problemGenerator: (req: CompleteRequest<unknown>) => {
+      const specs = [...(req.messages[0]?.content ?? '').matchAll(/### Problem (\d+)/g)].map((m) => Number(m[1]));
+      const statements = [
+        'Two firms set prices of 10 or 15. Payoffs are (40, 40), (10, 60), (60, 10) and (25, 25). Which pairs of prices are stable, and why?',
+        'Player 1 chooses Top or Bottom, then player 2 sees it and chooses Left or Right. Find the outcome a rational pair would reach.',
+        'In a game where one strategy beats another whatever the opponent does, what can you remove first, and what is left?',
+      ];
+      return { problems: specs.map((index) => ({ index, statement: statements[index % statements.length] as string, solution: 'Check each player in turn, holding the other fixed: only (10, 10) survives, since either firm gains by undercutting a price of 15.', rubric: ['checks both players', 'names the stable pair'] })) };
+    },
+    grader: (req: CompleteRequest<unknown>) => {
+      const ids = [...(req.messages[0]?.content ?? '').matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => m[1] as string);
+      return { score: 7, feedback: 'You found the stable pair and checked one firm; check the other as well.', ideas: ids.map((nodeId) => ({ nodeId, score: 7 })), misconception: null };
+    },
+  });
+  const examDeps = { db, provider: examProvider };
+  const mock = await startPractice(examDeps, exam.id, { kind: 'mock', maxProblems: 3 });
+  if (mock?.problems[0]) submitPracticeAnswer(examDeps, mock.problems[0].id, 'Low, low: neither firm gains by raising its price alone.', 0.66);
+  await settleGrading();
+}
 
 // an open session at its first explanation (which shows the lecture's figure), past the recall and the orientation
 if (flags.includes('--open-session')) {

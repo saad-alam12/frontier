@@ -475,6 +475,14 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX model_calls_at ON model_calls(at);
     `,
   },
+  {
+    version: 19,
+    // A mock exam is timed (minutes) and handed in; until then it shows no solution or grade.
+    sql: `
+      ALTER TABLE practice_sets ADD COLUMN minutes INTEGER;
+      ALTER TABLE practice_sets ADD COLUMN handed_in_at TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

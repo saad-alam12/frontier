@@ -15,6 +15,9 @@ export interface PracticeSetRecord {
   sessionId: string | null;
   createdAt: string;
   status: 'open' | 'done';
+  /** A timed exam's minutes; null for practice. */
+  minutes: number | null;
+  handedInAt: string | null;
 }
 
 export interface ProblemRecord {
@@ -52,6 +55,8 @@ interface SetRow {
   session_id: string | null;
   created_at: string;
   status: 'open' | 'done';
+  minutes: number | null;
+  handed_in_at: string | null;
 }
 interface ProblemRow {
   id: string;
@@ -78,7 +83,7 @@ interface AnswerRow {
   graded_at: string | null;
 }
 
-const toSet = (r: SetRow): PracticeSetRecord => ({ id: r.id, kind: r.kind, goalId: r.goal_id, sessionId: r.session_id, createdAt: r.created_at, status: r.status });
+const toSet = (r: SetRow): PracticeSetRecord => ({ id: r.id, kind: r.kind, goalId: r.goal_id, sessionId: r.session_id, createdAt: r.created_at, status: r.status, minutes: r.minutes, handedInAt: r.handed_in_at });
 const toProblem = (r: ProblemRow): ProblemRecord => ({
   id: r.id,
   setId: r.set_id,
@@ -107,15 +112,21 @@ const toAnswer = (r: AnswerRow): AnswerRecord => ({
 /** Store a set and its problems, solutions and rubrics before any problem is shown (commit before pose). */
 export function createPracticeSet(
   db: Database,
-  input: { kind: PracticeKind; goalId: string | null; sessionId: string | null; problems: Omit<ProblemRecord, 'id' | 'setId' | 'createdAt'>[] },
+  input: { kind: PracticeKind; goalId: string | null; sessionId: string | null; minutes?: number | null; problems: Omit<ProblemRecord, 'id' | 'setId' | 'createdAt'>[] },
 ): PracticeSetRecord {
   const id = newId('pset');
   const at = nowIso();
   const nodeIds = [...new Set(input.problems.flatMap((p) => p.nodeIds))];
-  db.prepare("INSERT INTO practice_sets (id, created_at, kind, goal_id, node_ids, status, session_id) VALUES (?, ?, ?, ?, ?, 'open', ?)").run(id, at, input.kind, input.goalId, JSON.stringify(nodeIds), input.sessionId);
+  const minutes = input.minutes ?? null;
+  db.prepare("INSERT INTO practice_sets (id, created_at, kind, goal_id, node_ids, status, session_id, minutes) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)").run(id, at, input.kind, input.goalId, JSON.stringify(nodeIds), input.sessionId, minutes);
   const insert = db.prepare('INSERT INTO problems (id, set_id, session_id, created_at, node_ids, rung, cue, presentation, statement, solution, rubric, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   for (const p of input.problems) insert.run(newId('prob'), id, input.sessionId, at, JSON.stringify(p.nodeIds), p.rung, p.cue, p.presentation, p.statement, p.solution, JSON.stringify(p.rubric), p.code ? JSON.stringify(p.code) : null);
-  return { id, kind: input.kind, goalId: input.goalId, sessionId: input.sessionId, createdAt: at, status: 'open' };
+  return { id, kind: input.kind, goalId: input.goalId, sessionId: input.sessionId, createdAt: at, status: 'open', minutes, handedInAt: null };
+}
+
+/** An exam is handed in: its time stops and its solutions and grades show. */
+export function handInPracticeSet(db: Database, id: string, at = nowIso()): void {
+  db.prepare('UPDATE practice_sets SET handed_in_at = coalesce(handed_in_at, ?) WHERE id = ?').run(at, id);
 }
 
 export function getPracticeSet(db: Database, id: string): PracticeSetRecord | undefined {
@@ -124,9 +135,10 @@ export function getPracticeSet(db: Database, id: string): PracticeSetRecord | un
 }
 
 /** The newest open set outside sessions (sessions keep their own set in their state). */
-export function openPracticeSet(db: Database): PracticeSetRecord | undefined {
-  const row = db.prepare("SELECT * FROM practice_sets WHERE status = 'open' AND kind IN ('compound', 'mock') AND session_id IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 1").get() as SetRow | undefined;
-  return row ? toSet(row) : undefined;
+/** The newest open set outside sessions; an exam whose time is up is no longer in progress. */
+export function openPracticeSet(db: Database, now = new Date()): PracticeSetRecord | undefined {
+  const rows = db.prepare("SELECT * FROM practice_sets WHERE status = 'open' AND kind IN ('compound', 'mock') AND session_id IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 5").all() as unknown as SetRow[];
+  return rows.map(toSet).find((s) => s.minutes === null || (s.handedInAt === null && new Date(s.createdAt).getTime() + s.minutes * 60_000 > now.getTime()));
 }
 
 export function listPracticeSets(db: Database, limit = 50): PracticeSetRecord[] {

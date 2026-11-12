@@ -23,9 +23,11 @@ import { transaction } from '../store/db';
 import { logEvent } from '../store/activity';
 import { listBugsForNode } from '../store/bugs';
 import { afterAnswer } from './bugs';
-import { getGoal, listMaterials, listTargets } from '../store/goals';
-import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
-import type { AnswerRecord, PracticeKind } from '../store/practice';
+import { getGoal, listCapabilities, listMaterials, listTargets } from '../store/goals';
+import { answerFor, closePracticeSet, createPracticeSet, getPracticeSet, getProblem, handInPracticeSet, ideaScoresForProblem, insertAnswer, listProblems, openPracticeSet, practiceCounts, recentStatements, saveGrade, ungradedAnswers } from '../store/practice';
+import type { AnswerRecord, PracticeKind, ProblemRecord } from '../store/practice';
+import { examClock, examMinutes, examReport } from '../core/exam';
+import type { ExamReport } from '../core/exam';
 import { getSource, listChunks } from '../store/sources';
 import { goalRhythm } from './budget';
 import { cardsToJudge, creditRecalledCards } from './cards';
@@ -147,6 +149,8 @@ export interface PracticeView {
   problems: PracticeProblemView[];
   /** The first unanswered problem, or null when all are answered. */
   currentIndex: number | null;
+  /** A mock exam: its time, whether it is over, and once it is, the report per skill. */
+  exam: { minutes: number; endsAt: string; over: boolean; report: ExamReport | null } | null;
 }
 
 export interface PracticeProblemView {
@@ -165,14 +169,20 @@ export interface PracticeProblemView {
   ideas: { nodeId: string; name: string; score: number | null }[] | null;
 }
 
-export function practiceView(db: Database, setId: string): PracticeView {
+export function practiceView(db: Database, setId: string, now = new Date()): PracticeView {
   const set = getPracticeSet(db, setId);
   if (!set) throw new Error(`unknown practice set ${setId}`);
   const goal = set.goalId ? getGoal(db, set.goalId) : undefined;
   const view = loadKnowledge(db);
-  const problems = listProblems(db, setId).map((p): PracticeProblemView => {
-    const answer = answerFor(db, p.id);
+  const clock = set.minutes !== null ? examClock({ createdAt: set.createdAt, minutes: set.minutes, handedInAt: set.handedInAt }, now) : null;
+  const stored = listProblems(db, setId).map((p) => ({ problem: p, answer: answerFor(db, p.id) }));
+  const problems = stored.map(({ problem: p, answer }): PracticeProblemView => {
     const ideaScores = answer && answer.score !== null ? ideaScoresForProblem(db, p.id) : new Map<string, number>();
+    // an exam shows nothing of the solution or the grade until it is handed in; then every problem's solution shows
+    if (clock && !clock.over) {
+      return { id: p.id, statement: p.statement, rung: p.rung, cue: p.cue, presentation: p.presentation, answer: answer ? { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null } : null, code: p.code, solution: null, grade: null, ideas: null };
+    }
+    const shown = Boolean(answer) || Boolean(clock?.over);
     return {
       id: p.id,
       statement: p.statement,
@@ -181,13 +191,60 @@ export function practiceView(db: Database, setId: string): PracticeView {
       presentation: p.presentation,
       answer: answer ? { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null } : null,
       code: p.code,
-      solution: answer ? p.solution : null,
+      solution: shown ? p.solution : null,
       grade: answer && answer.score !== null ? { score: Math.round(answer.score * 100) / 10, feedback: answer.feedback ?? '' } : null,
-      ideas: answer ? p.nodeIds.map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id, score: ideaScores.get(id) ?? null })) : null,
+      ideas: shown ? p.nodeIds.map((id) => ({ nodeId: id, name: view.nodes.get(id)?.name ?? id, score: ideaScores.get(id) ?? (answer ? null : 0) })) : null,
     };
   });
   const current = problems.findIndex((p) => p.answer === null);
-  return { id: set.id, kind: set.kind, goalId: set.goalId, goalTitle: goal?.title ?? goal?.text ?? '', status: set.status, problems, currentIndex: current === -1 ? null : current };
+  const exam = clock && set.minutes !== null ? { minutes: set.minutes, endsAt: clock.endsAt, over: clock.over, report: clock.over ? reportFor(db, set.goalId, stored) : null } : null;
+  return { id: set.id, kind: set.kind, goalId: set.goalId, goalTitle: goal?.title ?? goal?.text ?? '', status: set.status, problems, currentIndex: clock?.over || current === -1 ? null : current, exam };
+}
+
+/** The report of an exam that is over: points, a score per skill of the goal, the ideas to work on. */
+function reportFor(db: Database, goalId: string | null, stored: { problem: ProblemRecord; answer: AnswerRecord | undefined }[]): ExamReport {
+  const targets = goalId ? listTargets(db, goalId) : [];
+  const skills = goalId ? listCapabilities(db, goalId).map((c) => ({ id: c.id, statement: c.statement, nodeIds: targets.filter((t) => t.capabilityId === c.id).map((t) => t.nodeId) })) : [];
+  return examReport(
+    stored.map(({ problem, answer }) => ({
+      nodeIds: problem.nodeIds,
+      answered: Boolean(answer),
+      score: answer && answer.score !== null ? Math.round(answer.score * 100) / 10 : null,
+      ideaScores: answer && answer.score !== null ? ideaScoresForProblem(db, problem.id) : new Map(),
+    })),
+    skills,
+  );
+}
+
+/**
+ * Hand in an exam: its time stops, and its solutions, grades and report show. Problems left unanswered
+ * count zero in the exam's score and write nothing about their ideas, as when leaving practice early.
+ */
+export function handInExam(db: Database, setId: string, now = new Date()): PracticeView {
+  const set = getPracticeSet(db, setId);
+  if (!set || set.minutes === null) throw new Error('Only a mock exam is handed in.');
+  transaction(db, () => {
+    handInPracticeSet(db, setId, now.toISOString());
+    closeWhenGraded(db, setId, now);
+  });
+  return practiceView(db, setId, now);
+}
+
+/**
+ * A set is done when every problem has a graded answer, or, for an exam that is over, when every
+ * answer it got is graded.
+ */
+function closeWhenGraded(db: Database, setId: string, now = new Date()): boolean {
+  const set = getPracticeSet(db, setId);
+  if (!set || set.status !== 'open') return false;
+  const answers = listProblems(db, set.id).map((p) => answerFor(db, p.id));
+  const over = set.minutes !== null && examClock({ createdAt: set.createdAt, minutes: set.minutes, handedInAt: set.handedInAt }, now).over;
+  const graded = answers.every((a) => a !== undefined && a.score !== null) || (over && answers.every((a) => a === undefined || a.score !== null));
+  if (!graded) return false;
+  closePracticeSet(db, set.id);
+  logEvent(db, 'practice.done', { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId }, { kind: set.kind });
+  refreshGoalFields(db);
+  return true;
 }
 
 export function currentPractice(db: Database): PracticeView | null {
@@ -278,6 +335,8 @@ export async function startPractice(deps: PracticeDeps, goalId: string, options:
     kind,
     goalId,
     sessionId: options.sessionId ?? null,
+    // a mock exam is timed like the real one, about twelve minutes a problem
+    minutes: kind === 'mock' ? examMinutes(specs.length, goal.examProfile?.durationMinutes ?? null) : null,
     problems: problems.map((p) => {
       const spec = specs[p.index] as ProblemSpec;
       return { nodeIds: spec.nodeIds, rung: spec.rung, cue: spec.cue, presentation: spec.presentation, statement: p.statement, solution: p.solution, rubric: p.rubric, code: p.code ?? null };
@@ -320,6 +379,10 @@ export async function settleGrading(): Promise<void> {
 export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answer: string, confidence: number | null, extras: { code?: CodeAnswer } = {}): PracticeView {
   const problem = getProblem(deps.db, problemId);
   if (!problem) throw new Error(`unknown problem ${problemId}`);
+  const set = getPracticeSet(deps.db, problem.setId);
+  if (set?.minutes != null && examClock({ createdAt: set.createdAt, minutes: set.minutes, handedInAt: set.handedInAt }, new Date()).over) {
+    throw new Error('This exam is over: it was handed in or its time ran out.');
+  }
   if (!answerFor(deps.db, problemId)) {
     const record = insertAnswer(deps.db, problemId, answer, confidence, checkedExtras(deps, extras));
     track(deps, record);
@@ -403,11 +466,7 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     for (const nodeId of new Set([...grade.ideas.map((i) => i.nodeId), ...(wrong ? [wrong.nodeId] : [])])) {
       if (view.nodes.has(nodeId)) afterAnswer(db, nodeId, wrong?.nodeId === nodeId ? wrong.description : null, answer.submittedAt);
     }
-    if (set && listProblems(db, set.id).every((p) => answerFor(db, p.id)?.score !== null && answerFor(db, p.id) !== undefined)) {
-      closePracticeSet(db, set.id);
-      logEvent(db, 'practice.done', { goalId: set.goalId, practiceSetId: set.id, sessionId: set.sessionId }, { kind: set.kind });
-      refreshGoalFields(db);
-    }
+    if (set) closeWhenGraded(db, set.id);
   });
   deps.onGraded?.({ setId: problem.setId, problemId: problem.id });
 }

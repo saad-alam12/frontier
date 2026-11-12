@@ -83,6 +83,7 @@ export interface FigureView {
 export type { CodeAnswer, CodeRun, CodeStarter } from '../core/code';
 export type { InstallOutcome, PythonInfo, RunOutcome, UsageView };
 export type { Preset } from '../settings/schema';
+export type { ExamReport } from '../core/exam';
 
 export interface AppInfo {
   version: string;
@@ -213,6 +214,8 @@ export interface ApiMethods {
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel; problems?: number }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer }; output: PracticeView };
+  /** Hand in a mock exam: its solutions, grades and report show; unanswered problems count zero in its score. */
+  'practice.handIn': { input: { setId: string }; output: PracticeView };
   /** Leave a set as it stands: answered problems count, the rest write nothing. */
   'practice.end': { input: { setId: string }; output: null };
   'map.view': { input: undefined; output: MapView };

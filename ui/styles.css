@@ -3658,3 +3658,36 @@ button.map-label:hover {
   border-radius: 1px;
   background: var(--text-secondary);
 }
+
+/* A mock exam: the time left, and the report after it is handed in. */
+.exam-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.exam-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.exam-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-skill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 52px;
+  align-items: center;
+  gap: 14px;
+}
+.exam-skill-name {
+  min-width: 0;
+}

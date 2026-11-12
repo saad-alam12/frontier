@@ -143,7 +143,7 @@ A new goal is set up in four steps, one decision each: the goal (sentence, kind,
 
 ### 3.3 How the assessment changes behaviour
 
-- **Written exam:** capabilities are what the exam asks on paper; practice is shaped by the exam profile; readiness per lecture; mock exams in the last four weeks (M5).
+- **Written exam:** capabilities are what the exam asks on paper; practice is shaped by the exam profile; readiness per lecture; mock exams in the last four weeks (M5). A mock exam is timed like the exam (about twelve minutes a problem, never longer than the exam profile's duration, at least ten minutes) and shows no solution or grade until it is handed in or its time is up (answers are graded in the background meanwhile); a time that runs out hands it in, and an exam out of time is no longer "in progress" on Today. Then every problem shows its solution, the answered ones their grades, and a report: points (an unanswered problem counts zero), a score per skill of the goal from the ideas the exam tested, the skills it did not test, and the ideas below the pass mark to work on. Unanswered problems write no evidence, as when leaving practice early; the answered ones write practice evidence like any problem, which is how the report feeds the next sessions and practice.
 - **Oral exam:** practice is explaining aloud; the tutor can act as an examiner with follow-up "why" and "what if" questions; explanation depth is weighted up.
 - **Presentation or project:** practice is producing the thing (outline, argument, Q&A rehearsal).
 - **Outcome:** capabilities are the tasks themselves.
