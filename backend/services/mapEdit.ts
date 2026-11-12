@@ -15,7 +15,8 @@ import { ideaNotesFor, saveIdeaNote } from '../store/ideaNotes';
 import { openSetsWith } from '../store/practice';
 import { repointIdeaReferences } from '../store/references';
 import { activeSession } from '../store/sessions';
-import { applyIdeaEdit, applyIdeaMerge, deleteMergedNode, getNode, listChains, searchNodesByName } from '../store/world';
+import { getNode, listChains, searchNodesByName } from '../store/world';
+import { writeIdeaEdit, writeIdeaMerge } from './merger';
 import { mergeEvidenceInto } from './evidence';
 import { refreshGoalFields } from './knowledge';
 
@@ -40,7 +41,7 @@ export function editIdea(db: Database, nodeId: string, edit: { name: string; sta
   if (edit.statement.trim().length > STATEMENT_CHARS) throw new Error(`A statement can be at most ${STATEMENT_CHARS} characters.`);
   const planned = planIdeaEdit(node, edit);
   if (!planned) return { changed: false };
-  transaction(db, () => applyIdeaEdit(db, nodeId, planned));
+  transaction(db, () => writeIdeaEdit(db, nodeId, planned));
   return { changed: true };
 }
 
@@ -62,14 +63,14 @@ export function mergeIdeas(db: Database, keepId: string, dropId: string): { keep
 
   const plan = planIdeaMerge(keep, drop, listChains(db));
   transaction(db, () => {
-    applyIdeaMerge(db, plan);
-    mergeEvidenceInto(db, dropId, keepId);
-    mergeTargets(db, dropId, keepId);
-    const notes = ideaNotesFor(db, [keepId, dropId]);
-    const dropNote = notes.get(dropId);
-    if (dropNote) saveIdeaNote(db, keepId, [notes.get(keepId), dropNote].filter(Boolean).join('\n\n'));
-    repointIdeaReferences(db, dropId, keepId);
-    deleteMergedNode(db, dropId);
+    writeIdeaMerge(db, plan, () => {
+      mergeEvidenceInto(db, dropId, keepId);
+      mergeTargets(db, dropId, keepId);
+      const notes = ideaNotesFor(db, [keepId, dropId]);
+      const dropNote = notes.get(dropId);
+      if (dropNote) saveIdeaNote(db, keepId, [notes.get(keepId), dropNote].filter(Boolean).join('\n\n'));
+      repointIdeaReferences(db, dropId, keepId);
+    });
     refreshGoalFields(db);
   });
   return { keepId };

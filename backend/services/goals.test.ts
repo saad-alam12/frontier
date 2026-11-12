@@ -9,7 +9,8 @@ import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { getState, listEvidenceForNode } from '../store/evidence';
 import { listBugsForNode } from '../store/bugs';
 import { listNodes } from '../store/world';
-import { compileGoal, goalDetail, setGoalStatus } from './goals';
+import { compileGoal, goDeeper, goalDetail, listGoalDetails, removeGoal, setGoalStatus } from './goals';
+import { createSession, endSession } from '../store/sessions';
 import { recordEvidence } from './evidence';
 import { loadKnowledge } from './knowledge';
 import { cancelProbe, createProbe, openProbe, probeDraftKey, submitProbe } from './probe';
@@ -255,6 +256,18 @@ describe('pausing and finishing a goal', () => {
       setGoalStatus(db, goal.id, 'active');
       expect(getState(db, nash)?.targetDepth).toBe(3);
     }
+  });
+
+  it('a goal is not removed, and not taken deeper, while a session on it is open; removed, its ideas stay', async () => {
+    const { db, ids, goal } = await activeGoal();
+    const session = createSession(db, goal.id, {});
+    expect(() => removeGoal(db, goal.id)).toThrow('A session on this goal is open');
+    expect(() => goDeeper(db, goal.id)).toThrow('Finish or end the open session first');
+    endSession(db, session.id, 'abandoned');
+    removeGoal(db, goal.id);
+    expect(listGoalDetails(db, () => ({ state: 'idle' }))).toEqual([]);
+    expect(getState(db, ids.get('nash') as string)?.targetDepth).toBe(0); // no goal wants it now
+    expect(listNodes(db).some((n) => n.id === ids.get('nash'))).toBe(true);
   });
 
   it('a draft has no state to set', () => {

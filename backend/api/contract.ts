@@ -6,9 +6,8 @@ import type { PracticeLevel } from '../core/scheduler';
 import type { AsideMode } from '../agents/tutor';
 import type { BackupInfo } from '../store/backup';
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
-import type { MaterialRole } from '../core/types';
 import type { ConnectionTestResult } from '../agents/connectionTest';
-import type { DeltaItem, DeltaSummary, IdeaRef, LinkResult, PastedText, SourceSummary } from '../services/library';
+import type { DeltaItem, DeltaSummary, IdeaRef, LinkResult, MaterialCandidate, PastedText, SourceSummary } from '../services/library';
 import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
@@ -58,7 +57,7 @@ export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, Today
 export type { DeltaItem, IdeaRef, Effort, ModelOptions, GoalForm, GoalWorkState, MaterialView };
 export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind, GoalLevel, MaterialRole, UpcomingUnit } from '../core/types';
 export type { SkillStatus } from '../core/goals';
-export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, LinkResult, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
+export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, LinkResult, MaterialCandidate, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
 export type { SentAnswer, SessionWorkEvent, SessionWorkView };
 export type { FreeBackgroundView, FreeChoice, FreeIdeaView, FreePlanView, MakerRequest, MakerView };
@@ -68,13 +67,6 @@ export type { DeltaClass } from '../core/delta';
 export type { Goal, Depth } from '../core/types';
 
 /** A file offered as goal material, with the role guessed from its content. */
-export interface MaterialCandidate {
-  sourceId: string;
-  title: string;
-  role: MaterialRole;
-  reason: string;
-  existed: boolean;
-}
 
 export type { BackupInfo, PracticeLevel };
 

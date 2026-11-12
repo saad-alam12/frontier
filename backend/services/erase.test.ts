@@ -12,7 +12,8 @@ import { appendSessionEvent, createSession, endSession } from '../store/sessions
 import { getSetting, setSetting } from '../store/settingsTable';
 import { seedExampleGraph, SEED_HASH } from '../store/seed/exampleGraph';
 import { addCoverage, createSource, findSourceByHash, getSource, listSources } from '../store/sources';
-import { applyMergePlan, chainsAround, countNodes, getNode, listChains, listNodes } from '../store/world';
+import { chainsAround, countNodes, getNode, listChains, listNodes } from '../store/world';
+import { applyMergePlan } from '../store/worldWrites';
 import { eraseFromMap, EraseRequestSchema, previewErase } from './erase';
 import type { EraseRequest } from './erase';
 import { recordEvidence } from './evidence';

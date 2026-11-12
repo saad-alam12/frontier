@@ -16,7 +16,8 @@ import { closePracticeSet, openSetsWith } from '../store/practice';
 import { activeSession } from '../store/sessions';
 import { coveredNodeIds, coveredOutside, deleteSource, getSource, listSources } from '../store/sources';
 import { figureFilesInUse, listFigures } from '../store/figures';
-import { dropSourceRefs, listChains, listNodes, retireNodes } from '../store/world';
+import { listChains, listNodes } from '../store/world';
+import { retireIdeas, stopCiting } from './merger';
 import { eraseEvidenceFor } from './evidence';
 import { refreshGoalFields } from './knowledge';
 import { mapView } from './map';
@@ -131,11 +132,11 @@ export function eraseFromMap(deps: EraseDeps, request: EraseRequest): EraseResul
     deleteEmbeddings(db, ideas);
     removeTargetsOf(db, ideas);
     for (const setId of openSetsWith(db, plan.nodeIds)) closePracticeSet(db, setId);
-    retireNodes(db, ideas);
+    retireIdeas(db, ideas);
     deleteUntaggedCards(db);
     removeMaterialsOf(db, plan.sourceIds);
     for (const id of plan.sourceIds) {
-      dropSourceRefs(db, id);
+      stopCiting(db, id);
       deleteSource(db, id);
     }
 
@@ -203,7 +204,7 @@ export function removeSource(deps: EraseDeps, sourceId: string): void {
   if (deps.isReading?.(sourceId)) throw new Error('This source is being read right now. Wait until it finishes, then remove it.');
   const pictures = pictureFiles(db)(sourceId);
   transaction(db, () => {
-    dropSourceRefs(db, sourceId);
+    stopCiting(db, sourceId);
     for (const goal of listGoals(db)) forgetCompiledSource(db, goal.id, sourceId);
     deleteSource(db, sourceId); // its parts, its coverage, its picture pages and its place in goals' material go with it
   });

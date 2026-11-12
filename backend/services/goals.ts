@@ -31,11 +31,13 @@ import {
   forgetCompiledSource,
   getGoal,
   listCapabilities,
+  deleteGoal,
   listGoals,
   listMaterials,
   listTargets,
   markCompiled,
   requestRemap,
+  startUnverified,
   saveRemap,
   saveCoverage,
   saveProfile,
@@ -46,9 +48,11 @@ import {
 } from '../store/goals';
 import type { GoalInput, NewTarget } from '../store/goals';
 import { logEvent } from '../store/activity';
+import { activeSession } from '../store/sessions';
 import { newId } from '../store/ids';
 import { coveredNodeIds, getSource, listChunks } from '../store/sources';
-import { createUnverifiedNodes, getNodes } from '../store/world';
+import { getNodes } from '../store/world';
+import { addUnverifiedIdeas } from './merger';
 import { ideaMinutes } from '../core/budget';
 import { attributeTime, goalBudgetMinutes, goalProgress, learnerSpeedNow, spentByGoal } from './budget';
 import type { GoalProgress } from './budget';
@@ -100,6 +104,28 @@ export interface GoalDetail {
   /** Time against the budget, ideas against the plan, and pace; null until the goal is compiled. */
   progress: GoalProgress | null;
   work: GoalWorkState;
+}
+
+/** Every goal as its page shows it, with what the background work is doing on each. */
+export function listGoalDetails(db: Database, workOf: (goalId: string) => GoalWorkState): GoalDetail[] {
+  return listGoals(db).flatMap((g) => goalDetail(db, g.id, workOf(g.id)) ?? []);
+}
+
+/** Remove a goal, refused while a session on it is open. Its ideas and what was learned stay on the map. */
+export function removeGoal(db: Database, goalId: string): void {
+  if (activeSession(db)?.goalId === goalId) throw new Error('A session on this goal is open. End or finish it first, then remove the goal.');
+  deleteGoal(db, goalId);
+  refreshGoalFields(db);
+}
+
+/** The learner asked for a new map of the goal; the goal worker makes it. */
+export function askForRemap(db: Database, goalId: string): void {
+  requestRemap(db, goalId);
+}
+
+/** The learner chose to start an idea of the goal that no source has grounded yet. */
+export function startUngrounded(db: Database, goalId: string, nodeId: string): void {
+  startUnverified(db, goalId, nodeId);
 }
 
 export function goalDetail(db: Database, goalId: string, work: GoalWorkState = { state: 'idle' }): GoalDetail | undefined {
@@ -303,6 +329,7 @@ export function deeperMinutes(db: Database, goalId: string, only?: string[]): { 
  * simplified and the plan may take them to the depth the goal asks. The caller starts a session on them.
  */
 export function goDeeper(db: Database, goalId: string, nodeIds?: string[]): { minutes: number; nodeIds: string[] } {
+  if (activeSession(db)) throw new Error('Finish or end the open session first, then go deeper.');
   const { ideas, minutes } = deeperMinutes(db, goalId, nodeIds);
   if (ideas.length === 0) return { minutes: 0, nodeIds: [] };
   const ids = ideas.map((i) => i.nodeId);
@@ -431,7 +458,7 @@ export function applyCompile(db: Database, goal: Goal, result: CompileOutput, so
     tempToId.set(n.tempId, id);
     return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
   });
-  if (created.length) createUnverifiedNodes(db, created);
+  addUnverifiedIdeas(db, created);
   // an idea named by a map that waited (a proposal) may be gone since: erased, or retired when its source was read again
   const present = getNodes(db, [...result.capabilities, ...result.extend].flatMap((c) => c.targets.map((t) => tempToId.get(t.ref) ?? t.ref)));
   const resolve = (targets: { ref: string; depth: number; core: boolean }[]) =>

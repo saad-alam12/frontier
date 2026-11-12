@@ -428,12 +428,13 @@ Electron was chosen over Tauri because the backend and the Agent SDK are TypeScr
 ```
 ui/          React screens and components (render only, talks to backend over IPC)
 backend/
-  api/       IPC handlers (transport only)
+  api/       IPC handlers (transport only: checks each input, calls services, never the store)
   agents/    one module per role; prompts in prompts/*.md
   core/      pure domain logic: fringe, leverage, scheduler, FSRS wrapper,
              implicit credit, chain simplification, merger, delta classification
-  services/  orchestration that combines core and store: evidence service (the one
-             evidence writer), knowledge view, ingestion pipeline, session runner
+  services/  orchestration that combines core and store: the merger (the one writer
+             of nodes and chains), evidence service (the one evidence writer),
+             knowledge view, ingestion pipeline, session runner
   store/     SQLite access; the only code that touches the database
   llm/       provider interface + AgentSdkProvider + AnthropicApiProvider + FakeProvider
   ingest/    file readers (pdf, md, html, transcript) and chunking
@@ -442,7 +443,8 @@ prompts/     all prompts, written from scratch for this project
 
 Rules:
 - **LLMs judge, code mechanizes.** Fringe, scheduling, FSRS, merging, dedupe, tiering and scoring arithmetic are deterministic code. LLMs extract, match, teach, generate and grade.
-- **One writer per store.** Only the merger writes the world layer. Only the evidence service writes evidence. NodeState is derived from evidence.
+- **Imports point inward.** The lint rules hold each folder to it: the window reaches the backend over IPC only; the transport calls services and never the store; `core/` imports no store, model or IO; agents get what they need from their caller; the store imports nothing outside it. Types may cross, since they vanish at build.
+- **One writer per store.** Only the merger (`services/merger.ts`, the one module that may import `store/worldWrites.ts`) writes the world layer. Only the evidence service writes evidence. NodeState is derived from evidence.
 - **Append-only evidence.** Never edit evidence; correct by appending. Two exceptions, both asked for by the learner: when they erase ideas from their map (Settings, "Erase from your map"), the evidence on those ideas is deleted with them; when they merge two ideas that are the same (section 8, "Editing the map"), the evidence of the one merged in moves to the one kept, unchanged but for the idea it names. The world layer is written only by the merger's entry points: reading a source, a goal's compile, and the learner's renames, corrections and merges. Flashcard reviews are append-only too, and a card's schedule is derived from them; only the cards service writes cards and reviews.
 - **Inputs are checked at the door.** Every call from the window is checked by the transport against its own zod schema (`api/inputs.ts`) before any handler runs: ids, sizes of text, choices from fixed lists, and dates as real calendar dates. The table is typed by the contract, so a method or a field without a check does not compile. A refusal comes back to the window in plain words ("A date, like 2026-12-18.") and is noted in the log with the field, never the text.
 - **Structured outputs via submit tools.** Each agent ends by calling a `submit_*` tool whose input is validated with zod; validation errors go back to the model for a retry (max 3).

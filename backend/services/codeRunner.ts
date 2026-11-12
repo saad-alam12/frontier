@@ -326,6 +326,13 @@ export class CodeRunner {
   }
 }
 
+/** On a Mac, open Apple's installer for its command line tools (they include Python 3). */
+export async function openPythonInstaller(processes: Processes = new ChildProcesses()): Promise<{ message: string }> {
+  if (process.platform !== 'darwin') throw new Error('Install Python 3 for your system, then press Run again.');
+  await processes.run('xcode-select', ['--install'], { timeoutMs: 30_000 });
+  return { message: "Apple's installer is open. When it has finished, press Run again." };
+}
+
 function noPythonMessage(): string {
   return process.platform === 'darwin'
     ? 'Python 3 is not on this Mac yet. Install Apple\'s command line tools (they include Python 3), or Python from python.org, then press Run again.'

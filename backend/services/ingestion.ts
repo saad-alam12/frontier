@@ -36,7 +36,8 @@ import { nodesInOpenSets } from '../store/practice';
 import { nodesInSessions } from '../store/sessions';
 import { addCoverage, coveredElsewhere, coveredNodeIds, createSource, findSourceByHash, getSource, listChunks, resetSourceParts, updateChunk, updateSourceStatus } from '../store/sources';
 import type { SourceChunk } from '../store/sources';
-import { applyMergePlan, getNodes, listChains, listNodes, retireNodes } from '../store/world';
+import { getNodes, listChains, listNodes } from '../store/world';
+import { mergeIntoMap, retireIdeas } from './merger';
 import { refreshGoalFields } from './knowledge';
 
 export interface IngestProgress {
@@ -181,7 +182,7 @@ export class IngestionService {
     const keep = new Set([...nodesWithEvidence(this.db), ...coveredElsewhere(this.db, sourceId), ...nodesInOpenSets(this.db), ...nodesInSessions(this.db, old), ...nodesWithCards(this.db)]);
     const retired = old.filter((id) => !keep.has(id));
     transaction(this.db, () => {
-      retireNodes(this.db, retired);
+      retireIdeas(this.db, retired);
       resetSourceParts(this.db, sourceId, parts);
       syncFigurePages(this.db, sourceId, pictures);
     });
@@ -342,7 +343,7 @@ export class IngestionService {
 
       const vectors = await this.embed(plan.newNodes.map(embeddingText));
       transaction(this.db, () => {
-        applyMergePlan(this.db, plan);
+        mergeIntoMap(this.db, plan);
         addCoverage(this.db, source.id, plan.coveredNodeIds);
         plan.newNodes.forEach((n, i) => {
           const vector = vectors[i];

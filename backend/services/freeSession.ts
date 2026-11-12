@@ -17,7 +17,8 @@ import { transaction } from '../store/db';
 import { getGoal, listTargets } from '../store/goals';
 import { newId } from '../store/ids';
 import { activeSession, appendSessionEvent, createSession, saveSessionState } from '../store/sessions';
-import { applyMergePlan, listChains, listNodes } from '../store/world';
+import { listChains, listNodes } from '../store/world';
+import { mergeIntoMap } from './merger';
 import { learnerSpeedNow } from './budget';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import type { MapState } from './map';
@@ -258,7 +259,7 @@ function mergeProposal(db: Database, sessionId: string, proposal: Proposal): Map
     newId: (prefix) => newId(prefix),
     newStatus: 'unverified',
   });
-  applyMergePlan(db, plan);
+  mergeIntoMap(db, plan);
   return plan.resolved;
 }
 

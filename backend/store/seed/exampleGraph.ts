@@ -7,7 +7,8 @@ import type { ExtractedChain, ExtractedNode } from '../../core/merge';
 import type { Database } from '../db';
 import { transaction } from '../db';
 import { createSource, findSourceByHash, updateSourceStatus, addCoverage } from '../sources';
-import { applyMergePlan, listNodes } from '../world';
+import { listNodes } from '../world';
+import { applyMergePlan } from '../worldWrites';
 
 type N = [tempId: string, kind: ExtractedNode['kind'], name: string, statement: string];
 

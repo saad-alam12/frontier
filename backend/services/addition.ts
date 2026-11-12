@@ -17,7 +17,8 @@ import type { Database } from '../store/db';
 import { dryRun, nowIso, transaction } from '../store/db';
 import { addCapabilities, approvePlannedDepths, getGoal, listTargets, saveAddition, startUnverified } from '../store/goals';
 import { newId } from '../store/ids';
-import { createUnverifiedNodes, getNodes } from '../store/world';
+import { getNodes } from '../store/world';
+import { addUnverifiedIdeas } from './merger';
 import { goalBudgetMinutes, previewPlan } from './budget';
 import type { PlanPreview } from './budget';
 import { dedupeTargets, existingCapabilities, recordBaseline } from './goals';
@@ -129,7 +130,7 @@ function writeAddition(db: Database, goal: Goal, proposal: AdditionProposal, req
     tempToId.set(n.tempId, id);
     return { id, kind: n.kind, name: n.name, statement: n.statement, aliases: [] };
   });
-  if (created.length) createUnverifiedNodes(db, created);
+  addUnverifiedIdeas(db, created);
   const refs = proposal.capabilities.flatMap((c) => c.targets.map((t) => tempToId.get(t.ref) ?? t.ref));
   const present = getNodes(db, refs);
   const capabilities = proposal.capabilities

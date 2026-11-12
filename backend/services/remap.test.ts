@@ -4,7 +4,7 @@ import type { CompleteRequest } from '../llm/provider';
 import { openDatabase } from '../store/db';
 import { addCapabilities, getGoal, listCapabilities, listTargets, markCompiled, requestRemap, setMaterials } from '../store/goals';
 import { createSource, updateSourceStatus } from '../store/sources';
-import { retireNodes } from '../store/world';
+import { retireNodes } from '../store/worldWrites';
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { approveGoalPlan, createGoalFromForm } from './goals';
 import { nextGoalStep } from './goalWorker';

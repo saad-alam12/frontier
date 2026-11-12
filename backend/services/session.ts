@@ -278,8 +278,12 @@ function normalized(session: SessionRecord<SessionState>): SessionRecord<Session
  * deeper on those ideas. Planning runs as the session's work, so it goes on when the screen closes.
  */
 /** `minutes`: the time the learner has ("I have 30 minutes"); the planner fits the session to it instead of 45. */
-export async function startSession(deps: SessionDeps, goalId: string, focus?: string[], minutes?: number): Promise<SessionSnapshot> {
+/** A session asked to fit a time lasts between these, in minutes. */
+const SESSION_MINUTES = { min: 10, max: 90 };
+
+export async function startSession(deps: SessionDeps, goalId: string, focus?: string[], wanted?: number): Promise<SessionSnapshot> {
   const { db } = deps;
+  const minutes = wanted === undefined ? undefined : Math.max(SESSION_MINUTES.min, Math.min(SESSION_MINUTES.max, Math.round(wanted)));
   const active = activeSession<SessionState>(db);
   if (active) return snapshot(db, normalized(active), deps.work);
   const sessionId = await deps.work.run({ kind: 'start', sessionId: null, goalId, sent: null, stoppable: false }, () => openGoalSession(deps, goalId, focus, minutes), (id) => id);
@@ -341,11 +345,12 @@ export function pauseSession(db: Database, sessionId: string): void {
 /**
  * End a session early. What was learned stays as evidence, the tutor's prose is ingested, and the
  * next session on the goal recalls the finished ideas and continues a half-done one where it stopped.
+ * Answers the goal it was on, which may now want a new map.
  */
-export async function abandonSession(deps: SessionDeps, sessionId: string): Promise<void> {
+export async function abandonSession(deps: SessionDeps, sessionId: string): Promise<{ goalId: string | null }> {
   const { db } = deps;
   const session = getSession<SessionState>(db, sessionId);
-  if (!session || session.status !== 'active') return;
+  if (!session || session.status !== 'active') return { goalId: session?.goalId ?? null };
   // an answer still being judged is stopped if it can be; if not, the work stops itself at its next step (stillOpen)
   deps.work.cancel(sessionId);
   endSession(db, sessionId, 'abandoned');
@@ -354,6 +359,7 @@ export async function abandonSession(deps: SessionDeps, sessionId: string): Prom
   logEvent(db, 'session.ended', { goalId: session.goalId, sessionId }, { status: 'abandoned' });
   refreshGoalFields(db);
   await ingestTranscript(deps, sessionId, session.state);
+  return { goalId: session.goalId };
 }
 
 /**

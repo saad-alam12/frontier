@@ -105,6 +105,11 @@ export function cancelProbe(probeId: string): boolean {
   return judging.get(probeId)?.cancel() ?? false;
 }
 
+/** The goal a probe set checks, if it is still there. */
+export function probeGoalId(db: Database, probeId: string): string | null {
+  return getProbeSet(db, probeId)?.goalId ?? null;
+}
+
 export async function submitProbe(db: Database, provider: LlmProvider, probeId: string, answers: ProbeAnswerInput[]): Promise<ProbeOutcome[]> {
   if (judging.has(probeId)) throw new Error('These answers are already being judged.');
   const gate = new CommitGate();

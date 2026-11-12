@@ -8,14 +8,16 @@ import type { Depth, MaterialRole, Source } from '../core/types';
 import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
 import { activeSession } from '../store/sessions';
-import { coveredNodeIds, findSourceByOrigin, listChunks, listSources } from '../store/sources';
+import { coveredNodeIds, findSourceByOrigin, getSource, listChunks, listSources } from '../store/sources';
 import { listFigures } from '../store/figures';
 import { LinkError, fetchDocument, fetchVideoTitle } from '../ingest/link';
 import type { Fetcher } from '../ingest/link';
 import { readBytes } from '../ingest/readers';
 import type { SourceChunk } from '../store/sources';
-import { afterSourceReread } from './goals';
+import { afterSourceReread, guessRole } from './goals';
 import type { IngestionService } from './ingestion';
+import type { LlmProvider } from '../llm/provider';
+import { basename, join } from 'node:path';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { targetDepthFor } from '../core/leverage';
 
@@ -42,6 +44,60 @@ export interface SourceSummary extends Source {
  * Read a source again with the current extraction (design §7): its ideas that nothing depends on are
  * retired, goals using it compile it afresh, and it is queued. Refused while a session is open.
  */
+/** A file offered as material for a goal, with what it seems to be for. */
+export interface MaterialCandidate {
+  sourceId: string;
+  title: string;
+  role: MaterialRole;
+  reason: string;
+  existed: boolean;
+}
+
+/**
+ * Files offered as a goal's material: each is added to the library unread and what it is for is
+ * guessed; reading starts once a goal uses it. A file that cannot be read does not cost the others:
+ * it is named in `failed`, and only when none could be added is that an error.
+ */
+export async function addGoalMaterials(deps: { db: Database; ingestion: IngestionService; provider: LlmProvider }, paths: string[]): Promise<{ candidates: MaterialCandidate[]; failed: string[] }> {
+  const candidates: MaterialCandidate[] = [];
+  const failed: string[] = [];
+  for (const path of paths) {
+    try {
+      const { source, existed } = await deps.ingestion.addFile(path);
+      const guess = await guessRole(deps.db, deps.provider, source.id).catch(() => ({ role: 'teaching' as const, reason: 'Could not tell; assumed teaching material.' }));
+      candidates.push({ sourceId: source.id, title: source.title, role: guess.role, reason: guess.reason, existed });
+    } catch (error) {
+      failed.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (failed.length && candidates.length === 0) throw new Error(failed.join(' '));
+  return { candidates, failed };
+}
+
+/** Files for the Library, from the dialog or dropped on the window: each is added and its reading starts. */
+export async function addLibraryFiles(deps: { db: Database; ingestion: IngestionService }, paths: string[]): Promise<{ added: SourceSummary[]; skipped: string[] }> {
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const path of paths) {
+    try {
+      const { source, existed } = await deps.ingestion.addFile(path);
+      if (existed) skipped.push(`${basename(path)} is already in the library.`);
+      else added.push(source.id);
+      if (source.status !== 'done') deps.ingestion.start(source.id);
+    } catch (error) {
+      skipped.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return { added: listSourceSummaries(deps.db, deps.ingestion).filter((s) => added.includes(s.id)), skipped };
+}
+
+/** Where the stored copy of a source's file is, to open it; a pasted source or a session has none. */
+export function storedCopyPath(db: Database, sourcesDir: string, sourceId: string): string {
+  const stored = getSource(db, sourceId)?.path;
+  if (!stored) throw new Error('This source has no file: it was pasted or comes from a session.');
+  return join(sourcesDir, stored);
+}
+
 export async function readSourceAgain(db: Database, ingestion: IngestionService, sourceId: string): Promise<{ retired: number }> {
   if (activeSession(db)) throw new Error('End or finish the open session first, then read this source again.');
   const { retired } = await ingestion.prepareReread(sourceId);
