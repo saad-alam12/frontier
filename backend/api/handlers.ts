@@ -262,7 +262,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'plan.preview': ({ goalId }) => planSession(ctx.db(), ctx.provider(), goalId),
     'session.current': () => currentSession(ctx.db(), ctx.sessionWork),
     'session.work': () => ctx.sessionWork.current(),
-    'session.start': ({ goalId, focus }) => startSession(ctx.practiceDeps(), goalId, focus),
+    'session.start': ({ goalId, focus, minutes }) => startSession(ctx.practiceDeps(), goalId, focus, minutes === undefined ? undefined : Math.max(10, Math.min(90, Math.round(Number(minutes) || 45)))),
     'session.respond': async ({ sessionId, response, draftKey }) => {
       const snap = await respond(ctx.practiceDeps(), sessionId, response, { draftKey });
       if (snap.status !== 'active' && snap.goalId) ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map
@@ -303,9 +303,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
       endPracticeSet(ctx.db(), setId);
       return null;
     },
-    'practice.start': ({ goalId, kind, nodeIds, level }) =>
+    'practice.start': ({ goalId, kind, nodeIds, level, problems }) =>
       startPractice(ctx.practiceDeps(), goalId, {
         kind,
+        maxProblems: problems === undefined ? undefined : z.number().int().min(1).max(8).parse(problems),
         focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
       }),
     'practice.submit': ({ problemId, answer, confidence, code }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code }),

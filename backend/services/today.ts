@@ -13,6 +13,10 @@ import { activeSession, listSessions } from '../store/sessions';
 import { attributeTime, goalBudgetMinutes, goalProgress } from './budget';
 import type { GoalProgress } from './budget';
 import { loadKnowledge } from './knowledge';
+import { TIME_CHOICES, fillTime } from '../core/timePlan';
+import type { TimeStep } from '../core/timePlan';
+import { cardSummary } from './cards';
+import { streakDays } from './stats';
 import { currentPractice, forecastAcross, goalSchedule } from './practice';
 import type { FadingIdea, GoalSchedule, PracticeView } from './practice';
 import type { SessionState } from './session';
@@ -48,6 +52,10 @@ export interface TodayView {
   forecast: number[];
   preview: { question: string; goalTitle: string; date: string } | null;
   week: { sessions: number; practised: number; minutesTarget: number; minutesStudied: number };
+  /** Days in a row with study, ending today or yesterday. */
+  streak: number;
+  /** "I have 15, 30, 45 or 60 minutes": what fills each, for the goal Today leads with. */
+  timePlans: { minutes: number; steps: TimeStep[] }[];
 }
 
 const WEEK_MS = 7 * 86_400_000;
@@ -107,6 +115,13 @@ export function todayView(db: Database, now = new Date()): TodayView {
   const lastDone = sessions.find((s) => s.status === 'done' && s.state.closing?.previewQuestion);
   const preview = lastDone?.state.closing?.previewQuestion ? { question: lastDone.state.closing.previewQuestion, goalTitle: titleOf(lastDone.goalId), date: (lastDone.endedAt ?? lastDone.startedAt).slice(0, 10) } : null;
 
+  const lead = todayGoals[0];
+  const cardsDue = cardSummary(db, null, now).toReview;
+  const timePlans = TIME_CHOICES.map((minutes) => ({
+    minutes,
+    steps: fillTime({ minutes, cardsDue, goal: lead ? { goalId: lead.goalId, mode: lead.schedule.mode, fading: lead.schedule.due.length } : null }),
+  }));
+
   const weekStart = new Date(now.getTime() - WEEK_MS).toISOString();
   const practised = new Set(listEvidenceSince(db, weekStart).filter((e) => e.kind === 'practice' && !e.context.implicit).map((e) => e.nodeId)).size;
   const all = listGoals(db);
@@ -127,6 +142,8 @@ export function todayView(db: Database, now = new Date()): TodayView {
       minutesStudied: Math.round(studied),
       minutesTarget: goals.reduce((sum, g) => sum + (weeklyMinutes(g.budget, goalBudgetMinutes(db, g), g.approvedAt ?? g.createdAt, g.date) ?? 0), 0),
     },
+    streak: streakDays(db, now),
+    timePlans,
   };
 }
 

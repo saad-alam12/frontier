@@ -181,7 +181,8 @@ export interface ApiMethods {
   /** Planning or judging that is running (or failed) in the background, also while no session is open yet. */
   'session.work': { input: undefined; output: SessionWorkView | null };
   /** Plans and opens a session for the goal, or returns the active one. Planning goes on if the screen closes. */
-  'session.start': { input: { goalId: string; focus?: string[] }; output: SessionSnapshot };
+  /** `minutes`: fit the session to the time the learner has (Today, "I have 30 minutes"). */
+  'session.start': { input: { goalId: string; focus?: string[]; minutes?: number }; output: SessionSnapshot };
   /** `draftKey`: the unsent answer's draft, deleted once the answer is accepted. */
   'session.respond': { input: { sessionId: string; response: LearnerResponse; draftKey?: string }; output: SessionSnapshot };
   /** Ask the tutor about the open card: a question of the learner's own, or the explanation in another form. Not graded. */
@@ -208,7 +209,8 @@ export interface ApiMethods {
   'practice.get': { input: { setId: string }; output: PracticeView };
   /** Generate a compound set over the goal's fading ideas, or a mock exam; null when nothing is due. */
   /** A set over what is fading, a mock exam, or (with `nodeIds`) practice the learner asked for on those ideas at a level. */
-  'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel }; output: PracticeView | null };
+  /** `problems`: at most this many (the time the learner has on Today). */
+  'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel; problems?: number }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer }; output: PracticeView };
   /** Leave a set as it stands: answered problems count, the rest write nothing. */

@@ -4,7 +4,7 @@ import type { TodayGoal, TodayView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
 import type { ScreenName } from '../components/Shell';
 import { BrandMark, Screen } from '../components/Shell';
-import { Button, Meter, MetaLine, Notice, Section } from '../components/controls';
+import { Button, ChoiceChips, Meter, MetaLine, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar, paceSentence } from '../components/budget';
 import { TodayCards } from '../components/CardsLine';
@@ -105,7 +105,14 @@ export function TodayScreen({
           <span className="figure-label">{today.week.minutesTarget > 0 ? 'of the week your goals ask for' : 'studied'}</span>
           {today.week.minutesTarget > 0 && <Meter value={today.week.minutesStudied / today.week.minutesTarget} accent />}
         </div>
-        <MetaLine small items={[`${today.week.sessions} ${today.week.sessions === 1 ? 'session' : 'sessions'}`, ...(today.week.practised ? [`${today.week.practised} ${today.week.practised === 1 ? 'idea' : 'ideas'} practised`] : [])]} />
+        <MetaLine
+          small
+          items={[
+            `${today.week.sessions} ${today.week.sessions === 1 ? 'session' : 'sessions'}`,
+            ...(today.week.practised ? [`${today.week.practised} ${today.week.practised === 1 ? 'idea' : 'ideas'} practised`] : []),
+            ...(today.streak >= 2 ? [`${today.streak} days in a row`] : []),
+          ]}
+        />
       </div>
     </>
   );
@@ -119,6 +126,24 @@ export function TodayScreen({
       {error && <Notice error>{error}</Notice>}
 
       <NextUp today={today} lead={lead} busy={busy} onContinue={() => onNavigate('session')} onStartSession={startSession} onPractice={startPractice} onOpenPractice={onOpenPractice} onChoose={onChoose} />
+      {!today.session && !today.practice && today.timePlans.some((p) => p.steps.length > 0) && (
+        <TimeToday
+          plans={today.timePlans}
+          busy={busy}
+          onCards={onOpenCards}
+          onPractice={(goalId, problems) =>
+            void run(`time:${goalId}`, async () => {
+              const set = await call('practice.start', { goalId, kind: 'compound', problems });
+              if (set) onOpenPractice(set.id);
+              else setError('Nothing is fading right now. Practice opens again when ideas start to slip.');
+            })
+          }
+          onSession={(goalId, minutes) => {
+            startSessionInBackground(goalId, undefined, minutes);
+            onNavigate('session');
+          }}
+        />
+      )}
       <TodayCards main={!today.session && !today.practice && !lead} onReview={onOpenCards} />
       {today.drafts.map((d) => (
         <div key={d.goalId} className="next-card is-quiet">
@@ -193,6 +218,21 @@ export function TodayScreen({
               <GoalRow key={g.goalId} goal={g} busy={busy} onOpen={() => onOpenGoals({ name: 'goal', goalId: g.goalId })} onMock={() => void startPractice(g.goalId, 'mock')} />
             ))}
           </ul>
+          {today.goals.some((g) => g.progress) && (
+            <div className="budget-legend" aria-label="What the bars show">
+              <span>
+                <i className="swatch is-spent" /> studied
+              </span>
+              <span>
+                <i className="swatch is-planned" /> planned ahead
+              </span>
+              {today.goals.some((g) => g.progress?.expectedByNow !== null && g.progress?.totalMinutes) && (
+                <span>
+                  <i className="swatch is-tick" /> where your rhythm puts you by now
+                </span>
+              )}
+            </div>
+          )}
         </Section>
       )}
     </Screen>
@@ -288,6 +328,70 @@ function NextUp({
           Choose what to learn
         </Button>
       </div>
+    </div>
+  );
+}
+
+const STEP_LABEL = { cards: 'Flashcards', practice: 'Practice', session: 'A session' } as const;
+
+/**
+ * "How long do you have?" (design §10): 15, 30, 45 or 60 minutes, and what fills them, in order, each
+ * with its own button. The first step is the one to do now.
+ */
+function TimeToday({
+  plans,
+  busy,
+  onCards,
+  onPractice,
+  onSession,
+}: {
+  plans: TodayView['timePlans'];
+  busy: string | null;
+  onCards: () => void;
+  onPractice: (goalId: string, problems: number) => void;
+  onSession: (goalId: string, minutes: number) => void;
+}) {
+  const [minutes, setMinutes] = useState<number | null>(null);
+  const plan = plans.find((p) => p.minutes === minutes) ?? null;
+  return (
+    <div className="time-today">
+      <div className="time-today-head">
+        <span className="text-[15px] text-secondary">How long do you have?</span>
+        <ChoiceChips label="Minutes you have" options={plans.map((p) => ({ value: String(p.minutes), label: `${p.minutes} min` }))} value={minutes === null ? '' : String(minutes)} onChange={(v) => setMinutes(Number(v))} small />
+      </div>
+      {plan &&
+        (plan.steps.length === 0 ? (
+          <p className="t-small m-0 text-muted">Nothing fits in {plan.minutes} minutes today.</p>
+        ) : (
+          <ol className="time-steps">
+            {plan.steps.map((step, i) => (
+              <li key={`${step.kind}-${i}`} className="time-step">
+                <span className="time-step-what">
+                  <span>{STEP_LABEL[step.kind]}</span>
+                  <span className="t-small text-muted">
+                    about {step.minutes} min
+                    {step.kind === 'cards' ? ` · ${step.cards} ${step.cards === 1 ? 'card' : 'cards'}` : step.kind === 'practice' ? ` · ${step.problems} ${step.problems === 1 ? 'problem' : 'problems'} on what is fading` : ' · new ideas, fitted to the time'}
+                  </span>
+                </span>
+                {step.kind === 'cards' && (
+                  <Button kind={i === 0 ? 'primary' : 'secondary'} onClick={onCards}>
+                    Review cards
+                  </Button>
+                )}
+                {step.kind === 'practice' && (
+                  <Button kind={i === 0 ? 'primary' : 'secondary'} onClick={() => onPractice(step.goalId, step.problems)} disabled={busy !== null}>
+                    {busy === `time:${step.goalId}` ? 'Writing problems…' : 'Practise'}
+                  </Button>
+                )}
+                {step.kind === 'session' && (
+                  <Button kind={i === 0 ? 'primary' : 'secondary'} onClick={() => onSession(step.goalId, step.minutes)} disabled={busy !== null}>
+                    Start the session
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ol>
+        ))}
     </div>
   );
 }

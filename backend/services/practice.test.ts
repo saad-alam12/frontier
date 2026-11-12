@@ -283,3 +283,17 @@ describe('practice', () => {
     expect(provider.calls).toHaveLength(0);
   });
 });
+
+describe('Today: the time the learner has (R7 A4)', () => {
+  it('says what fills 15 to 60 minutes for the lead goal, with the cards due first', () => {
+    const { db, id, goal } = setup(8);
+    saveCard(db, { front: 'Define a best response', back: 'The best reply to what the others play.', nodeIds: [id('bestResponse')], goalId: goal.id });
+    const view = todayView(db);
+    expect(view.timePlans.map((p) => p.minutes)).toEqual([15, 30, 45, 60]);
+    const half = view.timePlans.find((p) => p.minutes === 30)?.steps ?? [];
+    expect(half[0]).toMatchObject({ kind: 'cards', cards: 1 });
+    // the goal's ideas are fading, so practice comes before new ideas
+    expect(half[1]).toMatchObject({ kind: 'practice', goalId: goal.id });
+    expect(view.streak).toBe(0);
+  });
+});

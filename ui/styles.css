@@ -2352,7 +2352,8 @@ button.map-label:hover {
   background: var(--text);
 }
 .swatch.is-planned {
-  background: var(--accent);
+  /* the same hatching as the planned part of the bar */
+  background: repeating-linear-gradient(135deg, var(--accent) 0 3px, rgba(142, 164, 255, 0.55) 3px 5px);
 }
 
 /* What the goal means for its time: the compiler's level and scope, read before approving. */
@@ -3611,4 +3612,49 @@ button.map-label:hover {
 /* An explanation as the tutor writes it: the card's own type, a touch quieter until it is done. */
 .writing-preview {
   opacity: 0.85;
+}
+
+/* Today: "How long do you have?" and what fills the time. */
+.time-today {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.time-today-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.time-steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.time-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+}
+.time-step + .time-step {
+  border-top: 1px solid var(--border);
+}
+.time-step-what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.swatch.is-tick {
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--text-secondary);
 }

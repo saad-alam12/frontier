@@ -267,15 +267,16 @@ function normalized(session: SessionRecord<SessionState>): SessionRecord<Session
  * Open a session on the goal (or return the open one). `focus`: a session the learner chose, going
  * deeper on those ideas. Planning runs as the session's work, so it goes on when the screen closes.
  */
-export async function startSession(deps: SessionDeps, goalId: string, focus?: string[]): Promise<SessionSnapshot> {
+/** `minutes`: the time the learner has ("I have 30 minutes"); the planner fits the session to it instead of 45. */
+export async function startSession(deps: SessionDeps, goalId: string, focus?: string[], minutes?: number): Promise<SessionSnapshot> {
   const { db } = deps;
   const active = activeSession<SessionState>(db);
   if (active) return snapshot(db, normalized(active), deps.work);
-  const sessionId = await deps.work.run({ kind: 'start', sessionId: null, goalId, sent: null, stoppable: false }, () => openGoalSession(deps, goalId, focus), (id) => id);
+  const sessionId = await deps.work.run({ kind: 'start', sessionId: null, goalId, sent: null, stoppable: false }, () => openGoalSession(deps, goalId, focus, minutes), (id) => id);
   return snapshot(db, getSession<SessionState>(db, sessionId) as SessionRecord<SessionState>, deps.work);
 }
 
-async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[] | undefined): Promise<string> {
+async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[] | undefined, minutes?: number): Promise<string> {
   const { db } = deps;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
@@ -285,7 +286,7 @@ async function openGoalSession(deps: SessionDeps, goalId: string, focus: string[
   const view = loadKnowledge(db);
   // an idea erased from the map since has nothing left to carry, so it counts as reached
   const carried = ended[0] && !focus?.length ? carriedPlace(ended[0], (id, depth) => !view.nodes.has(id) || ((view.states.get(id)?.depth ?? 0) >= depth && (depth < 2 || view.owned.has(id)))) : null;
-  const planned = focus?.length ? planFocusSession(db, goalId, focus) : await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0 });
+  const planned = focus?.length ? planFocusSession(db, goalId, focus) : await planSession(db, deps.provider, goalId, { maxNodes: carried ? MAX_PLAN_NODES - 1 : MAX_PLAN_NODES, reservedMinutes: carried?.step.minutes ?? 0, sessionMinutes: minutes });
   const plan = carried ? withCarriedStep(planned, carried.step) : planned;
   if (plan.steps.length === 0) throw new Error(`Nothing to teach for this goal yet: ${plan.orientation}`);
   // a session the learner chose (going deeper) is about those ideas: no recall of the last planned session

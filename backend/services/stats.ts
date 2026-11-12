@@ -163,7 +163,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
     filter,
     goals: allGoals.map((g) => ({ id: g.id, title: g.title ?? g.text, status: g.status })),
     topics: topicList.map((t) => ({ id: t.id, name: t.name, size: t.nodeIds.length })),
-    headline: { minutes: Math.round(minutes), sessions, ideasLearned: learnedInRange, ideasOwned: ownedStates.length, streakDays: streak(daySeries), answers: answers.length, avgScore },
+    headline: { minutes: Math.round(minutes), sessions, ideasLearned: learnedInRange, ideasOwned: ownedStates.length, streakDays: streak(daySeries, now), answers: answers.length, avgScore },
     weeks,
     days: daySeries,
     growth,
@@ -258,6 +258,11 @@ function weekSeries(shares: ReturnType<typeof attributeTime>, since: string | nu
 }
 
 /** The last twelve weeks, a day each (all time in the filter, so the calendar never looks empty for a short range). */
+/** The study streak alone, for Today. */
+export function streakDays(db: Database, now = new Date()): number {
+  return streak(calendar([...attributeTime(db), ...freeStudy(db)], now), now);
+}
+
 export function calendar(shares: { minutes: number; span: { endedAt: string } }[], now: Date): StatsView['days'] {
   const first = addDays(weekStart(now), 7 - 12 * 7);
   const byDay = new Map<string, number>();
@@ -275,8 +280,9 @@ export function calendar(shares: { minutes: number; span: { endedAt: string } }[
   return out;
 }
 
-function streak(days: StatsView['days']): number {
-  const today = localDate(new Date());
+/** Days in a row with at least five minutes of study, ending today (or yesterday, before today's study). */
+function streak(days: StatsView['days'], now = new Date()): number {
+  const today = localDate(now);
   const list = days.filter((d) => d.date <= today);
   let i = list.length - 1;
   if (i >= 0 && (list[i]?.minutes ?? 0) < 5) i -= 1;

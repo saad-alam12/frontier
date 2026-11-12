@@ -1011,3 +1011,14 @@ describe('R7 C1: explanations shown as they are written', () => {
     expect(deps.work.current()?.writing ?? null).toBeNull();
   });
 });
+
+describe('R7 A4: a session fitted to the time the learner has', () => {
+  it('tells the planner the time and keeps only the ideas that fit it (always one)', async () => {
+    const { goal, deps } = await setup([0.8]);
+    const snap = await startSession(deps, goal.id, undefined, 10);
+    const planning = deps.provider.calls.find((c) => c.role === 'planner')?.messages[0]?.content ?? '';
+    expect(planning).toContain('the session has about 10 minutes');
+    // the planner picked three ideas; ten minutes hold fewer
+    expect(snap.plan.steps.length).toBeLessThan(3);
+  });
+});

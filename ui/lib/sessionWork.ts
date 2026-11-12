@@ -65,7 +65,7 @@ export function useSessionScreenOpen(): void {
  * (before the backend's first event arrives) and the session when it is ready. A failure comes back
  * as the work's error, so the promise's own rejection is not needed here.
  */
-export function startSessionInBackground(goalId: string, focus?: string[]): void {
+export function startSessionInBackground(goalId: string, focus?: string[], minutes?: number): void {
   if (state.work?.status === 'running') return;
   const placeholder: SessionWorkView = { kind: 'start', status: 'running', sessionId: null, goalId, since: new Date().toISOString(), sent: null, stoppable: false, error: null, writing: null };
   update({ work: placeholder });
@@ -73,5 +73,5 @@ export function startSessionInBackground(goalId: string, focus?: string[]): void
   const settle = () => {
     if (state.work === placeholder) void call('session.work').then((work) => update({ work }));
   };
-  call('session.start', { goalId, focus }).then(settle, settle);
+  call('session.start', { goalId, focus, ...(minutes ? { minutes } : {}) }).then(settle, settle);
 }

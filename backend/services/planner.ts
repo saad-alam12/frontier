@@ -123,11 +123,11 @@ export function planFocusSession(db: Database, goalId: string, focus: string[]):
 }
 
 /** Keep steps in order while they fit the session (always at least one), and drop links to steps that did not fit. */
-function fitSession(steps: LessonStep[], reservedMinutes: number): { steps: LessonStep[] } {
+function fitSession(steps: LessonStep[], reservedMinutes: number, sessionMinutes = SESSION_MINUTES): { steps: LessonStep[] } {
   const fitted: LessonStep[] = [];
   let minutes = reservedMinutes;
   for (const step of steps) {
-    if (fitted.length > 0 && minutes + step.minutes > SESSION_MINUTES) break;
+    if (fitted.length > 0 && minutes + step.minutes > sessionMinutes) break;
     fitted.push(step);
     minutes += step.minutes;
   }
@@ -140,7 +140,8 @@ function fitSession(steps: LessonStep[], reservedMinutes: number): { steps: Less
  * they fit the session's 45 minutes (always at least one), counting `reservedMinutes` already taken
  * (an idea carried over from last time).
  */
-export async function planSession(db: Database, provider: LlmProvider, goalId: string, options: { maxNodes?: number; reservedMinutes?: number } = {}): Promise<LessonPlan> {
+export async function planSession(db: Database, provider: LlmProvider, goalId: string, options: { maxNodes?: number; reservedMinutes?: number; sessionMinutes?: number } = {}): Promise<LessonPlan> {
+  const length = options.sessionMinutes ?? SESSION_MINUTES;
   const maxNodes = options.maxNodes ?? MAX_PLAN_NODES;
   const goal = getGoal(db, goalId);
   if (!goal) throw new Error(`unknown goal ${goalId}`);
@@ -178,7 +179,7 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
     candidates: plannerCandidates,
     ownedNames: [...view.owned].map((id) => view.nodes.get(id)?.name ?? id).slice(0, 60),
     maxNodes,
-    sessionMinutes: SESSION_MINUTES - (options.reservedMinutes ?? 0),
+    sessionMinutes: length - (options.reservedMinutes ?? 0),
   });
   const byId = new Map(candidates.map((c) => [c.nodeId, c]));
   const simplified = new Map<string, string>();
@@ -211,7 +212,7 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
     goalId,
     title: result.title,
     orientation: result.orientation,
-    ...fitSession(steps, options.reservedMinutes ?? 0),
+    ...fitSession(steps, options.reservedMinutes ?? 0, length),
     candidateCount: candidates.length,
     unreachableTargets: unreachable,
   };
