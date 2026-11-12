@@ -138,3 +138,46 @@ export function MetaLine({ items, small }: { items: ReactNode[]; small?: boolean
     </div>
   );
 }
+
+/** Cards where exactly one is chosen: a title and one plain line each, arrow keys move the choice. */
+export function RadioCards<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  stack,
+}: {
+  label: string;
+  options: { value: T; title: string; line: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  /** One under the other when the column is narrow. */
+  stack?: boolean;
+}) {
+  const move = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const at = options.findIndex((o) => o.value === value);
+    const next = options[(at + step + options.length) % options.length];
+    if (!next) return;
+    onChange(next.value);
+    e.currentTarget.querySelector<HTMLButtonElement>(`[data-value="${next.value}"]`)?.focus();
+  };
+  return (
+    <div role="radiogroup" aria-label={label} className={stack ? 'radio-cards is-stacked' : 'radio-cards'} onKeyDown={move}>
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button key={o.value} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} data-value={o.value} className="radio-card" onClick={() => onChange(o.value)}>
+            <span className="radio-card-title">
+              <i className="radio-dot" aria-hidden="true" />
+              {o.title}
+            </span>
+            <span className="radio-card-line">{o.line}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

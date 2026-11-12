@@ -44,11 +44,57 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   connectionTest: { model: 'claude-haiku-5-5', effort: 'medium' },
 };
 
+/** Three ways to spend the plan (design §10, Settings): the model and effort per job, before any job set by hand. */
+export const PRESETS = ['best', 'balanced', 'light'] as const;
+export type Preset = (typeof PRESETS)[number];
+
+const opus = (effort: Effort): ModelChoice => ({ model: 'claude-opus-5-5', effort });
+const sonnet = (effort: Effort): ModelChoice => ({ model: 'claude-sonnet-5-5', effort });
+const haiku = (effort: Effort): ModelChoice => ({ model: 'claude-haiku-5-5', effort });
+
+export const PRESET_CHOICES: Record<Preset, Record<Role, ModelChoice>> = {
+  // stronger models and more thinking where quality shows: teaching, grading, problems, reading
+  best: {
+    goalCompiler: opus('xhigh'),
+    tutor: opus('high'),
+    tutorEscalation: opus('max'),
+    prober: opus('high'),
+    problemGenerator: opus('high'),
+    grader: opus('medium'),
+    extractor: sonnet('medium'),
+    matcher: haiku('max'),
+    planner: haiku('high'),
+    librarian: sonnet('medium'),
+    sessionPlanner: opus('high'),
+    cardWriter: sonnet('high'),
+    connectionTest: haiku('medium'),
+  },
+  balanced: DEFAULT_CHOICES,
+  // smaller models and less thinking: teaching and grading stay good enough, the plan lasts longer
+  light: {
+    goalCompiler: opus('medium'),
+    tutor: sonnet('medium'),
+    tutorEscalation: opus('medium'),
+    prober: sonnet('medium'),
+    problemGenerator: sonnet('medium'),
+    grader: haiku('high'),
+    extractor: haiku('low'),
+    matcher: haiku('high'),
+    planner: haiku('low'),
+    librarian: haiku('low'),
+    sessionPlanner: sonnet('medium'),
+    cardWriter: haiku('medium'),
+    connectionTest: haiku('low'),
+  },
+};
+
 /** One definition per field; `SettingsSchema` adds the defaults, a patch has none. */
 const FIELDS = {
   provider: z.enum(['agentSdk', 'anthropicApi']),
   apiKey: z.string(),
-  /** Per-role model overrides; absent or empty means the default. */
+  /** The model and effort per job, unless a job is set by hand below. */
+  preset: z.enum(PRESETS),
+  /** Per-role model overrides; absent or empty means the preset's. */
   models: z.partialRecord(z.enum(ROLES), z.string()),
   /** Per-role effort overrides; absent means the default. */
   efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS)),
@@ -68,6 +114,7 @@ const FIELDS = {
 export const SettingsSchema = z.object({
   provider: FIELDS.provider.default('agentSdk'),
   apiKey: FIELDS.apiKey.default(''),
+  preset: FIELDS.preset.default('balanced'),
   models: FIELDS.models.default({}),
   efforts: FIELDS.efforts.default({}),
   dataFolder: FIELDS.dataFolder.default(''),
@@ -88,6 +135,7 @@ export type Settings = z.infer<typeof SettingsSchema>;
 export const SettingsPatchSchema = z.strictObject({
   provider: FIELDS.provider.optional(),
   apiKey: FIELDS.apiKey.optional(),
+  preset: FIELDS.preset.optional(),
   models: FIELDS.models.optional(),
   efforts: z.partialRecord(z.enum(ROLES), z.enum(EFFORTS).nullable()).optional(),
   dataFolder: FIELDS.dataFolder.optional(),
@@ -104,19 +152,20 @@ export function effortsFor(model: string): readonly Effort[] {
   return KNOWN_MODELS.find((m) => m.id === model)?.efforts ?? EFFORTS;
 }
 
-/** What the Settings screen needs to offer models and efforts per role. */
+/** What the Settings screen needs to offer presets, and models and efforts per role. */
 export interface ModelOptions {
   models: { id: string; name: string; efforts: Effort[] }[];
   efforts: Effort[];
-  defaults: Record<Role, ModelChoice>;
+  presets: Record<Preset, Record<Role, ModelChoice>>;
 }
 
 export function modelOptions(): ModelOptions {
-  return { models: KNOWN_MODELS.map((m) => ({ id: m.id, name: m.name, efforts: [...m.efforts] })), efforts: [...EFFORTS], defaults: DEFAULT_CHOICES };
+  return { models: KNOWN_MODELS.map((m) => ({ id: m.id, name: m.name, efforts: [...m.efforts] })), efforts: [...EFFORTS], presets: PRESET_CHOICES };
 }
 
+/** The model and effort a job uses: what it was set to by hand, else the preset's. */
 export function modelChoice(settings: Settings, role: Role): ModelChoice {
-  const fallback = DEFAULT_CHOICES[role];
+  const fallback = PRESET_CHOICES[settings.preset][role];
   const model = settings.models[role]?.trim() || fallback.model;
   const wanted = settings.efforts[role] ?? (model === fallback.model ? fallback.effort : (KNOWN_MODELS.find((m) => m.id === model)?.defaultEffort ?? 'high'));
   const allowed = effortsFor(model);
@@ -131,7 +180,7 @@ export function modelChoice(settings: Settings, role: Role): ModelChoice {
 export function salvageSettings(raw: unknown): Settings {
   const input = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   const kept: Record<string, unknown> = {};
-  for (const key of ['provider', 'apiKey', 'dataFolder', 'concurrency', 'reminderDaily', 'reminderTime', 'iconBadge', 'pythonPath'] as const) {
+  for (const key of ['provider', 'apiKey', 'preset', 'dataFolder', 'concurrency', 'reminderDaily', 'reminderTime', 'iconBadge', 'pythonPath'] as const) {
     const parsed = FIELDS[key].safeParse(input[key]);
     if (parsed.success) kept[key] = parsed.data;
   }

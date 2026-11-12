@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../api';
-import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, PythonInfo, Role, Settings, SettingsPatch } from '../../backend/api/contract';
+import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, Preset, PythonInfo, Role, Settings, SettingsPatch, UsageView } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
-import { Button, Notice, Section } from '../components/controls';
+import { Button, Notice, RadioCards, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
 import { plainError } from '../lib/errors';
 import { EraseMap } from '../components/EraseMap';
@@ -23,6 +23,82 @@ const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'cardWriter', label: 'Card writer', does: 'Writes flashcards for the facts to memorize' },
   { role: 'connectionTest', label: 'Connection test', does: 'The test button above' },
 ];
+
+const PRESET_OPTIONS: { value: Preset; title: string; line: string }[] = [
+  { value: 'best', title: 'Best quality', line: 'The strongest models for teaching, grading and planning. Uses your plan fastest.' },
+  { value: 'balanced', title: 'Balanced', line: 'Strong models where you wait for the answer, quick ones for work in the background.' },
+  { value: 'light', title: 'Light on my plan', line: 'Smaller models that think less. Teaching is plainer and your plan lasts longer.' },
+];
+
+const thousands = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000).toLocaleString('en')}k` : n.toLocaleString('en'));
+
+/** One line of usage: calls and tokens, and the share read from the cache when there was any. */
+function usageLine(t: UsageView['today']): string {
+  if (t.calls === 0) return 'no calls';
+  const cached = t.inputTokens > 0 && t.cacheReadTokens > 0 ? `, ${Math.round((t.cacheReadTokens / t.inputTokens) * 100)}% of it from the cache` : '';
+  return `${t.calls.toLocaleString('en')} ${t.calls === 1 ? 'call' : 'calls'}, ${thousands(t.inputTokens)} tokens in${cached}, ${thousands(t.outputTokens)} out`;
+}
+
+/**
+ * How Frontier uses the model (design §10): three presets, how much was used, and behind Advanced the
+ * model and effort of each job, set by hand where wanted.
+ */
+function Models({ settings, options, onChange }: { settings: Settings; options: ModelOptions; onChange: (patch: SettingsPatch) => void }) {
+  const [usage, setUsage] = useState<UsageView | null>(null);
+  const [advanced, setAdvanced] = useState(false);
+  useEffect(() => {
+    void call('settings.usage').then(setUsage);
+  }, []);
+  const handSet = ROLE_LABELS.filter(({ role }) => Boolean(settings.models[role]?.trim()) || settings.efforts[role] !== undefined);
+  const label = (role: Role) => ROLE_LABELS.find((r) => r.role === role)?.label ?? role;
+  return (
+    <Section title="Models" gap={14}>
+      <RadioCards label="How Frontier uses the model" options={PRESET_OPTIONS} value={settings.preset} onChange={(preset) => onChange({ preset })} />
+      {usage && (
+        <p className="m-0 text-[13px] text-muted">
+          {usage.week.calls === 0 ? (
+            'No model calls in the last seven days.'
+          ) : (
+            <>
+              Today: {usageLine(usage.today)}. Last seven days: {usageLine(usage.week)}
+              {usage.topJobs.length > 0 && `; most by ${usage.topJobs.map((j) => label(j.role as Role).toLowerCase()).join(', ')}`}.
+            </>
+          )}
+        </p>
+      )}
+      {handSet.length > 0 && !advanced && (
+        <p className="m-0 text-[13px] text-muted">
+          {handSet.length === 1 ? `${handSet[0]?.label} is set by hand.` : `${handSet.length} jobs are set by hand.`}{' '}
+          <button type="button" className="link-button" onClick={() => setAdvanced(true)}>
+            Show
+          </button>
+        </p>
+      )}
+      <div>
+        <button type="button" className="link-button" aria-expanded={advanced} onClick={() => setAdvanced((open) => !open)}>
+          {advanced ? 'Hide the model for each job' : 'Advanced: the model for each job'}
+        </button>
+      </div>
+      {advanced && (
+        <>
+          <p className="m-0 text-[13px] text-muted">Which model does each job, and how hard it thinks. A job you set here keeps its setting when you change the preset above. Higher effort is slower and uses more of your plan.</p>
+          <ul className="list-card settings-list">
+            {ROLE_LABELS.map(({ role, label: name, does }) => (
+              <RoleRow key={role} role={role} label={name} does={does} settings={settings} options={options} onChange={onChange} />
+            ))}
+          </ul>
+          {handSet.length > 1 && (
+            <div>
+              <Button kind="quiet" onClick={() => onChange({ models: Object.fromEntries(handSet.map(({ role }) => [role, ''])), efforts: Object.fromEntries(handSet.map(({ role }) => [role, null])) })}>
+                Use the preset for every job
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
 
 const EFFORT_LABEL: Record<Effort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
 const CUSTOM = '__custom__';
@@ -114,14 +190,7 @@ export function SettingsScreen() {
         </div>
       </Section>
 
-      <Section title="Models" gap={14}>
-        <p className="m-0 text-[13px] text-muted">Which model does each job, and how hard it thinks. Higher effort is slower and uses more of your plan.</p>
-        <ul className="list-card settings-list">
-          {ROLE_LABELS.map(({ role, label, does }) => (
-            <RoleRow key={role} role={role} label={label} does={does} settings={settings} options={options} onChange={(patch) => void update(patch)} />
-          ))}
-        </ul>
-      </Section>
+      <Models settings={settings} options={options} onChange={(patch) => void update(patch)} />
 
       <FlashcardPreferences />
 
@@ -343,7 +412,7 @@ function RoleRow({
   options: ModelOptions;
   onChange: (patch: SettingsPatch) => void;
 }) {
-  const fallback = options.defaults[role];
+  const fallback = options.presets[settings.preset][role];
   const name = (id: string) => options.models.find((m) => m.id === id)?.name ?? id;
   const model = settings.models[role]?.trim() || fallback.model;
   const known = options.models.find((m) => m.id === model);
@@ -401,7 +470,7 @@ function RoleRow({
       {overridden && (
         <div className="t-small flex gap-[12px] text-muted">
           <span>
-            Default: {name(fallback.model)}, {EFFORT_LABEL[fallback.effort].toLowerCase()}
+            The preset: {name(fallback.model)}, {EFFORT_LABEL[fallback.effort].toLowerCase()}
           </span>
           <button
             type="button"
@@ -412,7 +481,7 @@ function RoleRow({
               onChange({ models: { [role]: '' }, efforts: { [role]: null } });
             }}
           >
-            Use the default
+            Use the preset
           </button>
         </div>
       )}

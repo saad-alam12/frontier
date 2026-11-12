@@ -33,6 +33,7 @@ export type { EraseRequest, ErasePreview, EraseResult, EraseScope, Aside, AsideM
 import type { GoalBudget } from '../core/types';
 import type { CodeAnswer } from '../core/code';
 import type { InstallOutcome, PythonInfo, RunOutcome } from '../services/codeRunner';
+import type { UsageView } from '../services/usage';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
 import type { CardText } from '../agents/cardWriter';
@@ -80,7 +81,8 @@ export interface FigureView {
 }
 
 export type { CodeAnswer, CodeRun, CodeStarter } from '../core/code';
-export type { InstallOutcome, PythonInfo, RunOutcome };
+export type { InstallOutcome, PythonInfo, RunOutcome, UsageView };
+export type { Preset } from '../settings/schema';
 
 export interface AppInfo {
   version: string;
@@ -243,6 +245,8 @@ export interface ApiMethods {
   'code.python': { input: { lookAgain?: boolean }; output: PythonInfo };
   /** On a Mac with no Python: open Apple's installer for its command line tools, which include Python 3. */
   'code.installPython': { input: undefined; output: { message: string } };
+  /** Model calls today and in the last seven days, for Settings. */
+  'settings.usage': { input: undefined; output: UsageView };
   /** A figure the tutor showed: its picture as a data URL, and where it is from. */
   'figures.read': { input: { figureId: string }; output: FigureView };
   /** The flashcard review queue for every goal (null) or one: the card to show now and what is left. */

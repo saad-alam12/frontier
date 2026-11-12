@@ -24,6 +24,7 @@ import { dailyBackup, isBackupName, listBackups, manualBackup, restoreBackup as 
 import type { BackupInfo } from './store/backup';
 import { openDatabase } from './store/db';
 import { releaseInterruptedSources } from './store/sources';
+import { recordModelCall } from './store/modelCalls';
 import type { Database } from './store/db';
 
 /** Everything the IPC handlers need. Built once in main.ts; pieces are rebuilt when settings change. */
@@ -75,7 +76,24 @@ export class AppContext {
   };
 
   provider(): LlmProvider {
-    if (!this.cachedProvider) this.cachedProvider = createProvider(this.settings.get(), this.paths().agentCwd, (role, error) => this.log.error(`model call: ${role}`, error));
+    if (!this.cachedProvider) {
+      this.cachedProvider = createProvider(
+        this.settings.get(),
+        this.paths().agentCwd,
+        (role, error) => this.log.error(`model call: ${role}`, error),
+        // every call that answered is counted, for the usage line in Settings
+        (role, result) =>
+          recordModelCall(this.db(), {
+            role,
+            model: result.model,
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cacheReadTokens: result.usage.cacheReadTokens ?? 0,
+            cacheWriteTokens: result.usage.cacheWriteTokens ?? 0,
+            costUsd: result.usage.costUsd ?? null,
+          }),
+      );
+    }
     return this.cachedProvider;
   }
 

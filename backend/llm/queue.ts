@@ -81,6 +81,8 @@ export class ThrottledProvider implements LlmProvider {
     limit: number,
     /** Told of every call that failed (not of one the learner stopped), for the log. */
     private readonly onError?: (role: Role, error: unknown) => void,
+    /** Told of every call that answered, with what it used. */
+    private readonly onDone?: (role: Role, result: CompleteResult<unknown>) => void,
   ) {
     this.semaphore = new Semaphore(limit);
   }
@@ -98,6 +100,15 @@ export class ThrottledProvider implements LlmProvider {
     const lane = WAITED_ON.has(req.role) ? this.waitedOn : this.semaphore;
     return lane
       .run(() => this.inner.complete(req), req.signal)
+      .then((result) => {
+        // keeping a count must never fail the call it counts
+        try {
+          this.onDone?.(req.role, result);
+        } catch {
+          // nothing to do: the call itself answered
+        }
+        return result;
+      })
       .catch((error: unknown) => {
         if (!isCancelled(error)) this.onError?.(req.role, error);
         throw error;

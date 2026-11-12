@@ -1,7 +1,7 @@
 import { AgentSdkProvider } from './AgentSdkProvider';
 import { AnthropicApiProvider } from './AnthropicApiProvider';
 import { ThrottledProvider } from './queue';
-import type { LlmProvider, Role } from './provider';
+import type { CompleteResult, LlmProvider, Role } from './provider';
 import type { Settings } from '../settings/schema';
 import { modelChoice } from '../settings/schema';
 
@@ -11,8 +11,8 @@ export function createInnerProvider(settings: Settings, cwd: string): LlmProvide
   return settings.provider === 'anthropicApi' ? new AnthropicApiProvider({ apiKey: settings.apiKey, modelForRole: pick }) : new AgentSdkProvider({ modelForRole: pick, cwd });
 }
 
-export function createProvider(settings: Settings, cwd: string, onError?: (role: Role, error: unknown) => void): ThrottledProvider {
-  return new ThrottledProvider(createInnerProvider(settings, cwd), settings.concurrency, onError);
+export function createProvider(settings: Settings, cwd: string, onError?: (role: Role, error: unknown) => void, onDone?: (role: Role, result: CompleteResult<unknown>) => void): ThrottledProvider {
+  return new ThrottledProvider(createInnerProvider(settings, cwd), settings.concurrency, onError, onDone);
 }
 
 export type { LlmProvider, Role, CompleteRequest, CompleteResult, HelperTool, LlmMessage } from './provider';

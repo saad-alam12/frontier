@@ -40,6 +40,7 @@ import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 import { MAX_CODE_CHARS } from '../core/code';
 import { FigureRequestSchema, figureView } from '../services/figures';
+import { usageView } from '../services/usage';
 import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
 
 const execFileAsync = promisify(execFile);
@@ -350,6 +351,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'attachments.save': (upload) => ({ name: saveAttachment(ctx.paths().attachments, upload) }),
     'attachments.read': ({ name }) => attachmentDataUrl(ctx.paths().attachments, name),
+    'settings.usage': () => usageView(ctx.db()),
     'figures.read': (input) => figureView(ctx.db(), ctx.paths().figures, FigureRequestSchema.parse(input).figureId),
     'cards.queue': ({ goalId }) => cardQueue(ctx.db(), goalId),
     'cards.review': (input) => {

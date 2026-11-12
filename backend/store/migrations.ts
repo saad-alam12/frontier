@@ -458,6 +458,23 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE answers ADD COLUMN extras TEXT;
     `,
   },
+  {
+    version: 18,
+    // Every model call that answered: when, which job, which model, and its tokens (Settings shows usage).
+    sql: `
+      CREATE TABLE model_calls (
+        at TEXT NOT NULL,
+        role TEXT NOT NULL,
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL
+      );
+      CREATE INDEX model_calls_at ON model_calls(at);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {
