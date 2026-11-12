@@ -36,6 +36,7 @@ import type { InstallOutcome, PythonInfo, RunOutcome } from '../services/codeRun
 import type { UsageView } from '../services/usage';
 import type { DialogueView } from '../services/dialogue';
 import type { CheatSheetView, GoalNotesView } from '../services/notes';
+import type { MergeCandidate } from '../services/mapEdit';
 import type { DialogueKind } from '../store/dialogues';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
@@ -89,6 +90,7 @@ export type { Preset } from '../settings/schema';
 export type { ExamReport } from '../core/exam';
 export type { DialogueKind, DialogueView };
 export type { CheatSheetView, GoalNotesView, NoteIdeaView } from '../services/notes';
+export type { MergeCandidate } from '../services/mapEdit';
 
 export interface AppInfo {
   version: string;
@@ -250,6 +252,12 @@ export interface ApiMethods {
   'map.erasePreview': { input: EraseRequest; output: ErasePreview };
   /** Erase from the map for good (Settings). Refused while a session is open or a chosen source is being read. */
   'map.erase': { input: EraseRequest; output: EraseResult };
+  /** Rename an idea or correct its statement (design §8, "Editing the map"); the old name stays as another name. */
+  'map.editIdea': { input: { nodeId: string; name: string; statement: string }; output: { changed: boolean } };
+  /** Ideas that may be the same as this one, or that match what the learner typed. */
+  'map.mergeCandidates': { input: { nodeId: string; query?: string }; output: MergeCandidate[] };
+  /** Merge `dropId` into `keepId`: one idea with both names, chains, evidence, targets and cards. */
+  'map.mergeIdeas': { input: { keepId: string; dropId: string }; output: { keepId: string } };
   /** Ideas by meaning and name; a question also gets a short answer from the learner's own cards. */
   'lookup.search': { input: { query: string }; output: LookupAnswer };
   /** Open a card from Lookup: counts as a weak review (once per idea per day). */

@@ -46,6 +46,8 @@ export function MapScreen({
   const [settings, setSettings] = useState<MapSettings>(loadSettings);
   const [selected, setSelected] = useState<string | null>(initialId);
   const [card, setCard] = useState<NodeCard | null>(null);
+  /** Bumped after the idea was edited or merged, so its card is read again. */
+  const [cardVersion, setCardVersion] = useState(0);
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState<{ id: string; seq: number } | null>(initialId ? { id: initialId, seq: 1 } : null);
   const [hops, setHops] = useState(0);
@@ -77,7 +79,7 @@ export function MapScreen({
     return () => {
       live = false;
     };
-  }, [selected, map]);
+  }, [selected, map, cardVersion]);
 
   // a goal that no longer exists is forgotten
   const goalId = settings.goalId && map?.goals.some((g) => g.id === settings.goalId) ? settings.goalId : null;
@@ -241,6 +243,11 @@ export function MapScreen({
               const goals = map?.nodes.find((n) => n.id === id)?.goals ?? [];
               onChoose({ pick: [id], goalId: goals.length === 1 ? goals[0] : null });
             }}
+            onTestMe={(id) => {
+              const goals = map?.nodes.find((n) => n.id === id)?.goals ?? [];
+              onChoose({ pick: [id], goalId: goals.length === 1 ? goals[0] : null, testMe: true });
+            }}
+            onEdited={() => void refresh().then(() => setCardVersion((v) => v + 1))}
             compact
             extra={<IdeaFlashcards key={card.id} idea={{ id: card.id, name: card.name }} />}
           />

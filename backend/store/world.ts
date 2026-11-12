@@ -1,11 +1,13 @@
 /**
- * World layer: nodes and chains. Reads are open to everyone; the only write path is `applyMergePlan`
- * and `createUnverifiedNodes` (goal compile), both merger-owned entry points.
+ * World layer: nodes and chains. Reads are open to everyone; the only write paths are merger-owned
+ * entry points: `applyMergePlan` (reading a source), `createUnverifiedNodes` (goal compile), and
+ * `applyIdeaEdit` and `applyIdeaMerge` (the learner editing their map by hand).
  */
 import type { Database } from './db';
 import { nowIso, parseJson } from './db';
 import { chainKey } from '../core/chains';
 import type { MergePlan } from '../core/merge';
+import type { IdeaMergePlan } from '../core/ideaMerge';
 import type { Chain, KnowledgeNode, SourceRef, WorkedExample } from '../core/types';
 
 interface NodeRow {
@@ -167,6 +169,39 @@ export function createUnverifiedNodes(db: Database, nodes: Omit<KnowledgeNode, '
     "INSERT INTO nodes (id, kind, name, statement, aliases, sources, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, '[]', 'unverified', ?, ?)",
   );
   for (const n of nodes) stmt.run(n.id, n.kind, n.name, n.statement, JSON.stringify(n.aliases), now, now);
+}
+
+/** The learner renamed an idea or corrected its statement (`planIdeaEdit`). */
+export function applyIdeaEdit(db: Database, nodeId: string, edit: { name: string; statement: string; aliases: string[] }): void {
+  db.prepare('UPDATE nodes SET name = ?, statement = ?, aliases = ?, updated_at = ? WHERE id = ?').run(edit.name, edit.statement, JSON.stringify(edit.aliases), nowIso(), nodeId);
+}
+
+/**
+ * The world-layer part of merging one idea into another (`planIdeaMerge`): the kept idea's names and
+ * citations, the chains rewritten, worked examples and figures moved. The dropped idea itself is
+ * deleted by the caller once everything else that points at it has moved.
+ */
+export function applyIdeaMerge(db: Database, plan: IdeaMergePlan): void {
+  const now = nowIso();
+  db.prepare(`UPDATE nodes SET aliases = ?, sources = ?, status = CASE WHEN ? THEN 'verified' ELSE status END, updated_at = ? WHERE id = ?`).run(JSON.stringify(plan.node.aliases), JSON.stringify(plan.node.sources), plan.node.verified ? 1 : 0, now, plan.keepId);
+  const deleteChain = db.prepare('DELETE FROM chains WHERE id = ?');
+  for (const id of plan.removeChainIds) deleteChain.run(id);
+  const insertChain = db.prepare('INSERT INTO chains (id, premises, conclusion, sources, chain_key, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+  const insertPremise = db.prepare('INSERT OR IGNORE INTO chain_premises (chain_id, node_id) VALUES (?, ?)');
+  for (const c of plan.newChains) {
+    insertChain.run(c.id, JSON.stringify(c.premises), c.conclusion, JSON.stringify(c.sources), chainKey(c.premises, c.conclusion), now);
+    for (const p of c.premises) insertPremise.run(c.id, p);
+  }
+  const updateChain = db.prepare('UPDATE chains SET sources = ? WHERE id = ?');
+  for (const u of plan.chainSourceUpdates) updateChain.run(JSON.stringify(u.sources), u.chainId);
+  db.prepare('UPDATE examples SET node_id = ? WHERE node_id = ?').run(plan.keepId, plan.dropId);
+  db.prepare('UPDATE OR IGNORE figure_ideas SET node_id = ? WHERE node_id = ?').run(plan.keepId, plan.dropId);
+  db.prepare('UPDATE OR IGNORE source_coverage SET node_id = ? WHERE node_id = ?').run(plan.keepId, plan.dropId);
+}
+
+/** Remove an idea merged into another; whatever still pointed at it (duplicates) goes by cascade. */
+export function deleteMergedNode(db: Database, nodeId: string): void {
+  db.prepare('DELETE FROM nodes WHERE id = ?').run(nodeId);
 }
 
 function mergeRefs(existing: SourceRef[], added: SourceRef[]): SourceRef[] {

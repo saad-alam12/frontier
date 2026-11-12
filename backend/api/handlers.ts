@@ -8,6 +8,7 @@ import { app, dialog, ipcMain, net, shell } from 'electron';
 import { basename, join } from 'node:path';
 import { cheatSheetView, exportGoalNotes, goalNotesView, NOTE_CHARS, noteFor, saveNote } from '../services/notes';
 import { notesPdfName } from '../core/notes';
+import { editIdea, mergeCandidates, mergeIdeas, NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
@@ -365,6 +366,18 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, figuresDir: ctx.paths().figures, isReading: (id) => ctx.ingestion().isRunning(id) }, EraseRequestSchema.parse(request));
       for (const goalId of result.goalsToMap) ctx.goalWorker().refresh(goalId); // goals left with no map are mapped again
       return result;
+    },
+    'map.editIdea': (input) => {
+      const { nodeId, name, statement } = z.object({ nodeId: z.string().min(1), name: z.string().max(NAME_CHARS * 2), statement: z.string().max(STATEMENT_CHARS * 2) }).parse(input);
+      const result = editIdea(ctx.db(), nodeId, { name, statement });
+      // matching and Lookup read the idea by meaning: its embedding follows the new text
+      if (result.changed) void ctx.ingestion().ensureEmbeddings().catch(() => undefined);
+      return result;
+    },
+    'map.mergeCandidates': ({ nodeId, query }) => mergeCandidates(ctx.db(), String(nodeId), z.string().max(200).optional().parse(query)),
+    'map.mergeIdeas': (input) => {
+      const { keepId, dropId } = z.object({ keepId: z.string().min(1), dropId: z.string().min(1) }).parse(input);
+      return mergeIdeas(ctx.db(), keepId, dropId);
     },
     'lookup.search': ({ query }) => lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query),
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),

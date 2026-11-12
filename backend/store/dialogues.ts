@@ -69,3 +69,10 @@ export function openDialogue(db: Database, goalId: string): DialogueRecord | nul
   const row = db.prepare("SELECT * FROM dialogues WHERE status = 'open' AND goal_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").get(goalId) as Row | undefined;
   return row ? toRecord(row) : null;
 }
+
+/** Whether a conversation still open is about any of these ideas. */
+export function openDialogueWith(db: Database, nodeIds: Iterable<string>): boolean {
+  const ids = new Set(nodeIds);
+  const rows = db.prepare("SELECT node_ids FROM dialogues WHERE status = 'open'").all() as { node_ids: string }[];
+  return rows.some((r) => parseJson<string[]>(r.node_ids, []).some((id) => ids.has(id)));
+}

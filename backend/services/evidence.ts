@@ -10,7 +10,7 @@ import type { Evidence, EvidenceContext, EvidenceKind, NodeState } from '../core
 import { PASS_SCORE } from '../core/types';
 import type { Database } from '../store/db';
 import { nowIso, transaction } from '../store/db';
-import { emptyState, eraseEvidence, getState, insertEvidence, listEvidenceForNode, upsertState } from '../store/evidence';
+import { emptyState, eraseEvidence, getState, insertEvidence, listEvidenceForNode, moveEvidence, upsertState } from '../store/evidence';
 import { newId } from '../store/ids';
 import { chainsAround, getNode } from '../store/world';
 
@@ -111,6 +111,19 @@ export function setOwnStatement(db: Database, nodeId: string, ownStatement: stri
 /** The learner erased these ideas (Settings): their evidence and states go. The erase service calls this inside its transaction. */
 export function eraseEvidenceFor(db: Database, nodeIds: Iterable<string>): void {
   eraseEvidence(db, nodeIds);
+}
+
+/**
+ * Two ideas were merged: the evidence of `from` moves to `to` (store/evidence.ts, `moveEvidence`) and
+ * `to`'s state is derived again from all of it. The learner's own words and handle of `from` carry over
+ * when `to` has none. The map-editing service calls this inside its transaction.
+ */
+export function mergeEvidenceInto(db: Database, from: string, to: string): NodeState {
+  const fromState = getState(db, from);
+  moveEvidence(db, from, to);
+  const toState = getState(db, to);
+  if (fromState?.ownStatement && !toState?.ownStatement) setOwnStatement(db, to, fromState.ownStatement, fromState.handle);
+  return recomputeState(db, to);
 }
 
 /** Goal fields are written by the goal service through this one door. */

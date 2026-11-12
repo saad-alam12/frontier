@@ -120,7 +120,7 @@ export interface TutorGoal {
 }
 
 /** Everything about the idea, the learner and the goal that a tutor call starts from. */
-export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry' | 'branches' | 'onWriting'>;
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry' | 'branches' | 'onWriting' | 'testedCold'>;
 
 /** A picture of a page that shows the idea, from the learner's material, which the tutor can show. */
 export interface TutorFigure {
@@ -166,6 +166,8 @@ export interface TutorStepInput {
   branches?: CardBranch[];
   /** The text of an explaining card as the tutor writes it (design §4.3, "shown as it is written"). */
   onWriting?: (text: string) => void;
+  /** The learner opened this idea with "I know this: test me": nothing about it has been shown in this session. */
+  testedCold?: boolean;
 }
 
 export interface TutorStepResult {
@@ -233,6 +235,9 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
         ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
         : '## Task\nGrade the response. No card is needed; this node is finished.',
     );
+  }
+  if (input.testedCold && input.nextStage) {
+    sections.push('The learner says they already know this idea and asked to be tested. Nothing about it has been shown in this session: ask the question cold, without explaining or hinting first, and do not refer to an explanation they have not seen.');
   }
   if (!branches && input.retry && input.nextStage) {
     sections.push(

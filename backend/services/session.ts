@@ -87,6 +87,8 @@ export interface SessionState {
   owed?: boolean;
   /** A session on a goal whose ideas the learner chose (going deeper): no recall, no practice, and the goal's planned sessions do not carry from it. */
   chosen?: boolean;
+  /** "I know this: test me" from the map or a goal page: each idea opens at the question that shows its aim. */
+  testMe?: boolean;
 }
 
 /** What the learner chose: their words or their ideas, how deep, and where the time is booked. */
@@ -600,6 +602,12 @@ async function beginStep(deps: SessionDeps, sessionId: string, state: SessionSta
     return;
   }
   const first = stepStages(step)[0] as Stage;
+  // the learner said they know it: the question that shows the aim decides, as with "test me" on a card
+  if (state.testMe && canTestOut(step, first, state.edge)) {
+    state.edge = testOutEdge(state.edge, first);
+    await produceCard(deps, sessionId, state, step, certifyingStage(step.aim), null, goal, afterOutcome);
+    return;
+  }
   await produceCard(deps, sessionId, state, step, first, null, goal, afterOutcome);
 }
 
@@ -641,7 +649,9 @@ async function produceCard(
   // text written for a card that is not shown (another call writes the card) is not shown either
   deps.work.write(sessionId, '');
   const input = buildTutorInput(deps.db, state, step, previous, stage, goal);
-  const result = await runTutorStep(deps.provider, { ...input, images: previous ? imagesOf(deps, previous.response) : undefined, figureImages: FIGURE_STAGES.has(stage) ? figureImagesOf(deps, input.figures) : undefined, retry, onWriting: (text) => deps.work.write(sessionId, text) }).catch(owe);
+  // a session opened with "test me" asks its first question cold: nothing about this idea was shown yet
+  const cold = Boolean(state.testMe && state.edge.jumpedFrom && !previous && !(state.history[step.nodeId]?.length));
+  const result = await runTutorStep(deps.provider, { ...input, images: previous ? imagesOf(deps, previous.response) : undefined, figureImages: FIGURE_STAGES.has(stage) ? figureImagesOf(deps, input.figures) : undefined, retry, testedCold: cold || undefined, onWriting: (text) => deps.work.write(sessionId, text) }).catch(owe);
   stillOpen(deps.db, sessionId);
   if (!result.card) return owe(new Error('the tutor returned no card'));
   showCard(deps, sessionId, state, step, stage, result.card);

@@ -3906,3 +3906,48 @@ button.map-label:hover {
     font-size: 12pt;
   }
 }
+
+/* Editing the map by hand, on an idea's card. */
+.edit-idea {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.edit-idea-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.edit-idea-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.merge-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.merge-candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.merge-candidate:hover:not(:disabled) {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}

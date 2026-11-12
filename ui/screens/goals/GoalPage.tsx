@@ -50,8 +50,8 @@ export function GoalPage({
   onStartSession: () => Promise<void>;
   /** Go deeper on simplified ideas (all, or these): their time joins the goal and a session on them opens. */
   onGoDeeper: (nodeIds?: string[]) => Promise<void>;
-  /** Choose a session on these ideas of the goal ("Learn these now" on a skill). */
-  onLearn: (nodeIds: string[]) => void;
+  /** Choose a session on these ideas of the goal ("Learn these now" on a skill), or a test on them ("I know these: test me"). */
+  onLearn: (nodeIds: string[], testMe?: boolean) => void;
   onChanged: () => void;
   /** Start the new-goal flow with this sentence (an addition that reads like a goal of its own). */
   onNewGoal: (text: string) => void;
@@ -669,7 +669,7 @@ function SkillRow({
   deeper: Map<string, GoalDetail['simplified']['ideas'][number]>;
   onGoDeeper: (nodeId: string) => void;
   /** Planned skills only: choose a session on the ideas not yet at their planned depth. */
-  onLearn?: (nodeIds: string[]) => void;
+  onLearn?: (nodeIds: string[], testMe?: boolean) => void;
   /** Planned skills only: new problems on the ideas already learned, at a chosen level. */
   onPractise?: (nodeIds: string[], level: PracticeLevel) => void;
   /** Problems are being written. */
@@ -739,9 +739,14 @@ function SkillRow({
                 </>
               )}
               {onLearn && toLearn.length > 0 && (
-                <button type="button" className="link-button ml-auto" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS))}>
-                  Learn these now
-                </button>
+                <span className="ml-auto flex flex-wrap gap-x-[16px] gap-y-[4px]">
+                  <button type="button" className="link-button" title="A question on each that shows you know it, with nothing explained first" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS), true)}>
+                    I know these: test me
+                  </button>
+                  <button type="button" className="link-button" onClick={() => onLearn(toLearn.slice(0, MAX_FREE_IDEAS))}>
+                    Learn these now
+                  </button>
+                </span>
               )}
             </div>
           )}

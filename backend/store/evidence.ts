@@ -83,6 +83,17 @@ export function eraseEvidence(db: Database, nodeIds: Iterable<string>): void {
   }
 }
 
+/**
+ * The second exception to append-only evidence: the learner merged two ideas that were the same, so
+ * what they showed about one is about the other. Rows keep everything but the idea they point at
+ * (and the idea named in implicit credit). The state of `from` goes; the caller recomputes `to`'s.
+ */
+export function moveEvidence(db: Database, from: string, to: string): void {
+  db.prepare('UPDATE evidence SET node_id = ? WHERE node_id = ?').run(to, from);
+  db.prepare(`UPDATE evidence SET context = replace(context, ?, ?) WHERE context LIKE ?`).run(`"${from}"`, `"${to}"`, `%"${from}"%`);
+  db.prepare('DELETE FROM node_states WHERE node_id = ?').run(from);
+}
+
 export function listEvidenceForNode(db: Database, nodeId: string): Evidence[] {
   return (db.prepare('SELECT * FROM evidence WHERE node_id = ? ORDER BY at, id').all(nodeId) as unknown as EvidenceRow[]).map(rowToEvidence);
 }

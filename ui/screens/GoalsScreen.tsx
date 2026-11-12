@@ -125,7 +125,7 @@ export function GoalsScreen({
           }}
           onGoDeeper={(nodeIds) => onGoDeeper(detail.goal.id, nodeIds)}
           onNewGoal={(text) => setView({ name: 'new', text })}
-          onLearn={(nodeIds) => onChoose({ goalId: detail.goal.id, pick: nodeIds })}
+          onLearn={(nodeIds, testMe) => onChoose({ goalId: detail.goal.id, pick: nodeIds, testMe })}
           onReviewCards={() => onReviewCards(detail.goal.id)}
           onOpenPractice={onOpenPractice}
           onTalk={(dialogueId) => setView({ name: 'talk', goalId: detail.goal.id, dialogueId })}

@@ -380,6 +380,25 @@ export function removeTargetsOf(db: Database, nodeIds: Iterable<string>): void {
   for (const id of nodeIds) stmt.run(id);
 }
 
+/**
+ * Two ideas were merged: targets on `from` become targets on `to`. Where a skill already targets both,
+ * the kept target takes the deeper of the two depths, and core if either was.
+ */
+export function mergeTargets(db: Database, from: string, to: string): void {
+  db.prepare(
+    `UPDATE targets AS t SET
+       depth = max(t.depth, f.depth),
+       planned_depth = CASE WHEN t.planned_depth IS NULL AND f.planned_depth IS NULL THEN NULL ELSE max(coalesce(t.planned_depth, t.depth), coalesce(f.planned_depth, f.depth)) END,
+       approved_depth = CASE WHEN t.approved_depth IS NULL AND f.approved_depth IS NULL THEN NULL ELSE max(coalesce(t.approved_depth, 0), coalesce(f.approved_depth, 0)) END,
+       core = max(t.core, f.core),
+       simplified = CASE WHEN t.simplified IS NOT NULL AND f.simplified IS NOT NULL THEN t.simplified ELSE NULL END
+     FROM targets AS f
+     WHERE t.node_id = ? AND f.node_id = ? AND f.capability_id = t.capability_id`,
+  ).run(to, from);
+  db.prepare('UPDATE OR IGNORE targets SET node_id = ? WHERE node_id = ?').run(to, from);
+  db.prepare('DELETE FROM targets WHERE node_id = ?').run(from);
+}
+
 /** The learner erased these sources: no goal keeps them as material. */
 export function removeMaterialsOf(db: Database, sourceIds: Iterable<string>): void {
   const stmt = db.prepare('DELETE FROM goal_materials WHERE source_id = ?');

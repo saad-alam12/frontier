@@ -38,6 +38,8 @@ export const FreeChoiceSchema = z
     proposalId: z.string().min(1).optional(),
     /** Missing background the learner chose to learn first: ids, or a proposal's new ideas by temp id. */
     addFirst: z.array(z.string().min(1)).max(MAX_FREE_IDEAS).default([]),
+    /** "I know this: test me" on picked ideas: each opens at the question that shows its aim. */
+    testMe: z.boolean().default(false),
   })
   .refine((c) => (c.pick === undefined) !== (c.proposalId === undefined), { message: 'Pick ideas or describe what you want to learn.' });
 export type FreeChoice = z.input<typeof FreeChoiceSchema>;
@@ -226,6 +228,7 @@ function openFreeSession(db: Database, maker: SessionMaker, choice: z.output<typ
       resume: null,
       priorMinutes: {},
       free,
+      testMe: choice.testMe || undefined,
     };
     saveSessionState(db, session.id, state);
     logEvent(db, 'session.started', { goalId: counted ? goal.id : null, sessionId: session.id }, { steps: steps.length, free: true });

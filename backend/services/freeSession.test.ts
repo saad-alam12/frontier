@@ -97,6 +97,20 @@ describe('choosing what to learn', () => {
     expect(provider.calls.map((c) => c.role)).not.toContain('problemGenerator');
   });
 
+  it('opens a picked idea at the question that shows its aim with "test me", asked cold', async () => {
+    const { provider, maker, deps, id } = setup();
+    let snap = await startFreeSession(deps, maker, { goalId: null, counted: false, pick: [id('bestResponse')], testMe: true });
+    expect(snap.phase).toBe('orient');
+    snap = await respond(deps, snap.id, { answer: '' });
+    expect(snap.phase).toBe('teach');
+    // no prediction or explanation first: the deeper question decides
+    expect(snap.card?.stage).not.toBe('predict');
+    expect(snap.card?.stage).not.toBe('explain');
+    const asked = provider.calls.filter((c) => c.role === 'tutor').at(-1)?.messages[0]?.content ?? '';
+    expect(asked).toContain('asked to be tested');
+    expect(asked).toMatch(new RegExp(`Produce the \\*\\*${snap.card?.stage ?? 'none'}\\*\\* card`));
+  });
+
   it('warns about picked ideas whose premises are not yours, and adds them first when asked', () => {
     const { db, id, maker } = setup();
     const goal = gameTheoryGoal(db, id);

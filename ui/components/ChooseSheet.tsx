@@ -16,6 +16,8 @@ import './ChooseSheet.css';
 export interface ChooseInit {
   goalId?: string | null;
   pick?: string[];
+  /** "I know this: test me": each picked idea opens at the question that shows its aim. */
+  testMe?: boolean;
 }
 
 type Mode = 'pick' | 'describe';
@@ -72,7 +74,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
   const choice: FreeChoice | null =
     mode === 'pick'
       ? picked.length > 0
-        ? { goalId, counted, pick: picked, addFirst }
+        ? { goalId, counted, pick: picked, addFirst, testMe: Boolean(init.testMe) }
         : null
       : proposalFits && maker
         ? { goalId, counted, proposalId: maker.id, addFirst }
@@ -171,7 +173,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
     </Button>
   ) : (
     <Button kind="primary" onClick={() => void start()} disabled={!ready || starting}>
-      {starting ? 'Starting…' : 'Start session'}
+      {starting ? 'Starting…' : init.testMe ? 'Start the test' : 'Start session'}
     </Button>
   );
 
@@ -180,7 +182,7 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
       open
       onClose={onClose}
       width={620}
-      title="Choose what to learn"
+      title={init.testMe ? 'Test me on what I know' : 'Choose what to learn'}
       actions={
         <>
           <span className="choose-estimate" aria-live="polite">
@@ -192,7 +194,8 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
       }
     >
       <div className="choose">
-        <div role="radiogroup" aria-label="How to choose" className="segmented is-small">
+        {init.testMe && <p className="m-0 text-secondary">Each idea opens with the question that shows you know it, with nothing explained first. Miss it and the session teaches it from there.</p>}
+        <div role="radiogroup" aria-label="How to choose" className="segmented is-small" style={init.testMe ? { display: 'none' } : undefined}>
           <button type="button" role="radio" aria-checked={mode === 'pick'} onClick={() => switchMode('pick')}>
             Pick ideas
           </button>

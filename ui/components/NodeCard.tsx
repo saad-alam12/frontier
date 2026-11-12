@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
 import { IdeaNote } from './IdeaNote';
+import { EditIdea } from './EditIdea';
 import { VerticalPath } from './paths';
 import { depthName } from '../lib/stages';
 
@@ -20,6 +21,8 @@ export function NodeCardView({
   onTrail,
   onGoDeeper,
   onLearn,
+  onEdited,
+  onTestMe,
   compact,
   extra,
 }: {
@@ -30,6 +33,10 @@ export function NodeCardView({
   onGoDeeper?: (goalId: string, nodeIds: string[]) => Promise<void>;
   /** "Learn this now": choose a session on this idea. */
   onLearn?: (nodeId: string) => void;
+  /** Editing the map: shown when given; called after a rename, correction or merge. */
+  onEdited?: () => void;
+  /** "I know this: test me": a session that opens at the question that shows the idea. */
+  onTestMe?: (nodeId: string) => void;
   compact?: boolean;
   /** More about the idea from the screen showing it (the Map adds its flashcards), above the sources. */
   extra?: ReactNode;
@@ -143,6 +150,8 @@ export function NodeCardView({
           )}
         </div>
       )}
+
+      {onEdited && <EditIdea key={card.id} card={card} onChanged={onEdited} onTestMe={onTestMe} />}
     </article>
   );
 }
