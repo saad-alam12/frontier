@@ -223,3 +223,72 @@ export function timebox(input: TimeboxInput): 'none' | 'simplify' | 'wrapUp' {
   if (input.missingBackground || (struggling && input.minutes >= SIMPLIFY_AT * input.allowance)) return 'simplify';
   return 'none';
 }
+
+/** What follows a graded answer: a worked example, the escalated re-teach, a simplified idea, or a stage (null: the idea is finished). */
+export type FollowUp = 'support' | 'reteach' | 'simplify' | { stage: Stage | null; retry: boolean };
+
+/** The step as the rules after a grade see it. */
+export interface FollowStep {
+  aim: number;
+  /** The idea's stages for this session (`stagesFor`). */
+  stages: Stage[];
+  /** Minutes the plan prices the idea at. */
+  minutes: number;
+  simplified: boolean;
+}
+
+/**
+ * Everything that decides what follows a graded answer (design §4.3), in one place: the edge rules,
+ * the half hour per idea, a question asked again, wrapping up. The session uses it after a grade, and
+ * before the call to tell the tutor which card each score leads to.
+ */
+export function followUp(edge: EdgeState, step: FollowStep, stage: Stage, input: { score: number; confidence?: number; missingBackground: boolean; minutes: number }): { edge: EdgeState; then: FollowUp } {
+  const graded = applyGrade(edge, { score: input.score, confidence: input.confidence, stage, aim: step.aim });
+  if (graded.action === 'support') return { edge: graded.edge, then: 'support' };
+  if (graded.action === 'escalate') return { edge: graded.edge, then: 'reteach' };
+  const box = graded.action === 'done' ? 'none' : timebox({ minutes: input.minutes, allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified, edge: graded.edge, missingBackground: input.missingBackground });
+  if (box === 'simplify') return { edge: graded.edge, then: 'simplify' };
+  const wrapped = box === 'wrapUp' ? { ...graded.edge, wrapping: true } : graded.edge;
+  // a missed question comes once more in a fresh version, unless the idea's time is up
+  if (graded.action === 'retry' && box === 'none') return { edge: wrapped, then: { stage, retry: true } };
+  const next = box === 'wrapUp' ? nextStage(step.stages, stage, 'wrapUp') : nextStage(step.stages, stage, graded.action, graded.edge, step.aim);
+  // a failed test-out goes back to teaching once; after that a miss on the same question is an ordinary miss
+  return { edge: graded.action === 'resume' ? { ...wrapped, jumpedFrom: null } : wrapped, then: { stage: next, retry: false } };
+}
+
+/** The card a tutor call can write with its grade: a stage of the idea (perhaps asked again), or none. */
+export interface CardBranch {
+  /** The tutor's score from here (inclusive)… */
+  from: number;
+  /** …to here (exclusive; null: up to 1). */
+  below: number | null;
+  card: { stage: Stage; retry: boolean } | null;
+}
+
+/** Cards a tutor call can write together with a grade; the escalated re-teach and a simplified idea need calls of their own. */
+const IN_CALL: ReadonlySet<Stage> = new Set<Stage>(['predict', 'explain', 'check', 'derive', 'connect', 'compress', 'use', 'index', 'support']);
+
+/**
+ * Which card follows each score the tutor may give, so the call that grades an answer writes the card
+ * that will be shown and none is written to be thrown away (design §4.3). Scores are tried every
+ * hundredth, as the tutor gives them (before hints lower them), and runs of the same card become one
+ * band. A band whose follow-up needs a call of its own (the re-teach, a simplified idea, the next idea)
+ * gets no card. Assumes no missing background: when the tutor names one, the session asks again.
+ */
+export function cardBranches(edge: EdgeState, step: FollowStep, stage: Stage, input: { confidence?: number; hints: number; minutes: number }): CardBranch[] {
+  const bands: CardBranch[] = [];
+  for (let i = 0; i <= 100; i += 1) {
+    const score = i / 100;
+    const { then } = followUp(edge, step, stage, { score: countedScore(score, input.hints), confidence: input.confidence, missingBackground: false, minutes: input.minutes });
+    const card = then === 'support' ? { stage: 'support' as Stage, retry: false } : typeof then === 'object' && then.stage && IN_CALL.has(then.stage) ? { stage: then.stage, retry: then.retry } : null;
+    const last = bands[bands.length - 1];
+    if (last && sameCard(last.card, card)) continue;
+    if (last) last.below = score;
+    bands.push({ from: score, below: null, card });
+  }
+  return bands;
+}
+
+function sameCard(a: CardBranch['card'], b: CardBranch['card']): boolean {
+  return a === null || b === null ? a === b : a.stage === b.stage && a.retry === b.retry;
+}

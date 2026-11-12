@@ -28,6 +28,7 @@ import type { Grade } from '../agents/tutor';
 import type { IdeaFinished } from '../core/cards';
 import { reviewsByCard } from '../store/cards';
 import { saveCard } from './cards';
+import { stageAsked } from '../llm/fakeTutor';
 
 /** A tutor that answers any stage with a plausible card and grades from a queue of scores. */
 function fakeTutor(scores: number[]) {
@@ -40,9 +41,8 @@ function fakeTutor(scores: number[]) {
       return { recalled: ids.map((id) => ({ nodeId: id, score: 0.8, note: '' })), canDo: closing ? 'You can now find equilibria.' : null, previewQuestion: closing ? 'What changes if payoffs double?' : null };
     }
     const grading = /Grade the response/.test(text);
-    const stage = /Produce the \*\*(\w+)\*\* card|produce the \*\*(\w+)\*\* card/.exec(text);
-    const next = stage?.[1] ?? stage?.[2] ?? null;
     const score = grading ? (queue.shift() ?? 0.8) : null;
+    const next = stageAsked(text, score);
     const said = text.split("## Learner's response")[1] ?? '';
     const missingBackground = /never heard of/.test(said) ? { name: 'best responses', hours: 2 } : null;
     const grade = grading ? { score, feedback: `Scored ${score}.`, misconception: score !== null && score < 0.3 ? 'Thinks equilibrium means best for all.' : null, confidentlyWrong: false, missingBackground } : null;
@@ -559,8 +559,12 @@ describe('teaching session', () => {
     const nashId = ids.get('nash') as string;
     while (snap.phase === 'teach' && snap.current?.nodeId !== nashId) snap = await respond(deps, snap.id, answer('one strategy per player'));
     expect(snap.current?.canTestOut).toBe(true);
+    const before = deps.provider.calls.filter((c) => c.role === 'tutor').length;
     snap = await respond(deps, snap.id, answer('nobody gains by moving alone: each plays a best reply', 0.9));
     expect(snap.current?.stage).toBe('derive');
+    // the call that graded the strong prediction wrote the test-out question: no explanation written to be thrown away
+    expect(deps.provider.calls.filter((c) => c.role === 'tutor').length - before).toBe(1);
+    expect(snap.history.nodes.find((n) => n.nodeId === nashId)?.items.map((h) => h.stage)).toEqual(['predict']);
     snap = await respond(deps, snap.id, answer('mutual best responses, both directions', 0.9));
     expect(snap.phase).not.toBe('teach');
     expect(listEvidenceForSession(db, snap.id).filter((e) => e.nodeId === nashId).map((e) => e.kind)).toEqual(['predict', 'derive']);
@@ -969,11 +973,41 @@ describe('R7 B1: asking the tutor', () => {
     const before = deps.provider.calls.length;
     snap = await respond(deps, snap.id, answer('It is the best outcome for everyone.', 0.66)); // 0.3
     expect(snap.current?.stage).toBe('check');
+    // the call that graded the miss wrote the fresh question too: one call, no card thrown away
+    expect(deps.provider.calls.slice(before)).toHaveLength(1);
     const retry = deps.provider.calls.slice(before).at(-1)?.messages[0]?.content ?? '';
-    expect(retry).toContain('The learner missed the last **check** question');
-    expect(retry).toContain('a fresh question, not the same one reworded');
+    expect(retry).toContain('- Score below 0.70: the **check** card again, as a fresh question on the same step from another side (not the same one reworded)');
     snap = await respond(deps, snap.id, answer('No player gains by changing alone.', 0.66)); // 0.8
     expect(snap.current?.stage).toBe('compress');
   });
 });
 
+
+describe('R7 C1: explanations shown as they are written', () => {
+  const pickDominant = (req: CompleteRequest<unknown>) => {
+    const text = (req.messages[0]?.content ?? '').split('## Candidates')[1] ?? '';
+    const all = [...text.matchAll(/- \[(node_[a-z0-9_]+)\] ([^(]+) \(/g)].map((m) => ({ id: m[1] as string, name: (m[2] as string).trim() }));
+    return { title: 'Dominance', orientation: 'Today builds on what you know.', steps: all.filter((c) => c.name === 'Strictly dominant strategy').map((c) => ({ nodeId: c.id, why: 'needed for the exam' })) };
+  };
+
+  it('the explanation reaches the window while it is written, and is gone once the card is there', async () => {
+    const { goal, deps } = await setup([0.4, 0.8, 0.8], [], pickDominant);
+    let snap = await startSession(deps, goal.id);
+    snap = await respond(deps, snap.id, answer(''));
+    expect(snap.current?.stage).toBe('predict');
+    const seen: string[] = [];
+    const stop = deps.work.subscribe((event) => {
+      if (event.work?.writing) seen.push(event.work.writing);
+    });
+    snap = await respond(deps, snap.id, answer('Not sure.', 0.33));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    stop();
+    expect(snap.current?.stage).toBe('explain');
+    // the text grew toward the card as written, without the JSON around it
+    expect(seen.length).toBeGreaterThan(0);
+    const card = snap.card as { markdown: string };
+    expect(card.markdown.startsWith(seen[seen.length - 1] ?? 'x')).toBe(true);
+    expect(seen.every((text) => !text.includes('"stage"'))).toBe(true);
+    expect(deps.work.current()?.writing ?? null).toBeNull();
+  });
+});

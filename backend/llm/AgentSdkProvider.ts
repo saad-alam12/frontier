@@ -64,7 +64,7 @@ export class AgentSdkProvider implements LlmProvider {
       alwaysLoad: true,
     });
 
-    const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const text = flattenMessages(req.messages);
     const images = req.messages.flatMap((m) => (m.role === 'user' ? (m.images ?? []) : []));
     const prompt = images.length ? withImages(text, images) : text;
@@ -87,16 +87,33 @@ export class AgentSdkProvider implements LlmProvider {
           allowedTools: [`mcp__${SERVER_NAME}__*`],
           settingSources: [],
           persistSession: false,
+          // the submit input as the model writes it, for showing long text as it is written
+          includePartialMessages: Boolean(req.onPartial),
           maxTurns: this.options.maxTurns ?? 12,
         },
       });
+      let submitIndex: number | null = null;
+      let partial = '';
       for await (const message of run) {
+        if (message.type === 'stream_event' && req.onPartial) {
+          const event = message.event;
+          if (event.type === 'content_block_start' && event.content_block.type === 'tool_use' && event.content_block.name.endsWith(`__${req.submit.name}`)) {
+            submitIndex = event.index;
+            partial = '';
+          } else if (event.type === 'content_block_delta' && event.index === submitIndex && event.delta.type === 'input_json_delta') {
+            partial += event.delta.partial_json;
+            req.onPartial(partial);
+          }
+          continue;
+        }
         if (message.type === 'system' && message.subtype === 'init') {
           this.options.onInit?.({ tools: message.tools, mcpServers: message.mcp_servers, permissionMode: message.permissionMode });
         }
         if (message.type === 'result') {
           usage.inputTokens += message.usage.input_tokens;
           usage.outputTokens += message.usage.output_tokens;
+          usage.cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
+          usage.cacheWriteTokens += message.usage.cache_creation_input_tokens ?? 0;
           usage.costUsd += message.total_cost_usd;
           if (message.subtype !== 'success' && !tracker.accepted) {
             const detail = 'errors' in message && Array.isArray(message.errors) ? message.errors.join('; ') : message.subtype;

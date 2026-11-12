@@ -65,6 +65,11 @@ export class FakeProvider implements LlmProvider {
         continue;
       }
       const payload = isSubmitStep(resolved) ? resolved.submit : resolved;
+      // a real model writes its input piece by piece: the fake hands it over in four pieces
+      if (req.onPartial) {
+        const json = JSON.stringify(payload) ?? '';
+        for (let i = 1; i <= 4; i += 1) req.onPartial(json.slice(0, Math.ceil((json.length * i) / 4)));
+      }
       const verdict = tracker.trySubmit(payload);
       if (verdict.ok) break;
       if (verdict.giveUp) throw tracker.failure();

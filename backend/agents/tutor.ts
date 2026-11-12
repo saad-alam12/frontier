@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { CodeStarterSchema, codeForModel } from '../core/code';
 import type { CodeAnswer } from '../core/code';
 import { unknownFigureRefs } from '../core/figureRefs';
+import { partialStringField } from '../core/partialJson';
 import { isGraded } from '../core/session';
-import type { Stage } from '../core/session';
+import type { CardBranch, Stage } from '../core/session';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
 import type { Assessment, GoalFocus, GoalLevel } from '../core/types';
@@ -42,19 +43,38 @@ export const GradeSchema = z.object({
 });
 export type Grade = z.infer<typeof GradeSchema>;
 
-/** The grade may name only the flashcards it was shown. */
-function gradeFor(cardIds: ReadonlySet<string>) {
-  return GradeSchema.superRefine((grade, ctx) => {
-    grade.recalledCards.forEach((id, i) => {
-      if (!cardIds.has(id)) ctx.addIssue({ code: 'custom', path: ['recalledCards', i], message: `${id} is not one of the flashcards listed` });
-    });
-  });
-}
+/** Any card of the step loop. */
+const AnyCard = z.discriminatedUnion('stage', [
+  CardSchemas.predict,
+  CardSchemas.explain,
+  CardSchemas.check,
+  CardSchemas.derive,
+  CardSchemas.connect,
+  CardSchemas.compress,
+  CardSchemas.use,
+  CardSchemas.index,
+  CardSchemas.support,
+  CardSchemas.reteach,
+]);
 
-export function buildStepSchema(nextStage: Stage | null, expectGrade: boolean, cardIds: ReadonlySet<string> = new Set(), figureIds: ReadonlySet<string> = new Set()) {
-  const card = nextStage ? CardSchemas[nextStage] : z.null();
-  const grade = expectGrade ? gradeFor(cardIds) : z.null();
-  return z.object({ grade, card }).superRefine((step, ctx) => {
+/**
+ * What a tutor call submits: a grade (or null) and a card (or null). The shape is the same for every
+ * call, so the tool the model sees never changes and the fixed part of the prompt can be cached; which
+ * grade and which cards this call may give is checked here, and a mistake goes back to the model.
+ * `next` is the stage to write, or the stages the score bands lead to (null: no card).
+ */
+export function buildStepSchema(next: Stage | null | (Stage | null)[], expectGrade: boolean, cardIds: ReadonlySet<string> = new Set(), figureIds: ReadonlySet<string> = new Set()) {
+  const allowed = Array.isArray(next) ? next : [next];
+  const stages = new Set(allowed.filter((s): s is Stage => s !== null));
+  const named = [...stages].map((s) => `**${s}**`).join(' or ');
+  return z.object({ grade: GradeSchema.nullable(), card: AnyCard.nullable() }).superRefine((step, ctx) => {
+    if (expectGrade && !step.grade) ctx.addIssue({ code: 'custom', path: ['grade'], message: 'grade the learner\'s response' });
+    if (!expectGrade && step.grade) ctx.addIssue({ code: 'custom', path: ['grade'], message: 'there is no response to grade here: grade must be null' });
+    step.grade?.recalledCards.forEach((id, i) => {
+      if (!cardIds.has(id)) ctx.addIssue({ code: 'custom', path: ['grade', 'recalledCards', i], message: `${id} is not one of the flashcards listed` });
+    });
+    if (step.card === null && !allowed.includes(null)) ctx.addIssue({ code: 'custom', path: ['card'], message: `write the ${named} card` });
+    if (step.card && !stages.has(step.card.stage)) ctx.addIssue({ code: 'custom', path: ['card'], message: stages.size ? `the card must be the ${named} card, not ${step.card.stage}` : 'no card is needed here: card must be null' });
     for (const id of unknownFigureRefs(step.card, figureIds)) ctx.addIssue({ code: 'custom', path: ['card'], message: figureMessage(id, figureIds) });
   });
 }
@@ -98,7 +118,7 @@ export interface TutorGoal {
 }
 
 /** Everything about the idea, the learner and the goal that a tutor call starts from. */
-export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry'>;
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry' | 'branches' | 'onWriting'>;
 
 /** A picture of a page that shows the idea, from the learner's material, which the tutor can show. */
 export interface TutorFigure {
@@ -137,6 +157,13 @@ export interface TutorStepInput {
   nextStage: Stage | null;
   /** The learner missed the last question of this stage: the card to produce asks it again in a fresh version. */
   retry?: boolean;
+  /**
+   * With a grade: which card follows each score (design §4.3), so the call writes the card that will be
+   * shown. Replaces `nextStage` for what to write.
+   */
+  branches?: CardBranch[];
+  /** The text of an explaining card as the tutor writes it (design §4.3, "shown as it is written"). */
+  onWriting?: (text: string) => void;
 }
 
 export interface TutorStepResult {
@@ -196,12 +223,16 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
   }
   const cards = expectGrade ? (input.cards ?? []) : [];
   if (cards.length) sections.push(`## The learner's flashcards on this idea and what it builds on\n${cards.map((c) => `- [${c.id}] ${c.front}\n  Answer: ${c.back.replace(/\n/g, ' ')}`).join('\n')}`);
-  sections.push(
-    input.nextStage
-      ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
-      : '## Task\nGrade the response. No card is needed; this node is finished.',
-  );
-  if (input.retry && input.nextStage) {
+  const branches = expectGrade ? input.branches : undefined;
+  if (branches) sections.push(branchTask(branches));
+  else {
+    sections.push(
+      input.nextStage
+        ? `## Task\n${expectGrade ? 'Grade the response, then produce' : 'Produce'} the **${input.nextStage}** card.`
+        : '## Task\nGrade the response. No card is needed; this node is finished.',
+    );
+  }
+  if (!branches && input.retry && input.nextStage) {
     sections.push(
       `The learner missed the last **${input.nextStage}** question (it is under "Earlier in this node", with their answer and your feedback). Ask about the same step again from another side: a fresh question, not the same one reworded, that the feedback they just read prepares them for. Do not explain again here.`,
     );
@@ -223,13 +254,30 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
     role: input.nextStage === 'reteach' ? 'tutorEscalation' : 'tutor',
     system: answerReadingPrompt('tutor'),
     messages: [{ role: 'user', content: sections.join('\n\n'), images: images.length ? images : undefined }],
+    onPartial: writingOf('markdown', input.onWriting),
     submit: {
       name: 'submit_step',
       description: 'Submit the grade for the previous response (or null) and the next card (or null).',
-      schema: buildStepSchema(input.nextStage, expectGrade, new Set(cards.map((c) => c.id)), new Set(input.figures.map((f) => f.id))),
+      schema: buildStepSchema(branches ? branches.map((b) => b.card?.stage ?? null) : input.nextStage, expectGrade, new Set(cards.map((c) => c.id)), new Set(input.figures.map((f) => f.id))),
     },
   });
   return result.data as TutorStepResult;
+}
+
+const score2 = (n: number) => n.toFixed(2);
+
+/**
+ * The task when the card depends on the grade: the score bands and the card each leads to. The tutor
+ * grades first, on the rubric alone, and then writes the card of the band its score falls in.
+ */
+function branchTask(branches: CardBranch[]): string {
+  const lines = branches.map((b) => {
+    const range = b.below === null ? (b.from === 0 ? 'any score' : `${score2(b.from)} or more`) : b.from === 0 ? `below ${score2(b.below)}` : `${score2(b.from)} to below ${score2(b.below)}`;
+    if (!b.card) return `- Score ${range}: no card (\`card\`: null); the app goes on by itself.`;
+    if (b.card.retry) return `- Score ${range}: the **${b.card.stage}** card again, as a fresh question on the same step from another side (not the same one reworded) that the feedback you write now prepares them for. Do not explain again in it.`;
+    return `- Score ${range}: the **${b.card.stage}** card.`;
+  });
+  return `## Task\nGrade the response first, on the rubric alone: the score decides the card, never the other way round. Then produce the card for the band your score falls in:\n${lines.join('\n')}`;
 }
 
 /** The answer key and rubric of a card that has them, as text for the tutor. */
@@ -260,6 +308,8 @@ export interface TutorAsideInput extends TutorContext {
   question: string;
   /** For a hint: which one this is (1 is the first), and the hints already given on this question. */
   hint?: { number: number; of: number; earlier: string[] };
+  /** The answer as the tutor writes it. */
+  onWriting?: (text: string) => void;
 }
 
 /**
@@ -286,6 +336,7 @@ export async function runTutorAside(provider: LlmProvider, input: TutorAsideInpu
     role: 'tutor',
     system: `${loadPrompt('tutor-ask')}\n\n${loadPrompt('answering')}`,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
+    onPartial: writingOf('answer', input.onWriting),
     submit: {
       name: 'submit_answer',
       description: 'Submit the answer to the learner, in Markdown.',
@@ -293,6 +344,19 @@ export async function runTutorAside(provider: LlmProvider, input: TutorAsideInpu
     },
   });
   return (result.data as { answer: string }).answer;
+}
+
+/** Follow one text field of the submit input as it is written; only explaining cards and answers have the fields followed. */
+function writingOf(field: string, onWriting: ((text: string) => void) | undefined): ((json: string) => void) | undefined {
+  if (!onWriting) return undefined;
+  let last = '';
+  return (json) => {
+    const text = partialStringField(json, field);
+    if (text && text !== last) {
+      last = text;
+      onWriting(text);
+    }
+  };
 }
 
 function asideSchema(figureIds: ReadonlySet<string>) {

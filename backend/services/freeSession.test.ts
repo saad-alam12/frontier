@@ -1,3 +1,4 @@
+import { stageAsked } from '../llm/fakeTutor';
 import { describe, expect, it } from 'vitest';
 import { FakeProvider } from '../llm/FakeProvider';
 import type { CompleteRequest } from '../llm/provider';
@@ -28,8 +29,8 @@ function tutor(req: CompleteRequest<unknown>) {
     const closing = /add the closing summary/.test(text);
     return { recalled: ids.map((id) => ({ nodeId: id, score: 0.9, note: '' })), canDo: closing ? 'You can explain it.' : null, previewQuestion: closing ? 'What if?' : null };
   }
-  const next = /roduce the \*\*(\w+)\*\* card/.exec(text)?.[1] ?? null;
   const grade = /Grade the response/.test(text) ? { score: 0.9, feedback: 'Good.', misconception: null, confidentlyWrong: false, missingBackground: null } : null;
+  const next = stageAsked(text, grade?.score ?? null);
   const cards: Record<string, unknown> = {
     predict: { stage: 'predict', prompt: 'What would you guess?' },
     explain: { stage: 'explain', markdown: 'Here is the idea.' },

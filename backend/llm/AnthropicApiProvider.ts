@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { CompleteRequest, CompleteResult, LlmMessage, LlmProvider, Role } from './provider';
-import type { ModelChoice } from '../settings/schema';
+import type { Effort, ModelChoice } from '../settings/schema';
 import { CancelledError, NoSubmitError } from './provider';
 import { SubmitTracker, runHelperTool } from './submitLoop';
 
@@ -33,39 +33,18 @@ export class AnthropicApiProvider implements LlmProvider {
     const { model, effort } = this.options.modelForRole(req.role);
     const tracker = new SubmitTracker(req);
     const helperTools = req.tools ?? [];
-    const tools: Anthropic.Tool[] = [
-      ...helperTools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: toInputSchema(t.schema),
-      })),
-      {
-        name: req.submit.name,
-        description: req.submit.description,
-        input_schema: toInputSchema(req.submit.schema),
-      },
-    ];
     const messages: Anthropic.MessageParam[] = req.messages.map(toMessageParam);
-    const usage = { inputTokens: 0, outputTokens: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     let idleTurns = 0;
 
     for (;;) {
-      const message = await this.client.messages
-        .stream(
-          {
-            model,
-            // thinking counts toward max_tokens, so the higher levels get more room
-            max_tokens: this.options.maxTokens ?? (effort === 'xhigh' || effort === 'max' ? 64000 : 32000),
-            output_config: { effort },
-            system: `${req.system}\n\nWhen you are done, call the ${req.submit.name} tool exactly once with your final answer.`,
-            tools,
-            messages,
-          },
-          { signal: req.signal },
-        )
-        .finalMessage();
+      const stream = this.client.messages.stream(requestBody(req, { model, effort, maxTokens: this.options.maxTokens }, messages), { signal: req.signal });
+      if (req.onPartial) followSubmit(stream, req.submit.name, req.onPartial);
+      const message = await stream.finalMessage();
       usage.inputTokens += message.usage.input_tokens;
       usage.outputTokens += message.usage.output_tokens;
+      usage.cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
+      usage.cacheWriteTokens += message.usage.cache_creation_input_tokens ?? 0;
 
       if (message.stop_reason === 'refusal') throw new Error(`${req.role}: the model refused the request`);
       if (message.stop_reason === 'max_tokens') throw new Error(`${req.role}: the model ran out of output tokens`);
@@ -106,6 +85,46 @@ export class AnthropicApiProvider implements LlmProvider {
       messages.push({ role: 'user', content: results });
     }
   }
+}
+
+/**
+ * The request for one turn of a call. The fixed part of a role's calls (its tools, then its system
+ * prompt) is cached: a breakpoint on the system prompt covers both. Automatic caching adds one at the
+ * end of the conversation, so a second turn of the same call (a submit sent back for a fix) reads the
+ * first from the cache.
+ */
+export function requestBody(req: CompleteRequest<unknown>, choice: { model: string; effort: Effort; maxTokens?: number }, messages: Anthropic.MessageParam[]): Anthropic.MessageCreateParamsNonStreaming {
+  const tools: Anthropic.Tool[] = [
+    ...(req.tools ?? []).map((t) => ({ name: t.name, description: t.description, input_schema: toInputSchema(t.schema) })),
+    // a call that shows its text as it is written gets the submit input as the model writes it, not in one
+    // piece at the end; the input is validated with zod either way
+    { name: req.submit.name, description: req.submit.description, input_schema: toInputSchema(req.submit.schema), ...(req.onPartial ? { eager_input_streaming: true } : {}) },
+  ];
+  return {
+    model: choice.model,
+    // thinking counts toward max_tokens, so the higher levels get more room
+    max_tokens: choice.maxTokens ?? (choice.effort === 'xhigh' || choice.effort === 'max' ? 64000 : 32000),
+    output_config: { effort: choice.effort },
+    system: [{ type: 'text', text: `${req.system}\n\nWhen you are done, call the ${req.submit.name} tool exactly once with your final answer.`, cache_control: { type: 'ephemeral' } }],
+    cache_control: { type: 'ephemeral' },
+    tools,
+    messages,
+  };
+}
+
+/** Pass the submit tool's input on as it streams in. */
+function followSubmit(stream: { on: (event: 'streamEvent', listener: (event: Anthropic.MessageStreamEvent) => void) => unknown }, submitName: string, onPartial: (json: string) => void): void {
+  let index: number | null = null;
+  let json = '';
+  stream.on('streamEvent', (event: Anthropic.MessageStreamEvent) => {
+    if (event.type === 'content_block_start' && event.content_block.type === 'tool_use' && event.content_block.name === submitName) {
+      index = event.index;
+      json = '';
+    } else if (event.type === 'content_block_delta' && event.index === index && event.delta.type === 'input_json_delta') {
+      json += event.delta.partial_json;
+      onPartial(json);
+    }
+  });
 }
 
 /** Text first, then any images as base64 image blocks, so the model reads the answer before looking at what it shows. */

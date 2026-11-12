@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FakeProvider } from '../llm/FakeProvider';
+import { stageAsked } from '../llm/fakeTutor';
 import type { CompleteRequest } from '../llm/provider';
 import { saveImageFile } from '../store/attachments';
 import { openDatabase } from '../store/db';
@@ -37,8 +38,8 @@ describe('code in answers (B19)', () => {
     const tutor = (req: CompleteRequest<unknown>) => {
       seen.push(req);
       const text = req.messages[0]?.content ?? '';
-      const next = /roduce the \*\*(\w+)\*\* card/.exec(text)?.[1];
       const grade = /Grade the response/.test(text) ? { score: 0.9, feedback: 'Right.', misconception: null, confidentlyWrong: false, missingBackground: null } : null;
+      const next = stageAsked(text, grade?.score ?? null);
       const cards: Record<string, unknown> = {
         predict: { stage: 'predict', prompt: 'How many profiles has a 2 × 3 game?' },
         explain: { stage: 'explain', markdown: 'One strategy per player.' },

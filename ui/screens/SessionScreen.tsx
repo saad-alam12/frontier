@@ -134,7 +134,9 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   const pending: Pending = sending ?? judging?.sent ?? null;
   const asksJudgement = Boolean(snap && pending && (pending.card ? !isReading(pending.card.stage) : snap.phase === 'reconstruct' || snap.phase === 'close'));
   const stoppable = judging ? judging.stoppable : asksJudgement;
-  const thinkingLabel = asksJudgement ? 'Judging…' : 'Thinking…';
+  /** The next explanation (or the answer to a question asked) as the tutor writes it. */
+  const writing = mine?.status === 'running' && mine.writing ? mine.writing : null;
+  const thinkingLabel = writing ? 'Writing…' : asksJudgement ? 'Judging…' : 'Thinking…';
   const stop = () => {
     if (snap && stoppable) void call('session.cancel', { sessionId: snap.id });
   };
@@ -265,6 +267,11 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
 
       <div ref={currentRef} className="flex flex-col gap-[36px]">
         {pending && !pending.card && <Thinking label={thinkingLabel} onStop={stoppable ? stop : undefined} />}
+        {pending && writing && (
+          <section className="writing-preview" aria-label="Being written">
+            <Markdown text={writing} />
+          </section>
+        )}
         {!pending && <PhaseView snap={snap} busy={isBusy} refocus={stopped} onSend={send} onAsk={ask} onDone={() => void refresh()} />}
         {/* next to the answer it is about, where the eyes are */}
         {notice && (

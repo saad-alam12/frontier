@@ -7,8 +7,8 @@ import { FIGURE_STAGES, cardText, runRecall, runTutorStep, runTutorAside } from 
 import type { Grade, LearnerResponse, TutorCard, TutorFigure, TutorGoal, TutorStepInput, AsideMode } from '../agents/tutor';
 import { joinNames } from '../core/freeSession';
 import { dependents, neighbourhood } from '../core/graph';
-import { HINT_STAGES, IDEA_MAX_MINUTES, MAX_HINTS, SESSION_MAX_DEPTH, SIMPLE_AIM, applyGrade, certifyingStage, countedScore, emptyEdge, evidenceKindFor, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge, timebox } from '../core/session';
-import type { EdgeState, Stage } from '../core/session';
+import { HINT_STAGES, IDEA_MAX_MINUTES, MAX_HINTS, SESSION_MAX_DEPTH, SIMPLE_AIM, cardBranches, certifyingStage, countedScore, emptyEdge, evidenceKindFor, followUp, ideaAllowance, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge } from '../core/session';
+import type { EdgeState, FollowStep, Stage } from '../core/session';
 import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, Goal, GoalLevel } from '../core/types';
@@ -637,18 +637,30 @@ async function produceCard(
     state.owed = true;
     saveSessionState(deps.db, sessionId, state);
   }
+  // text written for a card that is not shown (another call writes the card) is not shown either
+  deps.work.write(sessionId, '');
   const input = buildTutorInput(deps.db, state, step, previous, stage, goal);
-  const result = await runTutorStep(deps.provider, { ...input, images: previous ? imagesOf(deps, previous.response) : undefined, figureImages: FIGURE_STAGES.has(stage) ? figureImagesOf(deps, input.figures) : undefined, retry }).catch(owe);
+  const result = await runTutorStep(deps.provider, { ...input, images: previous ? imagesOf(deps, previous.response) : undefined, figureImages: FIGURE_STAGES.has(stage) ? figureImagesOf(deps, input.figures) : undefined, retry, onWriting: (text) => deps.work.write(sessionId, text) }).catch(owe);
   stillOpen(deps.db, sessionId);
   if (!result.card) return owe(new Error('the tutor returned no card'));
-  state.stage = stage;
-  state.card = result.card;
-  state.owed = false;
-  pushHistory(state, step.nodeId, { stage, card: result.card, response: null, grade: null });
-  if (result.card.stage === 'explain' || result.card.stage === 'support' || result.card.stage === 'reteach') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: result.card.markdown });
-  if (result.card.stage === 'index') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: `${result.card.gist}\n\n${result.card.placement}` });
-  appendSessionEvent(deps.db, sessionId, 'card', { nodeId: step.nodeId, stage, card: result.card });
+  showCard(deps, sessionId, state, step, stage, result.card);
   return result.grade;
+}
+
+/** Make `card` the open card of the step: in the history, the transcript (what explains) and the events. */
+function showCard(deps: SessionDeps, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, card: TutorCard): void {
+  state.stage = stage;
+  state.card = card;
+  state.owed = false;
+  pushHistory(state, step.nodeId, { stage, card, response: null, grade: null });
+  if (card.stage === 'explain' || card.stage === 'support' || card.stage === 'reteach') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: card.markdown });
+  if (card.stage === 'index') state.transcript.push({ nodeId: step.nodeId, nodeName: step.name, stage, text: `${card.gist}\n\n${card.placement}` });
+  appendSessionEvent(deps.db, sessionId, 'card', { nodeId: step.nodeId, stage, card });
+}
+
+/** The step as the rules after a grade see it. */
+function followStep(step: LessonStep): FollowStep {
+  return { aim: step.aim, stages: stepStages(step), minutes: step.minutes, simplified: step.simplified !== null };
 }
 
 async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: SessionState, response: LearnerResponse, goal: TutorGoal): Promise<void> {
@@ -680,45 +692,41 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     return;
   }
 
-  const nominalNext = nextStage(stages, stage, 'none');
   const previous = { stage, card, response };
-  let grade: Grade | null;
-  if (nominalNext) {
-    grade = await produceCard(deps, sessionId, state, step, nominalNext, previous, goal);
-  } else {
-    const result = await runTutorStep(deps.provider, { ...buildTutorInput(db, state, step, previous, null, goal), images: imagesOf(deps, response) });
-    grade = result.grade;
-    stillOpen(db, sessionId);
-  }
-  if (!grade) throw new Error('the tutor returned no grade');
   // an answer given with hints is not an unaided one: it counts for less, in the evidence and in what comes next
   const hints = hintsTaken(openAsides(db, sessionId, step.nodeId, stage));
+  // the call that grades writes the card its grade leads to, so no card is written to be thrown away
+  const branches = cardBranches(state.edge, followStep(step), stage, { confidence: response.confidence, hints, minutes: minutesOn(db, state, sessionId, step.nodeId) });
+  const input = buildTutorInput(db, state, step, previous, null, goal);
+  const explains = branches.some((b) => b.card && FIGURE_STAGES.has(b.card.stage));
+  const result = await runTutorStep(deps.provider, { ...input, branches, images: imagesOf(deps, response), figureImages: explains ? figureImagesOf(deps, input.figures) : undefined, onWriting: (text) => deps.work.write(sessionId, text) });
+  stillOpen(db, sessionId);
+  const grade = result.grade;
+  if (!grade) throw new Error('the tutor returned no grade');
   const counted = countedScore(grade.score, hints);
   finishHistory(state, step.nodeId, stage, response, grade);
   appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade, ...(hints ? { hints } : {}) });
   writeOutcome(db, sessionId, state, step, stage, response, grade, counted, hints);
   // The answer is judged and written. From here on a quit or a crash must never bring the answered
-  // card back: with no next card yet (the idea's last step) the session is saved as owing one.
-  if (state.card === card) {
-    state.card = null;
-    state.owed = true;
-  }
+  // card back: until the next card is shown, the session is saved as owing one.
+  state.card = null;
+  state.owed = true;
   saveSessionState(db, sessionId, state);
-
-  const { edge, action } = applyGrade(state.edge, { score: counted, confidence: response.confidence, stage, aim: step.aim });
-  state.edge = edge;
-  if (action === 'support' || action === 'escalate') {
-    state.supportAfter = stage;
-    await produceCard(deps, sessionId, state, step, action === 'support' ? 'support' : 'reteach', null, goal, true);
-    return;
-  }
 
   // the idea's half hour (design §4.3); a missing foundation is also noted for the goal's map
   const missing = stage !== 'predict' && counted < PASS_SCORE && grade.missingBackground !== null;
   // a chosen session's gaps are about what the learner asked, not about the goal's map
   if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
-  const box = action === 'done' ? 'none' : timebox({ minutes: minutesOn(db, state, sessionId, step.nodeId), allowance: ideaAllowance(step.minutes), aim: step.aim, simplified: step.simplified !== null, edge, missingBackground: missing });
-  if (box === 'simplify') {
+  const follow = followUp(state.edge, followStep(step), stage, { score: counted, confidence: response.confidence, missingBackground: missing, minutes: minutesOn(db, state, sessionId, step.nodeId) });
+  state.edge = follow.edge;
+  const written = result.card;
+  if (follow.then === 'support' || follow.then === 'reteach') {
+    state.supportAfter = stage;
+  if (follow.then === 'support' && written && written.stage === 'support') showCard(deps, sessionId, state, step, 'support', written);
+    else await produceCard(deps, sessionId, state, step, follow.then, null, goal, true);
+    return;
+  }
+  if (follow.then === 'simplify') {
     const reason = missing && grade.missingBackground ? `It needs ${grade.missingBackground.name}, which this goal's time does not also cover` : 'It was taking longer than its half hour allows';
     simplifyStep(db, state, step, SIMPLE_AIM, reason);
     // start again from a plain explanation of the core idea; the loop goes on from there
@@ -726,21 +734,18 @@ async function handleTeachResponse(deps: SessionDeps, sessionId: string, state: 
     await produceCard(deps, sessionId, state, step, 'explain', null, goal, true);
     return;
   }
-  if (box === 'wrapUp') state.edge = { ...state.edge, wrapping: true };
-  // a missed question comes once more in a fresh version (the feedback just said what was missing), unless the idea's time is up
-  if (action === 'retry' && box === 'none') {
-    await produceCard(deps, sessionId, state, step, stage, null, goal, true, true);
+  const next = follow.then;
+  // the card the tutor wrote with its grade is the one to show: no second call
+  if (next.stage !== null && written && written.stage === next.stage) {
+    showCard(deps, sessionId, state, step, next.stage, written);
     return;
   }
-  const next = box === 'wrapUp' ? nextStage(stepStages(step), stage, 'wrapUp') : nextStage(stepStages(step), stage, action, edge, step.aim);
-  // a failed test-out goes back to teaching once; after that, a miss on the same question is an
-  // ordinary miss (it counts toward the worked example) instead of sending the learner round again
-  if (action === 'resume') state.edge = { ...state.edge, jumpedFrom: null };
-  if (next === nominalNext) {
-    if (next === null) await advance(deps, sessionId, state, step, null, null, goal, true);
-    return; // the card for `next` is already showing
+  // a missed question comes once more in a fresh version (the feedback just said what was missing)
+  if (next.retry && next.stage) {
+    await produceCard(deps, sessionId, state, step, next.stage, null, goal, true, true);
+    return;
   }
-  await advance(deps, sessionId, state, step, next, null, goal, true);
+  await advance(deps, sessionId, state, step, next.stage, null, goal, true);
 }
 
 /** "I know this, test me" applies to a prediction or explanation with a deeper question still ahead. */
@@ -1089,7 +1094,7 @@ export async function askTutor(deps: SessionDeps, sessionId: string, input: { mo
     const goal = tutorGoalFor(db, state);
     const { previous: _previous, images: _images, cards: _cards, nextStage: _nextStage, ...context } = buildTutorInput(db, state, step, null, null, goal);
     const hint = input.mode === 'hint' ? { number: earlier.length + 1, of: MAX_HINTS, earlier } : undefined;
-    const answer = await runTutorAside(deps.provider, { ...context, open: { stage, card, unanswered: isGraded(stage) }, mode: input.mode, question, hint });
+    const answer = await runTutorAside(deps.provider, { ...context, open: { stage, card, unanswered: isGraded(stage) }, mode: input.mode, question, hint, onWriting: (text) => deps.work.write(sessionId, text) });
     stillOpen(db, sessionId);
     appendSessionEvent(db, sessionId, 'aside', { nodeId: step.nodeId, stage, mode: input.mode, question, answer });
     // what the tutor said is taught material: it is read into the map with the rest, and the card writer sees it (a hint is not)

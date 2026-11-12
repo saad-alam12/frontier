@@ -1,3 +1,4 @@
+import { stageAsked } from '../llm/fakeTutor';
 import { describe, expect, it } from 'vitest';
 import { FakeEmbedder } from '../ingest/embedder';
 import { FakeProvider } from '../llm/FakeProvider';
@@ -121,8 +122,8 @@ describe('trails', () => {
     refreshGoalFields(db);
     const tutor = (req: CompleteRequest<unknown>) => {
       const text = req.messages[0]?.content ?? '';
-      const next = /[Pp]roduce the \*\*(\w+)\*\* card/.exec(text)?.[1] ?? null;
       const grade = /Grade the response/.test(text) ? { score: 0.8, feedback: 'Good.', misconception: null, confidentlyWrong: false } : null;
+      const next = stageAsked(text, grade?.score ?? null);
       const cards: Record<string, unknown> = {
         index: { stage: 'index', gist: 'A profile lists one strategy per player.', placement: 'Under Nash.', question: 'What is a profile?', answerKey: 'SECRET KEY one per player' },
         predict: { stage: 'predict', prompt: 'What would you pick?' },

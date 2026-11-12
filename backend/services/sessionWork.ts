@@ -31,6 +31,8 @@ export interface SessionWorkView {
   /** While true, Esc stops it and the answer goes back to the field. */
   stoppable: boolean;
   error: string | null;
+  /** An explanation (or an answer to a question asked) as the tutor writes it; null until it starts. */
+  writing: string | null;
 }
 
 export interface SessionWorkEvent {
@@ -57,7 +59,11 @@ interface Entry extends WorkJob {
   since: string;
   error: string | null;
   gate: CommitGate | null;
+  writing: string | null;
 }
+
+/** Text being written reaches the window at most this often. */
+const WRITING_MS = 120;
 
 /**
  * At most one piece of work at a time: there is one open session, a session refuses a second answer
@@ -67,6 +73,7 @@ interface Entry extends WorkJob {
 export class SessionWork {
   private entry: Entry | null = null;
   private readonly listeners = new Set<(event: SessionWorkEvent) => void>();
+  private writingTimer: ReturnType<typeof setTimeout> | null = null;
 
   current(): SessionWorkView | null {
     return this.entry ? view(this.entry) : null;
@@ -85,7 +92,7 @@ export class SessionWork {
     const running = this.entry?.status === 'running' ? this.entry : null;
     if (running) throw new Error(running.kind === 'respond' ? 'Still working on your last answer.' : 'Your session is still being planned.');
     const gate = job.stoppable ? new CommitGate(() => this.notify('running', job.kind, job.sessionId)) : null;
-    const entry: Entry = { ...job, status: 'running', since: nowIso(), error: null, gate };
+    const entry: Entry = { ...job, status: 'running', since: nowIso(), error: null, gate, writing: null };
     this.entry = entry;
     this.notify('running', job.kind, job.sessionId);
     try {
@@ -95,10 +102,24 @@ export class SessionWork {
       return result;
     } catch (error) {
       const stopped = isCancelled(error);
-      if (this.entry === entry) this.entry = stopped ? null : { ...entry, status: 'failed', error: error instanceof Error ? error.message : String(error), gate: null };
+      if (this.entry === entry) this.entry = stopped ? null : { ...entry, status: 'failed', error: error instanceof Error ? error.message : String(error), gate: null, writing: null };
       this.notify(stopped ? 'stopped' : 'failed', job.kind, job.sessionId);
       throw error;
     }
+  }
+
+  /**
+   * The tutor is writing an explanation for this session's running work: the text so far. The window
+   * hears about it a few times a second, not on every token.
+   */
+  write(sessionId: string, text: string): void {
+    const entry = this.entry;
+    if (entry?.status !== 'running' || entry.sessionId !== sessionId) return;
+    entry.writing = text;
+    this.writingTimer ??= setTimeout(() => {
+      this.writingTimer = null;
+      if (this.entry === entry && entry.status === 'running') this.notify('running', entry.kind, entry.sessionId);
+    }, WRITING_MS);
   }
 
   /** Stop the answer being judged on this session, if it can still stop. True when it will. */
@@ -148,5 +169,6 @@ function view(entry: Entry): SessionWorkView {
     sent: entry.sent,
     stoppable: entry.status === 'running' && (entry.gate?.stoppable ?? false),
     error: entry.error,
+    writing: entry.status === 'running' ? entry.writing : null,
   };
 }

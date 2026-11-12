@@ -13,6 +13,7 @@ import { saveImageFile } from '../backend/store/attachments';
 import { describeFigure, listFigures, setFigurePicture, syncFigurePages } from '../backend/store/figures';
 import { createSource } from '../backend/store/sources';
 import { FakeProvider } from '../backend/llm/FakeProvider';
+import { stageAsked } from '../backend/llm/fakeTutor';
 import type { CompleteRequest } from '../backend/llm/provider';
 import { openDatabase } from '../backend/store/db';
 import type { Database } from '../backend/store/db';
@@ -53,11 +54,11 @@ function tutor(scores: number[]) {
       const closing = /add the closing summary/.test(text);
       return { recalled: ids.map((nodeId) => ({ nodeId, score: 0.8, note: 'Named it and said why.' })), canDo: closing ? 'You can find equilibria in small games and say why they hold.' : null, previewQuestion: closing ? 'What changes when one player moves first?' : null };
     }
-    const next = /roduce the \*\*(\w+)\*\* card/.exec(text)?.[1] ?? null;
-    // shows the idea's figure when it has one, as the real tutor may
-    const figure = /## Figures you can show[\s\S]*?^- \[(fig_[a-z0-9]+)\]/m.exec(text)?.[1];
     const grading = /Grade the response/.test(text);
     const score = scores[i++ % scores.length] ?? 0.8;
+    const next = stageAsked(text, grading ? score : null);
+    // shows the idea's figure when it has one, as the real tutor may
+    const figure = /## Figures you can show[\s\S]*?^- \[(fig_[a-z0-9]+)\]/m.exec(text)?.[1];
     const grade = grading ? { score, feedback: score >= 0.7 ? 'Right, and you said why: no player gains by moving alone.' : 'Close, but you checked only one player. Each must be best-responding.', misconception: null, confidentlyWrong: false, missingBackground: null } : null;
     const cards: Record<string, unknown> = {
       predict: { stage: 'predict', prompt: 'Two firms set prices at the same time. What would make a pair of prices stable, so neither firm wants to change?' },

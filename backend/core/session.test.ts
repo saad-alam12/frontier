@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyGrade, certifyingStage, countedScore, emptyEdge, evidenceKindFor, ideaAllowance, nextStage, stagesFor, timebox } from './session';
+import { applyGrade, cardBranches, certifyingStage, countedScore, emptyEdge, evidenceKindFor, followUp, ideaAllowance, nextStage, stagesFor, timebox } from './session';
 import type { EdgeState } from './session';
 
 const grade = (edge: EdgeState, score: number, stage: Parameters<typeof applyGrade>[1]['stage'] = 'check', aim = 2, confidence?: number) => applyGrade(edge, { score, stage, aim, confidence });
@@ -148,5 +148,43 @@ describe('session mechanics', () => {
     expect(ideaAllowance(66)).toBe(30);
     expect(ideaAllowance(3.5)).toBe(10);
     expect(ideaAllowance(25)).toBe(25);
+  });
+});
+
+describe('the card a grade leads to (R7 C1)', () => {
+  const step = (aim: number) => ({ aim, stages: stagesFor(aim), minutes: 25, simplified: false });
+  const fresh = { consecutiveFailures: 0, strongStreak: 0 };
+
+  it('a prediction leads to the explanation, or, strong and sure, straight to the question that shows the aim', () => {
+    expect(cardBranches(fresh, step(2), 'predict', { confidence: 0.9, hints: 0, minutes: 2 })).toEqual([
+      { from: 0, below: 0.85, card: { stage: 'explain', retry: false } },
+      { from: 0.85, below: null, card: { stage: 'check', retry: false } },
+    ]);
+    // a guess is never strong
+    expect(cardBranches(fresh, step(2), 'predict', { confidence: 0.33, hints: 0, minutes: 2 })).toEqual([{ from: 0, below: null, card: { stage: 'explain', retry: false } }]);
+  });
+
+  it('a missed question is asked again, a passed one goes on, and hints move the bands', () => {
+    expect(cardBranches(fresh, step(2), 'check', { confidence: 0.66, hints: 0, minutes: 8 })).toEqual([
+      { from: 0, below: 0.7, card: { stage: 'check', retry: true } },
+      { from: 0.7, below: null, card: { stage: 'compress', retry: false } },
+    ]);
+    // with one hint an answer counts 0.85 of its score: it needs 0.83 to count as a pass
+    expect(cardBranches(fresh, step(2), 'check', { confidence: 0.66, hints: 1, minutes: 8 })[1]?.from).toBe(0.83);
+  });
+
+  it('the question that finishes an idea leads to no card, and a third failure to a worked example', () => {
+    const jumped = { ...fresh, jumpedFrom: 'predict' as const };
+    expect(cardBranches(jumped, step(2), 'check', { confidence: 0.9, hints: 0, minutes: 8 }).at(-1)).toEqual({ from: 0.85, below: null, card: null });
+    const failing = { consecutiveFailures: 2, strongStreak: 0, retried: ['check' as const] };
+    expect(cardBranches(failing, step(2), 'check', { confidence: 0.66, hints: 0, minutes: 8 })[0]).toEqual({ from: 0, below: 0.5, card: { stage: 'support', retry: false } });
+  });
+
+  it('decides after a grade exactly as the bands said before it', () => {
+    for (const score of [0.1, 0.45, 0.6, 0.75, 0.9]) {
+      const band = cardBranches(fresh, step(3), 'check', { confidence: 0.9, hints: 0, minutes: 8 }).find((b) => score >= b.from && (b.below === null || score < b.below));
+      const { then } = followUp(fresh, step(3), 'check', { score, confidence: 0.9, missingBackground: false, minutes: 8 });
+      expect(typeof then === 'object' ? then : null).toEqual(band?.card ? band.card : { stage: null, retry: false });
+    }
   });
 });

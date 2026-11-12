@@ -67,7 +67,7 @@ export function useSessionScreenOpen(): void {
  */
 export function startSessionInBackground(goalId: string, focus?: string[]): void {
   if (state.work?.status === 'running') return;
-  const placeholder: SessionWorkView = { kind: 'start', status: 'running', sessionId: null, goalId, since: new Date().toISOString(), sent: null, stoppable: false, error: null };
+  const placeholder: SessionWorkView = { kind: 'start', status: 'running', sessionId: null, goalId, since: new Date().toISOString(), sent: null, stoppable: false, error: null, writing: null };
   update({ work: placeholder });
   // an open session comes back at once with no work at all; read the true state then
   const settle = () => {

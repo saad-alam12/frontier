@@ -3607,3 +3607,8 @@ button.map-label:hover {
   min-height: 36px;
   font-size: 13px;
 }
+
+/* An explanation as the tutor writes it: the card's own type, a touch quieter until it is done. */
+.writing-preview {
+  opacity: 0.85;
+}

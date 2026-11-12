@@ -60,11 +60,20 @@ export interface CompleteRequest<T> {
   /** Validation errors sent back to the model before giving up. Default 3. */
   maxRetries?: number;
   signal?: AbortSignal;
+  /**
+   * The submit tool's input as the model has written it so far (raw JSON, unfinished), while it writes
+   * it: for showing long text as it is written. Called often; the accepted result still comes at the end.
+   */
+  onPartial?: (json: string) => void;
 }
 
 export interface Usage {
+  /** Input tokens not read from the cache (the cache's own reads and writes are below). */
   inputTokens: number;
   outputTokens: number;
+  /** Input tokens read from the prompt cache, and written to it. */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   costUsd?: number;
 }
 
