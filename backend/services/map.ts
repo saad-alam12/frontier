@@ -5,8 +5,8 @@
  */
 import { derivationPath } from '../core/derivation';
 import { topics } from '../core/clusters';
+import { cachedForWorld } from '../store/readCache';
 import { recallProbability } from '../core/fsrs';
-import { centrality } from '../core/leverage';
 import { PASS_SCORE } from '../core/types';
 import type { Depth, KnowledgeNode, Tier } from '../core/types';
 import type { Database } from '../store/db';
@@ -65,12 +65,15 @@ export function mapView(db: Database, now = new Date()): MapView {
     if (t.simplified) simplified.add(t.nodeId);
     if (t.depth > 0) targetGoals.set(t.nodeId, [...new Set([...(targetGoals.get(t.nodeId) ?? []), goalId])]);
   }
-  const groups = topics(
-    [...view.nodes.keys()],
-    view.index,
-    new Map([...view.nodes.values()].map((n) => [n.id, n.name])),
-    (id) => centrality(id, view.index),
-  ).sort((a, b) => b.nodeIds.length - a.nodeIds.length);
+  // topics come from the graph alone: worked out again only when the map changes
+  const groups = cachedForWorld(db, 'map.topics', () =>
+    topics(
+      [...view.nodes.keys()],
+      view.index,
+      new Map([...view.nodes.values()].map((n) => [n.id, n.name])),
+      view.centrality,
+    ).sort((a, b) => b.nodeIds.length - a.nodeIds.length),
+  );
   const topicOf = new Map<string, string>();
   for (const t of groups) for (const id of t.nodeIds) topicOf.set(id, t.id);
   const learned = firstPasses(db, PASS_SCORE);

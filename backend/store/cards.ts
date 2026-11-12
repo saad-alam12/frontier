@@ -162,8 +162,18 @@ export function removeLatestScreenReview(db: Database, cardId: string, since: st
 export function reviewsByCard(db: Database): Map<string, CardReview[]> {
   const rows = db.prepare('SELECT card_id, at, rating, source FROM card_reviews ORDER BY at, rowid').all() as { card_id: string; at: string; rating: CardRating; source: ReviewSource }[];
   const out = new Map<string, CardReview[]>();
-  for (const r of rows) out.set(r.card_id, [...(out.get(r.card_id) ?? []), { at: r.at, rating: r.rating, source: r.source }]);
+  for (const r of rows) {
+    const review = { at: r.at, rating: r.rating, source: r.source };
+    const list = out.get(r.card_id);
+    if (list) list.push(review);
+    else out.set(r.card_id, [review]);
+  }
   return out;
+}
+
+/** One card's reviews, oldest first. */
+export function reviewsOfCard(db: Database, cardId: string): CardReview[] {
+  return db.prepare('SELECT at, rating, source FROM card_reviews WHERE card_id = ? ORDER BY at, rowid').all(cardId) as unknown as CardReview[];
 }
 
 export interface ReviewRow extends CardReview {

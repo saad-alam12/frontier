@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { upgradeBackup } from './backup';
 import { SCHEMA_VERSION, runMigrations } from './migrations';
+import { forgetReads } from './readCache';
 
 export type Database = DatabaseSync;
 
@@ -62,6 +63,7 @@ export function transaction<T>(db: Database, fn: () => T): T {
   } catch (error) {
     db.exec(`ROLLBACK TO ${name}`);
     db.exec(`RELEASE ${name}`);
+    forgetReads(db); // the change counter does not go back with the data
     throw error;
   } finally {
     depths.set(db, depth);
@@ -82,6 +84,7 @@ export function dryRun<T>(db: Database, fn: () => T): T {
   } finally {
     db.exec(`ROLLBACK TO ${name}`);
     db.exec(`RELEASE ${name}`);
+    forgetReads(db); // the change counter does not go back with the data
     depths.set(db, depth);
   }
 }

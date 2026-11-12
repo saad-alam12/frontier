@@ -103,7 +103,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
       .filter((t) => t.capabilityId === cap.id)
       .map((t) => {
         const node = nodes.get(t.nodeId);
-        return { ...t, name: node?.name ?? t.nodeId, kind: node?.kind ?? 'claim', status: node?.status ?? 'verified', currentDepth: getState(db, t.nodeId)?.depth ?? 0 };
+        return { ...t, name: node?.name ?? t.nodeId, kind: node?.kind ?? 'claim', status: node?.status ?? 'verified', currentDepth: view.states.get(t.nodeId)?.depth ?? 0 };
       });
     const planned = capTargets.filter((t) => t.depth > 0);
     return { ...cap, status: skillStatus(cap.masteredAt, planned), planned: planned.length > 0, targets: capTargets };

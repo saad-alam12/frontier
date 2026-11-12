@@ -6,13 +6,13 @@
 import { generateProblems } from '../agents/problemGenerator';
 import type { GeneratorSpec } from '../agents/problemGenerator';
 import { gradePractice } from '../agents/grader';
-import { ancestors } from '../core/graph';
+import { ancestorsOfAll } from '../core/graph';
 import { leverageOf } from '../core/leverage';
 import { chooseMode, dailyMinutes, daysUntil, dueForecast, dueNodes, groupForPractice, mockExamSpecs, mockExamsOpen, specifyProblem, atLevel } from '../core/scheduler';
 import type { DayMode, DueReason, ModeChoice, Presentation, ProblemSpec, ScheduleInput, PracticeLevel } from '../core/scheduler';
 import { OWNED_DEPTH, PASS_SCORE } from '../core/types';
-import type { Depth } from '../core/types';
-import { listEvidenceForNode } from '../store/evidence';
+import type { Depth, Evidence } from '../core/types';
+import { listEvidenceOfKind } from '../store/evidence';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { ResponseExtrasSchema } from '../core/attachments';
 import type { ResponseExtras } from '../core/attachments';
@@ -70,13 +70,10 @@ export interface GoalSchedule {
 
 /** Everything a goal reaches: its targets and what they are built on. */
 function goalScope(db: Database, goalId: string, view: KnowledgeView): Set<string> {
-  const scope = new Set<string>();
-  for (const t of listTargets(db, goalId)) {
-    if (!view.nodes.has(t.nodeId)) continue;
-    scope.add(t.nodeId);
-    for (const a of ancestors(t.nodeId, view.index)) scope.add(a);
-  }
-  return scope;
+  const targeted = listTargets(db, goalId)
+    .map((t) => t.nodeId)
+    .filter((id) => view.nodes.has(id));
+  return new Set([...targeted, ...ancestorsOfAll(targeted, view.index)]);
 }
 
 function scheduleInputs(db: Database, view: KnowledgeView, scope?: Set<string>): ScheduleInput[] {
@@ -112,7 +109,7 @@ export function goalSchedule(db: Database, goalId: string, now = new Date()): Go
     .filter((c) => c.onFringe)
     .map((c) => {
       const node = view.nodes.get(c.nodeId);
-      return node ? leverageOf(node, view.states.get(c.nodeId), view.index, view.owned, view.goals).leverage : 0;
+      return node ? leverageOf(node, view.states.get(c.nodeId), view.index, view.owned, view.goals, view.centrality).leverage : 0;
     })
     .sort((a, b) => b - a);
   const deepenGaps = inputs.filter((n) => view.owned.has(n.nodeId) && n.depth < n.targetDepth).map((n) => n.targetDepth - n.depth);
@@ -367,11 +364,11 @@ const grading = new Set<string>();
  */
 export function missedInPractice(db: Database, goalId: string): { nodeId: string; name: string }[] {
   const view = loadKnowledge(db);
+  const lastPractice = new Map<string, Evidence>();
+  for (const e of listEvidenceOfKind(db, 'practice')) if (!e.context.implicit) lastPractice.set(e.nodeId, e);
   const missed: { nodeId: string; name: string }[] = [];
   for (const nodeId of goalScope(db, goalId, view)) {
-    const last = listEvidenceForNode(db, nodeId)
-      .filter((e) => e.kind === 'practice' && !e.context.implicit)
-      .at(-1);
+    const last = lastPractice.get(nodeId);
     // an idea that fell below "learned" is taught again in a session, not practised
     if (last && last.score < PASS_SCORE && (view.states.get(nodeId)?.depth ?? 0) >= OWNED_DEPTH) missed.push({ nodeId, name: view.nodes.get(nodeId)?.name ?? nodeId });
   }

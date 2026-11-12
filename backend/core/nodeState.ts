@@ -67,55 +67,85 @@ export interface DerivedState {
 
 const mean = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
 
-export function deriveState(evidence: Evidence[]): DerivedState {
-  const ordered = [...evidence].sort((a, b) => a.at.localeCompare(b.at));
-  let depth: Depth = 0;
-  let fsrs = emptyFsrs();
-  let firstSessionId: string | null = null;
+/**
+ * The fold behind a node's state: evidence in time order, one sitting open at a time. `depthIfClosed`
+ * reads the depth as if the open sitting ended now, so the depth after each answer comes from one pass.
+ */
+class StateFold {
+  depth: Depth = 0;
+  fsrs = emptyFsrs();
+  firstSessionId: string | null = null;
   /** When the clearly failed sittings in a row ended; a passed sitting empties it. */
-  let failedAt: number[] = [];
+  private failedAt: number[] = [];
+  private sitting: Evidence[] = [];
+  private previousAt: number | null = null;
 
-  let sitting: Evidence[] = [];
-  const closeSitting = () => {
-    const direct = sitting.filter((e) => reviewRole(e) === 'direct');
-    const credits = sitting.filter((e) => reviewRole(e) === 'credit');
-    sitting = [];
+  add(e: Evidence): void {
+    if (!this.firstSessionId && e.sessionId) this.firstSessionId = e.sessionId;
+    if (e.kind === 'lookup') return; // not part of any sitting
+    const at = new Date(e.at).getTime();
+    if (this.previousAt !== null && at - this.previousAt > SITTING_GAP_MS) this.close();
+    this.previousAt = at;
+    this.sitting.push(e);
+    if (e.score >= PASS_SCORE) {
+      const certified = certifiedDepth(e.kind, e.context);
+      if (certified > this.depth) this.depth = certified;
+    }
+  }
+
+  /** What closing the open sitting does to the depth: a second clear failure on another day drops it a level. */
+  private failure(): { score: number; at: number; failedAt: number[] } | null {
+    const direct = this.sitting.filter((e) => reviewRole(e) === 'direct');
     const last = direct[direct.length - 1];
-    if (last) {
-      const score = mean(direct.map((e) => e.score));
-      const partialFail = fsrs.lastReview !== null && score >= CLEAR_FAIL_SCORE && score < PASS_SCORE;
-      fsrs = applyReview(fsrs, score, new Date(last.at), partialFail ? PARTIAL_FAIL_WEIGHT : 1);
-      if (score >= PASS_SCORE) failedAt = [];
-      else if (score < CLEAR_FAIL_SCORE && depth > 0) {
-        const at = new Date(last.at).getTime();
-        const previous = failedAt[failedAt.length - 1];
-        // two failures in one day are one bad day, not two
-        if (previous === undefined || at - previous >= DROP_APART_MS) failedAt.push(at);
-        if (failedAt.length >= FAILED_SITTINGS_TO_DROP) {
-          depth = (depth - 1) as Depth;
-          failedAt = [];
-        }
+    if (!last) return null;
+    const score = mean(direct.map((e) => e.score));
+    const at = new Date(last.at).getTime();
+    if (score >= PASS_SCORE) return { score, at, failedAt: [] };
+    if (score >= CLEAR_FAIL_SCORE || this.depth === 0) return { score, at, failedAt: this.failedAt };
+    const previous = this.failedAt[this.failedAt.length - 1];
+    // two failures in one day are one bad day, not two
+    return { score, at, failedAt: previous === undefined || at - previous >= DROP_APART_MS ? [...this.failedAt, at] : this.failedAt };
+  }
+
+  depthIfClosed(): Depth {
+    const failure = this.failure();
+    return failure && failure.failedAt.length >= FAILED_SITTINGS_TO_DROP ? ((this.depth - 1) as Depth) : this.depth;
+  }
+
+  close(): void {
+    const failure = this.failure();
+    const credits = this.sitting.filter((e) => reviewRole(e) === 'credit');
+    this.sitting = [];
+    if (failure) {
+      const partialFail = this.fsrs.lastReview !== null && failure.score >= CLEAR_FAIL_SCORE && failure.score < PASS_SCORE;
+      this.fsrs = applyReview(this.fsrs, failure.score, new Date(failure.at), partialFail ? PARTIAL_FAIL_WEIGHT : 1);
+      this.failedAt = failure.failedAt;
+      if (this.failedAt.length >= FAILED_SITTINGS_TO_DROP) {
+        this.depth = (this.depth - 1) as Depth;
+        this.failedAt = [];
       }
       return;
     }
     const lastCredit = credits[credits.length - 1];
     // one credit per sitting, at the strongest link: three tasks that all used the idea are one light review
-    if (lastCredit) fsrs = applyReview(fsrs, mean(credits.map((e) => e.score)), new Date(lastCredit.at), Math.max(...credits.map((e) => e.context.implicit?.weight ?? 0)));
-  };
-
-  let previousAt: number | null = null;
-  for (const e of ordered) {
-    if (!firstSessionId && e.sessionId) firstSessionId = e.sessionId;
-    if (e.kind === 'lookup') continue; // not part of any sitting
-    const at = new Date(e.at).getTime();
-    if (previousAt !== null && at - previousAt > SITTING_GAP_MS) closeSitting();
-    previousAt = at;
-    sitting.push(e);
-    if (e.score >= PASS_SCORE) {
-      const certified = certifiedDepth(e.kind, e.context);
-      if (certified > depth) depth = certified;
-    }
+    if (lastCredit) this.fsrs = applyReview(this.fsrs, mean(credits.map((e) => e.score)), new Date(lastCredit.at), Math.max(...credits.map((e) => e.context.implicit?.weight ?? 0)));
   }
-  closeSitting();
-  return { depth, fsrs, firstSessionId };
+}
+
+const inTimeOrder = (evidence: Evidence[]) => [...evidence].sort((a, b) => a.at.localeCompare(b.at));
+
+export function deriveState(evidence: Evidence[]): DerivedState {
+  const fold = new StateFold();
+  for (const e of inTimeOrder(evidence)) fold.add(e);
+  fold.close();
+  return { depth: fold.depth, fsrs: fold.fsrs, firstSessionId: fold.firstSessionId };
+}
+
+/** The depth after each piece of evidence, in time order: what `deriveState` gives for each prefix, in one pass. */
+export function depthsAlong(evidence: Evidence[]): { evidence: Evidence; depth: Depth }[] {
+  const fold = new StateFold();
+  return inTimeOrder(evidence).map((e) => {
+    fold.add(e);
+    return { evidence: e, depth: fold.depthIfClosed() };
+  });
 }

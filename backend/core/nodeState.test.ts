@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyReview, emptyFsrs } from './fsrs';
-import { certifiedDepth, deriveState } from './nodeState';
+import { certifiedDepth, depthsAlong, deriveState } from './nodeState';
 import type { Evidence } from './types';
 
 let n = 0;
@@ -135,5 +135,29 @@ describe('deriveState', () => {
       expect(deriveState([...deep, fail(10), fail(12), fail(14)]).depth).toBe(3);
       expect(deriveState([...deep, fail(10), fail(12), fail(14), fail(16)]).depth).toBe(2);
     });
+  });
+});
+
+describe('depthsAlong', () => {
+  it('gives, after each piece of evidence, the depth deriveState gives for that prefix', () => {
+    let seed = 11;
+    const random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const kinds: Evidence['kind'][] = ['predict', 'check', 'explain', 'derive', 'use', 'practice', 'recall', 'lookup'];
+    for (let run = 0; run < 200; run += 1) {
+      let t = Date.parse('2026-01-05T09:00:00Z');
+      const list: Evidence[] = [];
+      for (let i = 0; i < 2 + Math.floor(random() * 14); i += 1) {
+        // answers minutes apart within a sitting, hours or days apart between them
+        t += random() < 0.5 ? 10 * 60_000 : Math.floor(random() * 4) * 86_400_000 + 5 * 3_600_000;
+        const score = random() < 0.35 ? random() * 0.4 : 0.4 + random() * 0.6;
+        const implicit = random() < 0.15 ? { implicit: { fromNodeId: 'n', weight: 0.5 } } : {};
+        list.push(ev(kinds[Math.floor(random() * kinds.length)] as Evidence['kind'], score, new Date(t).toISOString(), { rung: 1 + Math.floor(random() * 4), ...implicit } as Evidence['context']));
+      }
+      const along = depthsAlong(list);
+      along.forEach((step, i) => expect(step.depth).toBe(deriveState(list.slice(0, i + 1)).depth));
+    }
   });
 });

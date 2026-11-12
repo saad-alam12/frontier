@@ -7,16 +7,14 @@ import { addDays, daysBetween, localDate, startOfDay, weekStart } from '../core/
 import { formatHours, ideaMinutes } from '../core/budget';
 import { topics } from '../core/clusters';
 import { recallProbability } from '../core/fsrs';
-import { indexChains } from '../core/graph';
-import { centrality } from '../core/leverage';
-import { deriveState } from '../core/nodeState';
+import { depthsAlong } from '../core/nodeState';
+import { worldGraph } from './worldGraph';
 import { CONFIDENCE_LEVELS, OWNED_DEPTH } from '../core/types';
 import type { Evidence, KnowledgeNode, NodeState } from '../core/types';
 import type { Database } from '../store/db';
 import { listEvidenceSince, listStates } from '../store/evidence';
 import { listCapabilities, listGoals, listTargets } from '../store/goals';
 import { listSessions } from '../store/sessions';
-import { listChains, listNodes } from '../store/world';
 import { attributeTime, freeStudy, goalProgress, learnerSpeedNow } from './budget';
 
 const DAY_MS = 86_400_000;
@@ -73,8 +71,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
   const since = days === null ? null : new Date(now.getTime() - days * DAY_MS).toISOString();
   const allGoals = listGoals(db).filter((g) => g.status !== 'draft');
   const goalTitle = new Map(allGoals.map((g) => [g.id, g.title ?? g.text]));
-  const nodes = new Map(listNodes(db).map((n) => [n.id, n]));
-  const index = indexChains(listChains(db));
+  const { nodes, index, centrality } = worldGraph(db);
   const states = listStates(db);
   const caps = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
   const targets = listTargets(db);
@@ -86,7 +83,7 @@ export function statsView(db: Database, filter: StatsFilter, now = new Date()): 
 
   // topics over the ideas that matter to the learner: targeted or touched
   const relevant = [...nodes.keys()].filter((id) => goalsOfNode.has(id) || (states.get(id)?.depth ?? 0) > 0);
-  const topicList = topics(relevant, index, new Map([...nodes.values()].map((n) => [n.id, n.name])), (id) => centrality(id, index));
+  const topicList = topics(relevant, index, new Map([...nodes.values()].map((n) => [n.id, n.name])), centrality);
   const topic = filter.topicId ? topicList.find((t) => t.id === filter.topicId) : undefined;
   const goalNodes = filter.goalId ? new Set(targets.filter((t) => caps.get(t.capabilityId) === filter.goalId).map((t) => t.nodeId)) : null;
   const topicNodes = topic ? new Set(topic.nodeIds) : null;
@@ -192,15 +189,17 @@ export interface Transition {
 /** Every change of depth, by replaying each idea's evidence in order. */
 export function depthHistory(evidence: Evidence[]): Transition[] {
   const byNode = new Map<string, Evidence[]>();
-  for (const e of evidence) byNode.set(e.nodeId, [...(byNode.get(e.nodeId) ?? []), e]);
+  for (const e of evidence) {
+    const list = byNode.get(e.nodeId);
+    if (list) list.push(e);
+    else byNode.set(e.nodeId, [e]);
+  }
   const out: Transition[] = [];
   for (const [nodeId, list] of byNode) {
-    const ordered = [...list].sort((a, b) => a.at.localeCompare(b.at));
     let depth = 0;
-    for (let i = 0; i < ordered.length; i += 1) {
-      const next = deriveState(ordered.slice(0, i + 1)).depth;
-      if (next !== depth) out.push({ nodeId, at: (ordered[i] as Evidence).at, from: depth, to: next });
-      depth = next;
+    for (const step of depthsAlong(list)) {
+      if (step.depth !== depth) out.push({ nodeId, at: step.evidence.at, from: depth, to: step.depth });
+      depth = step.depth;
     }
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));

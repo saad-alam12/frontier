@@ -9,11 +9,11 @@ import { z } from 'zod';
 import { CardTextSchema, draftCard, writeIdeaCards } from '../agents/cardWriter';
 import type { CardGoal, CardText } from '../agents/cardWriter';
 import { CARD_ORIGINS, aroundSelection, cardKey, cardsToAsk, creditable, introducedSince, nextDueByRating, reviewQueue, scheduleOf } from '../core/cards';
-import type { CardOrigin, CardPhase, CardRating, CardReview, IdeaFinished, ReviewSource } from '../core/cards';
+import type { CardOrigin, CardPhase, CardRating, CardReview, CardSchedule, IdeaFinished, ReviewSource } from '../core/cards';
 import type { Goal } from '../core/types';
 import type { LlmProvider } from '../llm/provider';
 import { listActivity } from '../store/activity';
-import { cardsForNodes, cardsWithoutGoal, countAutoCards, createCard, deleteCard, getCard, getGoalCardSettings, insertReview, listCards, listReviewsSince, reviewsByCard, saveGoalCardSettings, setCardsWithoutGoal, setSuspended, updateCard, removeLatestScreenReview } from '../store/cards';
+import { cardsForNodes, cardsWithoutGoal, countAutoCards, createCard, deleteCard, getCard, getGoalCardSettings, insertReview, listCards, listReviewsSince, reviewsByCard, reviewsOfCard, saveGoalCardSettings, setCardsWithoutGoal, setSuspended, updateCard, removeLatestScreenReview } from '../store/cards';
 import type { CardRecord, GoalCardSettings } from '../store/cards';
 import type { Database } from '../store/db';
 import { transaction } from '../store/db';
@@ -80,13 +80,40 @@ interface Scheduled {
   schedule: ReturnType<typeof scheduleOf>;
 }
 
+/**
+ * Each card's schedule is its reviews replayed; replays are kept per card and done again only when its
+ * reviews change (a review is added, or the last one taken back), so a long history is not replayed
+ * on every read.
+ */
+const replays = new WeakMap<Database, Map<string, { key: string; schedule: CardSchedule }>>();
+
+function scheduleFor(db: Database, record: CardRecord, reviews: CardReview[]): CardSchedule {
+  let kept = replays.get(db);
+  if (!kept) {
+    kept = new Map();
+    replays.set(db, kept);
+  }
+  const last = reviews[reviews.length - 1];
+  const key = `${record.createdAt}|${reviews.length}|${last?.at ?? ''}|${last?.rating ?? ''}|${last?.source ?? ''}`;
+  const hit = kept.get(record.id);
+  if (hit?.key === key) return hit.schedule;
+  const schedule = scheduleOf(reviews, record.createdAt);
+  kept.set(record.id, { key, schedule });
+  return schedule;
+}
+
+function scheduledOne(db: Database, record: CardRecord): Scheduled {
+  const reviews = reviewsOfCard(db, record.id);
+  return { record, reviews, id: record.id, createdAt: record.createdAt, schedule: scheduleFor(db, record, reviews) };
+}
+
 function scheduled(db: Database, filter: (c: CardRecord) => boolean = () => true): Scheduled[] {
   const reviews = reviewsByCard(db);
   return listCards(db)
     .filter(filter)
     .map((record) => {
       const own = reviews.get(record.id) ?? [];
-      return { record, reviews: own, id: record.id, createdAt: record.createdAt, schedule: scheduleOf(own, record.createdAt) };
+      return { record, reviews: own, id: record.id, createdAt: record.createdAt, schedule: scheduleFor(db, record, own) };
     });
 }
 
@@ -252,8 +279,9 @@ export function saveCard(db: Database, input: CardInput): CardView {
 }
 
 export function cardView(db: Database, cardId: string): CardView {
-  const s = scheduled(db, (c) => c.id === cardId)[0];
-  if (!s) throw new Error('That card no longer exists.');
+  const record = getCard(db, cardId);
+  if (!record) throw new Error('That card no longer exists.');
+  const s = scheduledOne(db, record);
   const { names, goals } = lookups(db, [s.record]);
   return toView(s, names, goals);
 }

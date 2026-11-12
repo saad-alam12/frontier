@@ -6,7 +6,6 @@
 import { runSessionMaker } from '../agents/sessionMaker';
 import type { MakerIdea, SessionMakerResult } from '../agents/sessionMaker';
 import { SESSION_MINUTES } from '../core/budget';
-import { centrality } from '../core/leverage';
 import { nowIso } from '../store/db';
 import { getGoal, listTargets } from '../store/goals';
 import { newId } from '../store/ids';
@@ -116,7 +115,7 @@ async function makerInput(deps: MakerDeps, description: string, goalId: string |
   const shown = new Set(ids);
   const owned = [...view.owned]
     .filter((id) => !shown.has(id))
-    .sort((a, b) => centrality(b, view.index) - centrality(a, view.index) || a.localeCompare(b))
+    .sort((a, b) => view.centrality(b) - view.centrality(a) || a.localeCompare(b))
     .slice(0, OWNED)
     .map((id) => ({ id, name: view.nodes.get(id)?.name ?? id }));
   const speed = learnerSpeedNow(db);

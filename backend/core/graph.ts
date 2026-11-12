@@ -25,6 +25,24 @@ function push(map: Map<string, Chain[]>, key: string, chain: Chain): void {
 }
 
 /** Every node reachable upward through premises from `start` (not including start). */
+/** Everything any of `starts` rests on, transitively, in one walk (the starts themselves only if one rests on another). */
+export function ancestorsOfAll(starts: Iterable<string>, index: GraphIndex): Set<string> {
+  const seen = new Set<string>();
+  const stack = [...starts];
+  while (stack.length) {
+    const id = stack.pop() as string;
+    for (const chain of index.into.get(id) ?? []) {
+      for (const p of chain.premises) {
+        if (!seen.has(p)) {
+          seen.add(p);
+          stack.push(p);
+        }
+      }
+    }
+  }
+  return seen;
+}
+
 export function ancestors(start: string, index: GraphIndex): Set<string> {
   const seen = new Set<string>();
   const stack = [start];

@@ -9,9 +9,8 @@ import type { Allocation, GoalPlan, Pace, PlanGoal, PlanNode, PlanTarget } from 
 import { addDays, localDate } from '../core/dates';
 import { roadmap } from '../core/plan';
 import { indexChains } from '../core/graph';
-import { centrality } from '../core/leverage';
 import { EXTRACTED_ROLES, OWNED_DEPTH } from '../core/types';
-import type { Depth, Goal, GoalBudget, KnowledgeNode, NodeState } from '../core/types';
+import type { Capability, Depth, Goal, GoalBudget, KnowledgeNode, NodeState, Target } from '../core/types';
 import type { Activity } from '../store/activity';
 import { listActivity, setSpanOwners } from '../store/activity';
 import type { Database } from '../store/db';
@@ -19,6 +18,8 @@ import { listStates } from '../store/evidence';
 import { getGoal, listCapabilities, listGoals, listMaterials, listTargets, savePlannedDepths } from '../store/goals';
 import { coveredNodeIds, getSource } from '../store/sources';
 import { listChains, listNodes } from '../store/world';
+import { cachedRead } from '../store/readCache';
+import { worldGraph } from './worldGraph';
 
 const DAY_MS = 86_400_000;
 /** Surfaces whose time counts as studying (browsing the map or library does not); flashcard reviews count for the card's goal. */
@@ -70,6 +71,12 @@ export function timeOwners(db: Database, context: { goalId?: string | null; node
  * that no longer exists.
  */
 export function attributeTime(db: Database, since?: string): TimeShare[] {
+  // the whole history is read by most screens; it is kept until something is written
+  if (since === undefined) return cachedRead(db, 'time.shares', () => sharesOf(db));
+  return sharesOf(db, since);
+}
+
+function sharesOf(db: Database, since?: string): TimeShare[] {
   const shares: TimeShare[] = [];
   for (const span of listActivity(db, { kinds: ['time'], since })) {
     if (!STUDY.has(String(span.data.surface))) continue;
@@ -102,6 +109,10 @@ export function freezeTimeOwners(db: Database): number {
  * in that time and does not count.
  */
 export function learnerSpeedNow(db: Database): number {
+  return cachedRead(db, 'learner.speed', () => speedNow(db));
+}
+
+function speedNow(db: Database): number {
   const goals = listGoals(db).filter((g) => g.status !== 'draft');
   const goalIds = new Set(goals.map((g) => g.id));
   const goalOf = new Map(listCapabilities(db).map((c) => [c.id, c.goalId]));
@@ -145,39 +156,73 @@ interface PlanInputs {
   speed: number;
 }
 
+/** What every plan reads, whatever goal it is for: kept until the database changes. */
+interface PlanBase {
+  goals: Goal[];
+  capabilities: Map<string, Capability>;
+  nodes: Map<string, KnowledgeNode>;
+  states: Map<string, NodeState>;
+  targets: Target[];
+  /** Per goal: how many of its extracted sources cover each idea. */
+  coverCount: Map<string, Map<string, number>>;
+  spent: Map<string, number>;
+  speed: number;
+}
+
+function planBase(db: Database): PlanBase {
+  return cachedRead(db, 'plan.base', () => {
+    const goals = listGoals(db);
+    const coverCount = new Map<string, Map<string, number>>();
+    for (const g of goals) {
+      const counts = new Map<string, number>();
+      for (const m of listMaterials(db, g.id)) {
+        if (!EXTRACTED_ROLES.includes(m.role)) continue;
+        for (const id of coveredNodeIds(db, m.sourceId)) counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      coverCount.set(g.id, counts);
+    }
+    return {
+      goals,
+      capabilities: new Map(listCapabilities(db).map((c) => [c.id, c])),
+      nodes: new Map(listNodes(db).map((n) => [n.id, n])),
+      states: listStates(db),
+      targets: listTargets(db, undefined, { all: true }),
+      coverCount,
+      spent: spentByGoal(attributeTime(db)),
+      speed: learnerSpeedNow(db),
+    };
+  });
+}
+
 /**
  * Everything the allocation needs, for the active goals plus (for a preview) one draft. Each target's
  * ideal depth is capped at the depth the learner approved, so automatic re-plans never go deeper than
- * the approved plan; `uncapped` lifts the caps of one goal, for previewing a new time.
+ * the approved plan; `uncapped` lifts the caps of one goal, for previewing a new time. Kept until the
+ * database changes, as a goal page and Today ask for the same inputs several times.
  */
 function planInputs(db: Database, options: { include?: string; uncapped?: string } = {}): PlanInputs {
-  const goals = listGoals(db).filter((g) => g.status === 'active' || g.id === options.include);
+  const base = planBase(db);
+  // including a goal that is active anyway changes nothing
+  const include = options.include && base.goals.find((g) => g.id === options.include)?.status !== 'active' ? options.include : '';
+  return cachedRead(db, `plan.inputs:${include}:${options.uncapped ?? ''}`, () => buildPlanInputs(db, base, include, options.uncapped));
+}
+
+function buildPlanInputs(db: Database, base: PlanBase, include: string, uncapped: string | undefined): PlanInputs {
+  const { capabilities, nodes, states } = base;
+  const goals = base.goals.filter((g) => g.status === 'active' || g.id === include);
   const goalIds = new Set(goals.map((g) => g.id));
-  const capabilities = new Map(listCapabilities(db).map((c) => [c.id, c]));
-  const nodes = new Map(listNodes(db).map((n) => [n.id, n]));
-  const states = listStates(db);
-  const index = indexChains(listChains(db));
+  const graph = worldGraph(db);
 
   // a part the learner keeps adding material on weighs more: 1 + 0.15 per extra source covering an idea
-  const coverCount = new Map<string, Map<string, number>>();
-  for (const g of goals) {
-    const counts = new Map<string, number>();
-    for (const m of listMaterials(db, g.id)) {
-      if (!EXTRACTED_ROLES.includes(m.role)) continue;
-      for (const id of coveredNodeIds(db, m.sourceId)) counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    coverCount.set(g.id, counts);
-  }
-
   const targets: PlanTarget[] = [];
-  for (const t of listTargets(db, undefined, { all: true })) {
+  for (const t of base.targets) {
     const capability = capabilities.get(t.capabilityId);
     const goalId = capability?.goalId;
     if (!goalId || !goalIds.has(goalId) || !nodes.has(t.nodeId)) continue;
-    const covered = coverCount.get(goalId)?.get(t.nodeId) ?? 0;
+    const covered = base.coverCount.get(goalId)?.get(t.nodeId) ?? 0;
     // previewing a new time lifts what the old time trimmed, but an idea that was simplified stays as it
     // was learned until the learner goes deeper on it: the preview must show what saving will give
-    const cap = goalId === options.uncapped && !t.simplified ? null : t.approvedDepth;
+    const cap = goalId === uncapped && !t.simplified ? null : t.approvedDepth;
     targets.push({
       goalId,
       capabilityId: t.capabilityId,
@@ -194,18 +239,16 @@ function planInputs(db: Database, options: { include?: string; uncapped?: string
   // A premise outside every plan that still has to be owned first costs its time once, however many
   // planned ideas rest on it: it is charged to the first idea that needs it (the most central first,
   // since those are planned first), along the chain that adds the fewest premises not yet charged.
-  const centralityOf = new Map([...targeted].map((id) => [id, centrality(id, index)]));
+  const centralityOf = new Map([...targeted].map((id) => [id, graph.centrality(id)]));
   const charged = new Set<string>();
   for (const id of [...targeted].sort((a, b) => (centralityOf.get(b) ?? 0) - (centralityOf.get(a) ?? 0) || a.localeCompare(b))) {
     const node = nodes.get(id) as KnowledgeNode;
-    const options = (index.into.get(id) ?? []).map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH && !charged.has(p)));
+    const options = (graph.index.into.get(id) ?? []).map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH && !charged.has(p)));
     const fresh = options.sort((a, b) => a.length - b.length)[0] ?? [];
     for (const p of fresh) charged.add(p);
     planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centralityOf.get(id) ?? 0, premiseMinutes: fresh.length * ideaMinutes('claim', 0, OWNED_DEPTH) });
   }
-
-  const spent = spentByGoal(attributeTime(db));
-  return { goals, nodes, states, targets, planNodes, spent, speed: learnerSpeedNow(db) };
+  return { goals, nodes, states, targets, planNodes, spent: base.spent, speed: base.speed };
 }
 
 /**
@@ -226,12 +269,28 @@ function learnedMinutes(goal: Goal, targets: Pick<PlanTarget, 'goalId' | 'nodeId
   return total;
 }
 
+/** Allocations of the same inputs (kept while the database is unchanged) with the same budget are the same. */
+const allocations = new WeakMap<PlanInputs, Map<string, Allocation>>();
+
 function runAllocation(db: Database, inputs: PlanInputs, override?: { goalId: string; budget: GoalBudget | null }): Allocation {
-  const planGoals: PlanGoal[] = inputs.goals.map((g) => {
+  const key = override ? `${override.goalId}:${JSON.stringify(override.budget)}` : '';
+  let kept = allocations.get(inputs);
+  if (!kept) {
+    kept = new Map();
+    allocations.set(inputs, kept);
+  }
+  const hit = kept.get(key);
+  if (hit) return hit;
+  const allocation = allocate(planGoalsOf(db, inputs, override), inputs.targets, inputs.planNodes, inputs.speed);
+  kept.set(key, allocation);
+  return allocation;
+}
+
+function planGoalsOf(db: Database, inputs: PlanInputs, override?: { goalId: string; budget: GoalBudget | null }): PlanGoal[] {
+  return inputs.goals.map((g) => {
     const budget = override && override.goalId === g.id ? override.budget : g.budget;
     return { id: g.id, budgetMinutes: goalBudgetMinutes(db, g, budget), spentMinutes: inputs.spent.get(g.id) ?? 0, priority: g.priority };
   });
-  return allocate(planGoals, inputs.targets, inputs.planNodes, inputs.speed);
 }
 
 /**

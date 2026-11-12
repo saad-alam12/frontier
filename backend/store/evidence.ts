@@ -98,6 +98,11 @@ export function listEvidenceForNode(db: Database, nodeId: string): Evidence[] {
   return (db.prepare('SELECT * FROM evidence WHERE node_id = ? ORDER BY at, id').all(nodeId) as unknown as EvidenceRow[]).map(rowToEvidence);
 }
 
+/** Every piece of evidence of one kind, in the order the node's own list has it. */
+export function listEvidenceOfKind(db: Database, kind: Evidence['kind']): Evidence[] {
+  return (db.prepare('SELECT * FROM evidence WHERE kind = ? ORDER BY at, id').all(kind) as unknown as EvidenceRow[]).map(rowToEvidence);
+}
+
 export function listEvidenceForSession(db: Database, sessionId: string): Evidence[] {
   return (db.prepare('SELECT * FROM evidence WHERE session_id = ? ORDER BY at, id').all(sessionId) as unknown as EvidenceRow[]).map(rowToEvidence);
 }

@@ -7,7 +7,6 @@ import { runGoalCompiler } from '../agents/goalCompiler';
 import type { CompileResult, ExistingCapability, GoalCompilerInput, GraphSummaryEntry } from '../agents/goalCompiler';
 import { guessMaterialRole, runCourseProfile } from '../agents/materials';
 import { ancestors } from '../core/graph';
-import { centrality } from '../core/leverage';
 import { depthSkew, sameRemap } from '../core/goals';
 import { EXTRACTED_ROLES } from '../core/types';
 import type { Depth, Goal, KnowledgeNode, MaterialRole } from '../core/types';
@@ -55,7 +54,7 @@ export function compileInput(db: Database, goal: Goal): { input: GoalCompilerInp
   for (const t of existingTargets) scope.add(t.nodeId);
   // What the learner knows and what their other goals hold, so overlap is targeted, not re-created.
   const elsewhere = new Set([...view.owned, ...listTargets(db).map((t) => t.nodeId)].filter((id) => !scope.has(id) && view.nodes.has(id)));
-  const shared = [...elsewhere].sort((a, b) => centrality(b, view.index) - centrality(a, view.index) || a.localeCompare(b)).slice(0, SHARED_IN_COMPILE);
+  const shared = [...elsewhere].sort((a, b) => view.centrality(b) - view.centrality(a) || a.localeCompare(b)).slice(0, SHARED_IN_COMPILE);
   const graph: GraphSummaryEntry[] = [...scope, ...shared]
     .map((id) => view.nodes.get(id))
     .filter((n): n is KnowledgeNode => n !== undefined)

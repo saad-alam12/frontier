@@ -82,9 +82,10 @@ export function leverageOf(
   index: GraphIndex,
   owned: Set<string>,
   ctx: GoalContext,
+  centralityOf: (nodeId: string) => number = (id) => centrality(id, index),
 ): LeverageScore {
   const relevance = goalRelevance(node.id, ctx);
-  const central = 1 + centrality(node.id, index);
+  const central = 1 + centralityOf(node.id);
   const target = targetDepthFor(node.id, ctx);
   const gap = depthGap(state, target);
   const effort = expectedEffort(node, index, owned);

@@ -8,9 +8,11 @@ import { chainKey } from '../core/chains';
 import type { MergePlan } from '../core/merge';
 import type { IdeaMergePlan } from '../core/ideaMerge';
 import type { KnowledgeNode, SourceRef } from '../core/types';
+import { worldChanged } from './readCache';
 
 /** The merger's write path. Runs inside the caller's transaction. */
 export function applyMergePlan(db: Database, plan: MergePlan): void {
+  worldChanged(db);
   const now = nowIso();
   const insertNode = db.prepare(
     'INSERT INTO nodes (id, kind, name, statement, aliases, sources, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -55,6 +57,7 @@ export function applyMergePlan(db: Database, plan: MergePlan): void {
  * (services/erase.ts), which removes it first.
  */
 export function retireNodes(db: Database, ids: Iterable<string>): void {
+  worldChanged(db);
   const dropChains = db.prepare('DELETE FROM chains WHERE conclusion = ? OR id IN (SELECT chain_id FROM chain_premises WHERE node_id = ?)');
   const dropNode = db.prepare('DELETE FROM nodes WHERE id = ?');
   for (const id of ids) {
@@ -68,6 +71,7 @@ export function retireNodes(db: Database, ids: Iterable<string>): void {
  * it, so no card points at a source that is gone.
  */
 export function dropSourceRefs(db: Database, sourceId: string): void {
+  worldChanged(db);
   // LIKE only narrows the rows to parse; the exact match is on the parsed refs.
   const like = `%${sourceId}%`;
   const now = nowIso();
@@ -83,6 +87,7 @@ export function dropSourceRefs(db: Database, sourceId: string): void {
 
 /** Goal compiles may create placeholder nodes that a source has yet to ground. */
 export function createUnverifiedNodes(db: Database, nodes: Omit<KnowledgeNode, 'status' | 'sources'>[]): void {
+  worldChanged(db);
   const now = nowIso();
   const stmt = db.prepare(
     "INSERT INTO nodes (id, kind, name, statement, aliases, sources, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, '[]', 'unverified', ?, ?)",
@@ -92,6 +97,7 @@ export function createUnverifiedNodes(db: Database, nodes: Omit<KnowledgeNode, '
 
 /** The learner renamed an idea or corrected its statement (`planIdeaEdit`). */
 export function applyIdeaEdit(db: Database, nodeId: string, edit: { name: string; statement: string; aliases: string[] }): void {
+  worldChanged(db);
   db.prepare('UPDATE nodes SET name = ?, statement = ?, aliases = ?, updated_at = ? WHERE id = ?').run(edit.name, edit.statement, JSON.stringify(edit.aliases), nowIso(), nodeId);
 }
 
@@ -101,6 +107,7 @@ export function applyIdeaEdit(db: Database, nodeId: string, edit: { name: string
  * deleted by the caller once everything else that points at it has moved.
  */
 export function applyIdeaMerge(db: Database, plan: IdeaMergePlan): void {
+  worldChanged(db);
   const now = nowIso();
   db.prepare(`UPDATE nodes SET aliases = ?, sources = ?, status = CASE WHEN ? THEN 'verified' ELSE status END, updated_at = ? WHERE id = ?`).run(JSON.stringify(plan.node.aliases), JSON.stringify(plan.node.sources), plan.node.verified ? 1 : 0, now, plan.keepId);
   const deleteChain = db.prepare('DELETE FROM chains WHERE id = ?');
@@ -120,6 +127,7 @@ export function applyIdeaMerge(db: Database, plan: IdeaMergePlan): void {
 
 /** Remove an idea merged into another; whatever still pointed at it (duplicates) goes by cascade. */
 export function deleteMergedNode(db: Database, nodeId: string): void {
+  worldChanged(db);
   db.prepare('DELETE FROM nodes WHERE id = ?').run(nodeId);
 }
 
