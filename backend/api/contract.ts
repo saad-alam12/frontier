@@ -37,6 +37,7 @@ import type { UsageView } from '../services/usage';
 import type { DialogueView } from '../services/dialogue';
 import type { CheatSheetView, GoalNotesView } from '../services/notes';
 import type { MergeCandidate } from '../services/mapEdit';
+import type { WeekReviewView } from '../services/weekReview';
 import type { DialogueKind } from '../store/dialogues';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
@@ -91,6 +92,8 @@ export type { ExamReport } from '../core/exam';
 export type { DialogueKind, DialogueView };
 export type { CheatSheetView, GoalNotesView, NoteIdeaView } from '../services/notes';
 export type { MergeCandidate } from '../services/mapEdit';
+export type { WeekReviewView } from '../services/weekReview';
+export type { Suggestion, SuggestionKind } from '../core/weekReview';
 
 export interface AppInfo {
   version: string;
@@ -267,6 +270,8 @@ export interface ApiMethods {
   /** Active time from the renderer, attributed to what the learner is doing. */
   'activity.tick': { input: TickInput; output: undefined };
   'stats.view': { input: StatsFilter; output: StatsView };
+  /** One week on one page: learned, faded, too sure, and one change to the plan. `weekOf` is a local date; null is this week. */
+  'stats.week': { input: { weekOf: string | null }; output: WeekReviewView };
   /** Unsent answers by key; values are opaque JSON strings owned by the UI. */
   'drafts.get': { input: { keys: string[] }; output: Record<string, string> };
   'drafts.set': { input: { key: string; value: string }; output: undefined };

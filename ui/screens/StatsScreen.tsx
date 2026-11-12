@@ -7,6 +7,8 @@ import { DefGrid, Meter } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { BudgetBar } from '../components/budget';
 import { Calendar, Calibration, FREE_STUDY, HourBars, Lines, WeeklyBars, seriesColor, shortDate } from '../components/charts';
+import { WeekReview } from '../components/WeekReview';
+import type { WeekActions } from '../components/WeekReview';
 
 const RANGES: { value: StatsRange; label: string }[] = [
   { value: '7d', label: '7 days' },
@@ -21,7 +23,8 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
  * Stats: how you learn, from everything Frontier logs. Filters sit in one row on top (time range,
  * goal, topic); a few plain sentences say what stands out; the charts below carry the detail.
  */
-export function StatsScreen() {
+export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: WeekActions; initialTab?: 'numbers' | 'week' }) {
+  const [tab, setTab] = useState<'numbers' | 'week'>(initialTab);
   const [filter, setFilter] = useState<StatsFilter>({ goalId: null, topicId: null, range: '30d' });
   const [view, setView] = useState<StatsView | null>(null);
   const [cards, setCards] = useState<CardStats | null>(null);
@@ -35,6 +38,29 @@ export function StatsScreen() {
     };
   }, [filter]);
 
+  const tabs = (
+    <div role="radiogroup" aria-label="Show" className="segmented is-small self-start">
+      {(['numbers', 'week'] as const).map((t) => (
+        <button key={t} type="button" role="radio" aria-checked={tab === t} onClick={() => setTab(t)}>
+          {t === 'numbers' ? 'Numbers' : 'Your week'}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab === 'week') {
+    return (
+      <Screen wide>
+        <div className="flex flex-col gap-[18px]">
+          <div className="flex flex-col gap-[10px]">
+            <h1 className="t-display">Stats</h1>
+            <p className="t-lead m-0">Your week on one page: what you learned, what faded, where you were too sure, and one change worth making.</p>
+          </div>
+          {tabs}
+        </div>
+        <WeekReview actions={actions} />
+      </Screen>
+    );
+  }
   if (!view) return <Screen wide>{null}</Screen>;
   // a goal keeps its colour whatever the filter: colours follow the order of all goals
   const colorOf = new Map(view.goals.map((g, i) => [g.id, seriesColor(i)]));
@@ -64,6 +90,7 @@ export function StatsScreen() {
           <h1 className="t-display">Stats</h1>
           <p className="t-lead m-0">Where your time goes and how far each goal has come.</p>
         </div>
+        {tabs}
         <div className="stats-filters">
           <div role="radiogroup" aria-label="Time range" className="segmented is-small">
             {RANGES.map((r) => (

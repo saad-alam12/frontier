@@ -190,7 +190,7 @@ export interface Transition {
 }
 
 /** Every change of depth, by replaying each idea's evidence in order. */
-function depthHistory(evidence: Evidence[]): Transition[] {
+export function depthHistory(evidence: Evidence[]): Transition[] {
   const byNode = new Map<string, Evidence[]>();
   for (const e of evidence) byNode.set(e.nodeId, [...(byNode.get(e.nodeId) ?? []), e]);
   const out: Transition[] = [];

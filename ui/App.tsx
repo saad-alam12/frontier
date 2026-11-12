@@ -189,7 +189,15 @@ export function App() {
         {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
         {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
         {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} onOpenPractice={openPractice} />}
-        {screen === 'stats' && <StatsScreen />}
+        {screen === 'stats' && (
+          <StatsScreen
+            actions={{
+              onOpenGoal: (goalId) => openGoals({ name: 'goal', goalId }),
+              onTestMe: (nodeIds) => openChoose({ pick: nodeIds, testMe: true }),
+              onToday: () => navigate('today'),
+            }}
+          />
+        )}
         {screen === 'lookup' && <LookupScreen key={lookupQuery?.key ?? 'lookup'} initialQuery={lookupQuery?.query} onOpenTrail={openTrail} onGoDeeper={goDeeper} />}
         {screen === 'trails' && <TrailsScreen key={trailId ?? 'trails'} initialId={trailId} />}
         {screen === 'library' && <LibraryScreen />}
