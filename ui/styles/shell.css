@@ -1,0 +1,315 @@
+/* Type styles, the app shell (sidebar, title bar, columns) and how screens settle in. */
+
+/* ---------- Type styles ---------- */
+
+.t-display {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.22;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+.t-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.t-heading {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+/* The current question: one size and weight for every question in the app, math set in KaTeX. */
+.t-question {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.45;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  color: var(--text);
+}
+.learner-text {
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 300;
+}
+.t-lead {
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 300;
+  color: var(--text-soft);
+}
+.t-small {
+  font-size: 13px;
+  line-height: 1.45;
+}
+.t-caption {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ---------- App shell ---------- */
+
+.app {
+  display: flex;
+  height: 100%;
+}
+.nav-rail {
+  flex: 0 0 220px;
+  box-sizing: border-box;
+  padding: 0 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  overflow-y: auto;
+  user-select: none;
+}
+/* The strip the window is dragged by; on macOS the traffic lights sit in it. */
+.nav-titlebar {
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 0 -12px -14px;
+  -webkit-app-region: drag;
+}
+.is-mac .nav-titlebar {
+  height: 40px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+.brand-svg {
+  flex-shrink: 0;
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-heading {
+  padding: 0 10px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+.nav-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 150ms ease-out;
+}
+.nav-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.nav-item[aria-current='page'] {
+  background: var(--selected);
+  color: var(--text);
+}
+.nav-item[aria-current='page'] svg {
+  color: var(--accent);
+}
+.nav-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(142, 164, 255, 0.3);
+  border-radius: 10px;
+  background: var(--accent-tint);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 150ms ease-out;
+}
+.nav-live:hover {
+  background: rgba(142, 164, 255, 0.2);
+}
+.nav-live-hint {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+.nav-live[aria-current='page'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.nav-spacer {
+  flex: 1 1 auto;
+}
+/* Narrow windows: the sidebar keeps its icons and drops its words (names stay as tooltips). */
+@media (max-width: 1023px) {
+  .nav-rail {
+    flex-basis: 64px;
+    padding: 0 10px 14px;
+  }
+  .nav-titlebar {
+    margin: 0 -10px -14px;
+  }
+  .brand,
+  .nav-item,
+  .nav-live {
+    justify-content: center;
+    padding: 0;
+  }
+  .brand-name,
+  .nav-heading,
+  .nav-item span,
+  .nav-live span:not(.live-dot) {
+    display: none;
+  }
+  .nav-heading + .nav-item {
+    margin-top: 0;
+  }
+}
+
+/* macOS: the window is transparent so the sidebar shows the system material; everything else is opaque. */
+.is-mac body {
+  background: transparent;
+}
+.is-mac .nav-rail {
+  background: var(--bg-sidebar-translucent);
+}
+.screen {
+  position: relative;
+  background: var(--bg);
+}
+/* The rest of the title bar strip, over the content, so the window can be dragged from anywhere along the top. */
+.window-drag {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 220px;
+  height: 28px;
+  z-index: 50;
+  -webkit-app-region: drag;
+}
+html:not(.is-mac) .window-drag {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .window-drag {
+    left: 64px;
+  }
+}
+
+.screen {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  height: 100%;
+}
+.main-column {
+  flex: 1 1 560px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 56px 64px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  overflow-y: auto;
+}
+.main-column > * {
+  max-width: 720px;
+}
+/* Each screen settles in once when you open it; nothing moves after that. */
+.screen > .main-column,
+.screen > .side-panel {
+  animation: screen-in 220ms ease-out;
+}
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen > .main-column,
+  .screen > .side-panel,
+  .btn:not(:disabled):active {
+    animation: none;
+    transform: none;
+  }
+}
+.side-panel {
+  flex: 0 1 420px;
+  min-width: 340px;
+  box-sizing: border-box;
+  padding: 48px 36px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  overflow-y: auto;
+}
+
+/* Too narrow for two columns (sidebar 220 + main 520 + panel 340): the panel moves under the main column. */
+@media (max-width: 1099px) {
+  .screen {
+    display: block;
+    overflow-y: auto;
+  }
+  .main-column,
+  .side-panel {
+    overflow: visible;
+  }
+  .side-panel {
+    max-width: none;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+@media (max-width: 699px) {
+  .main-column {
+    padding: 32px 16px;
+  }
+  .side-panel {
+    padding: 32px 16px;
+  }
+}

@@ -20,7 +20,7 @@ import { getSource } from '../store/sources';
 import { deeperMinutes } from './goals';
 import { loadKnowledge } from './knowledge';
 import type { IdeaRef } from './library';
-import type { SessionState } from './session';
+import type { SessionState } from './sessionState';
 
 export type MapState = 'owned' | 'fringe' | 'beyond';
 

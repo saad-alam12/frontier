@@ -1,0 +1,186 @@
+/* A goal's notes and cheat sheet, and printing them. */
+
+/* A goal's notes and cheat sheet (design §10, "Notes"). */
+.notes-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 760px;
+}
+.notes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.notes-toolbar-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.notes-article {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+.notes-skill {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.notes-skill > h2 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-idea {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  break-inside: avoid-page;
+}
+.notes-idea-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+}
+.notes-field,
+.idea-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* the learner's own text keeps its face, at the size of the notes around it */
+.notes-page .learner-text,
+.idea-note .learner-text {
+  font-size: 16px;
+}
+.idea-note.is-editing {
+  gap: 10px;
+}
+.notes-example {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.notes-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+.notes-cards > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.notes-cards dt {
+  color: var(--text-secondary);
+}
+.notes-cards dd {
+  margin: 0;
+}
+
+.cheat-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cheat-sheet-head h1 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.cheat-sheet-columns {
+  column-count: 2;
+  column-gap: 28px;
+  column-rule: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.cheat-sheet-skill {
+  break-inside: avoid-column;
+  margin-bottom: 12px;
+}
+.cheat-sheet-skill h2 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: none;
+}
+.cheat-sheet-idea {
+  break-inside: avoid;
+  margin-bottom: 6px;
+}
+.cheat-sheet-idea p {
+  margin: 0;
+}
+.cheat-sheet-formula {
+  padding-left: 12px;
+  color: var(--text-secondary);
+}
+
+/* Printing (and saving as PDF) shows only the page's content, dark on white, flowing over pages. */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --bg-panel: #ffffff;
+    --surface: #f6f5f2;
+    --surface-raised: #ffffff;
+    --border: #dcd9d2;
+    --border-strong: #cfcbc2;
+    --ring: #b9b4aa;
+    --text: #111111;
+    --text-soft: #1d1c1a;
+    --text-secondary: #45423d;
+    --text-muted: #6a665e;
+    --text-faint: #8a857b;
+    --accent-text: #2d48c4;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  html,
+  body,
+  #root,
+  .app,
+  .screen,
+  .main-column {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: var(--text);
+  }
+  .main-column {
+    padding: 0 !important;
+    animation: none !important;
+  }
+  .main-column > *,
+  .notes-page {
+    max-width: none !important;
+  }
+  .nav-rail,
+  .side-panel,
+  .window-drag,
+  .toasts,
+  .no-print {
+    display: none !important;
+  }
+  .cheat-sheet-columns {
+    column-count: 3;
+    column-gap: 16px;
+    font-size: 8.5pt;
+    line-height: 1.32;
+  }
+  .cheat-sheet-skill h2 {
+    font-size: 8.5pt;
+  }
+  .cheat-sheet-head h1 {
+    font-size: 12pt;
+  }
+}

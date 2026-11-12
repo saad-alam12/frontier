@@ -25,7 +25,8 @@ import type { MapState } from './map';
 import { stepMinutes } from './planner';
 import type { LessonStep } from './planner';
 import { currentSession } from './session';
-import type { FreeSession, NodeStatus, SessionDeps, SessionSnapshot, SessionState } from './session';
+import type { FreeSession, NodeStatus, SessionDeps, SessionState } from './sessionState';
+import type { SessionSnapshot } from './sessionView';
 import type { Proposal, SessionMaker } from './sessionMaker';
 
 export const FreeChoiceSchema = z

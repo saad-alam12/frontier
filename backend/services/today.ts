@@ -19,7 +19,7 @@ import { cardSummary } from './cards';
 import { streakDays } from './stats';
 import { currentPractice, forecastAcross, goalSchedule } from './practice';
 import type { FadingIdea, GoalSchedule, PracticeView } from './practice';
-import type { SessionState } from './session';
+import type { SessionState } from './sessionState';
 
 export interface TodayGoal {
   goalId: string;

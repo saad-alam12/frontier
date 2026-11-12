@@ -1,0 +1,398 @@
+/* The goal wizard, a goal's page and goal cards. */
+
+/* ---------- Goal wizard ---------- */
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  max-width: 760px;
+}
+.wizard-top {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.wizard-top .step-path {
+  flex: 1 1 auto;
+}
+/* the same width for Cancel and Finish later, so the steps do not shift when it changes */
+.wizard-top > .btn {
+  min-width: 96px;
+  justify-content: flex-end;
+}
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  animation: step-in 260ms ease-out;
+}
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.example-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.example-row .mini-chip {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.explain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.explainer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.drop-zone.is-big {
+  padding: 28px;
+  min-height: 140px;
+  justify-content: center;
+}
+.drop-hint {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+.drop-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-selected);
+  color: var(--accent-text);
+}
+.focus-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 10px 18px;
+  border-radius: 14px;
+  text-align: left;
+}
+.chip-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chip[aria-pressed='true'] .chip-hint {
+  color: var(--surface-selected);
+}
+.plan-notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-soft);
+}
+.plan-notes li {
+  padding-left: 16px;
+  position: relative;
+}
+.plan-notes li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.plan-time {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--bg-panel);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* The plan of a goal with no time limit: what it will take, in place of the time control. */
+.plan-estimate-number {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--accent-text);
+}
+
+/* Sizing a goal: a time, or a depth with no time limit (R5). */
+.time-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  container-type: inline-size;
+}
+.radio-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+/* three depths side by side get too narrow to read in a narrow column: one under the other instead */
+@container (max-width: 600px) {
+  .radio-cards.is-stacked {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+.radio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  text-align: left;
+  transition: background 150ms ease-out, box-shadow 150ms ease-out;
+}
+.radio-card:hover {
+  background: var(--surface-raised);
+}
+.radio-card[aria-checked='true'] {
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--text-secondary);
+}
+.radio-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.radio-card-line {
+  padding-left: 24px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.radio-dot {
+  flex: 0 0 14px;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--node-muted);
+  transition: background 150ms ease-out, box-shadow 150ms ease-out;
+}
+.radio-card[aria-checked='true'] .radio-dot {
+  border: 0;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-halo);
+}
+
+/* ---------- Goal page hero ---------- */
+
+.goal-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 40px;
+}
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.figure-number {
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.figure-of {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.figure-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.pace-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pace-warn {
+  color: #e8c27a;
+}
+.pace-good {
+  color: var(--accent-text);
+}
+.pace-calm {
+  color: var(--text-secondary);
+}
+.resource-times {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.resource-times li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+.resource-times .meter {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.skill-head {
+  align-items: flex-start !important;
+}
+.skill-head .chevron {
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.skill-list.is-muted {
+  opacity: 0.7;
+}
+.skill-ideas {
+  list-style: none;
+  margin: 0 0 4px 17px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.skill-ideas li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.depth-pips {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--border-strong);
+}
+.pip.is-known {
+  background: var(--text);
+}
+.pip.is-planned {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+}
+.pip.is-ideal {
+  background: transparent;
+  border: 1.5px dashed var(--node-muted);
+}
+.disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure > summary::before {
+  content: '+ ';
+  color: var(--accent-text);
+}
+.disclosure[open] > summary::before {
+  content: '− ';
+}
+.disclosure[open] > summary {
+  margin-bottom: 14px;
+}
+
+/* ---------- Goal cards ---------- */
+
+.goal-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.goal-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  text-align: left;
+  transition: box-shadow 150ms ease-out, background 150ms ease-out, transform 120ms ease-out;
+}
+.goal-card:hover {
+  background: var(--surface-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--ring),
+    0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.goal-card:active {
+  transform: scale(0.995);
+}
+.next-card.is-quiet {
+  background: transparent;
+}
+.week-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.week-figure .meter {
+  width: 100%;
+  height: 6px;
+}
+.week-figure .meter > span {
+  height: 6px;
+}

@@ -1,0 +1,438 @@
+/* A session: the frontier panel, its history, asides and header; library ideas, goal lists and practice. */
+
+/* ---------- Frontier map (side panel) ---------- */
+
+.frontier-map {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+}
+.frontier-map svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.map-node {
+  position: absolute;
+  border-radius: 50%;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+}
+.map-node.is-owned {
+  width: 8px;
+  height: 8px;
+  background: var(--text);
+}
+.map-node.is-learnable {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--accent);
+  background: var(--bg-panel);
+}
+.map-node.is-current {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  animation: atlas-pulse 2.4s ease-out infinite;
+}
+.map-node.is-beyond {
+  width: 7px;
+  height: 7px;
+  background: var(--node-muted);
+}
+.map-label {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: default;
+}
+button.map-label {
+  cursor: pointer;
+}
+.map-label-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.map-label.is-current .map-label-text {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.map-label.is-owned {
+  color: var(--text-muted);
+}
+.map-label.is-learnable {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--accent-text);
+}
+.map-label.is-current {
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--text);
+}
+.map-label.is-beyond {
+  color: var(--text-faint);
+}
+button.map-label:hover {
+  color: var(--text);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Session history ---------- */
+
+.history-node.is-done {
+  border-bottom: 1px solid var(--border-strong);
+}
+.history-node.is-done:first-child {
+  border-top: 1px solid var(--border-strong);
+}
+.history-node:not(.is-done) + .history-node:not(.is-done),
+.history-node.is-done + .history-node:not(.is-done) {
+  margin-top: 36px;
+}
+.history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 15px;
+}
+.history-row:hover .chevron {
+  border-color: var(--text);
+}
+.history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+.history-node.is-done .history-items {
+  padding: 14px 0 32px;
+}
+.chevron {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-secondary);
+  border-bottom: 1.5px solid var(--text-secondary);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 150ms ease-out;
+}
+.chevron.is-open {
+  transform: translateY(1px) rotate(-135deg);
+}
+
+/* ---------- Library ideas ---------- */
+
+.idea-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 200ms ease-out;
+}
+.idea-row.is-highlighted {
+  background: var(--surface-raised);
+}
+.idea-row .link-button {
+  font-size: inherit;
+}
+
+/* ---------- Goals ---------- */
+
+.goal-sentence {
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  padding: 18px 24px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text);
+  field-sizing: content;
+}
+.goal-sentence:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+/* The goal's context: a few lines of the learner's own words, growing with what they write. */
+.context-input {
+  min-height: 96px;
+  max-height: 320px;
+  line-height: 1.5;
+  field-sizing: content;
+}
+.context-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.goal-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.goal-context p {
+  white-space: pre-line;
+}
+.goal-context .is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.step-number {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--node-muted);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 18px;
+  transition: box-shadow 150ms ease-out;
+}
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  box-shadow: inset 0 0 0 3px var(--accent-halo);
+  color: var(--text);
+  font-size: 17px;
+  pointer-events: none;
+}
+.drop-zone.is-dragging {
+  box-shadow: 0 0 0 2px var(--accent-halo);
+}
+.remove-x {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+.remove-x:hover {
+  color: var(--text);
+  background: var(--surface-selected);
+}
+.this-week {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 16px;
+  font-size: 14px;
+}
+.work-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* A goal that is paused or finished says so above everything else, with the way back beside it. */
+.state-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.state-note > button {
+  flex-shrink: 0;
+}
+
+/* The plan as a list: ideas by name, session by session. */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.plan-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.plan-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.plan-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.plan-row:last-child {
+  border-bottom: 0;
+}
+.plan-row > .idea-dot {
+  align-self: center;
+}
+.plan-row-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.segmented.is-small {
+  padding: 3px;
+}
+.segmented.is-small button {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* What the learner asked the tutor about a card, and the answer: set off from the card by a rule on
+   the left, like a note in a margin. */
+.asides {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border-strong);
+}
+.aside-question {
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 300;
+  color: var(--text);
+}
+.ask-input {
+  min-height: 64px;
+  resize: vertical;
+}
+.chip.is-quiet {
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* The session's header (where you are: goal, idea, step, time) stays in view while the conversation
+   scrolls under it. Its own top padding keeps it clear of the window's drag strip on macOS. */
+.session-head {
+  position: sticky;
+  /* The column's own top padding (56) does not count as room to stick in, so the header reaches up
+     over it; stuck, 28 of that space stays above the breadcrumb and the rest scrolls away. */
+  top: -84px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: -56px;
+  padding: 56px 0 14px;
+  background: var(--bg);
+}
+/* a step scrolled to (from the step path or the map) lands below the header, not under it */
+.main-column:has(.session-head) {
+  scroll-padding-top: 176px;
+}
+.session-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -18px;
+  height: 18px;
+  background: linear-gradient(var(--bg), transparent);
+  pointer-events: none;
+}
+.session-where {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Practice ---------- */
+
+.solution-block {
+  padding-left: 18px;
+  border-left: 1px solid var(--border-strong);
+}
+.idea-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.idea-chips > .t-caption {
+  margin-right: 4px;
+}
+.idea-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-selected);
+  font-size: 12px;
+}

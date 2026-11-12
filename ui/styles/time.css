@@ -1,0 +1,404 @@
+/* Time budgets: the segmented control, the time picker, the budget bar, proposals and the idea field. */
+
+/* ======================================================================
+ * Time budgets, the goal wizard, progress, Stats (design §3.4, §10.2).
+ * ====================================================================== */
+
+.main-column.is-wide > * {
+  max-width: 1120px;
+}
+
+/* ---------- Segmented control ---------- */
+
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.segmented button {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button[aria-checked='true'] {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 500;
+}
+.segmented.is-small button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* ---------- Time picker ---------- */
+
+.time-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.time-amount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.stepper button {
+  width: 48px;
+  height: 64px;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 22px;
+}
+.stepper button:hover {
+  color: var(--text);
+}
+.stepper input {
+  width: 96px;
+  border: 0;
+  background: none;
+  text-align: center;
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  outline: none;
+}
+.time-unit {
+  font-size: 18px;
+  color: var(--text-soft);
+}
+.time-length {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+}
+.length-input {
+  width: 64px;
+  text-align: center;
+}
+.length-unit {
+  width: auto;
+}
+.time-slider {
+  width: 100%;
+  max-width: 560px;
+  accent-color: var(--accent);
+}
+.time-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.time-picks .mini-chip {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.mini-chip.is-on {
+  background: var(--chip-selected);
+  color: var(--text);
+}
+.time-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.time-total-number {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--accent-text);
+}
+
+/* ---------- Budget bar ---------- */
+
+.budget-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.budget-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  overflow: visible;
+}
+.budget-bar.is-compact .budget-track {
+  height: 6px;
+}
+.budget-spent,
+.budget-planned {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: width 300ms ease-out, left 300ms ease-out;
+}
+.budget-spent {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: var(--text);
+}
+.budget-planned {
+  border-radius: 0 999px 999px 0;
+  background: repeating-linear-gradient(135deg, var(--accent) 0 5px, rgba(142, 164, 255, 0.55) 5px 8px);
+}
+.budget-tick {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.budget-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.budget-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.swatch.is-spent {
+  background: var(--text);
+}
+.swatch.is-planned {
+  /* the same hatching as the planned part of the bar */
+  background: repeating-linear-gradient(135deg, var(--accent) 0 3px, rgba(142, 164, 255, 0.55) 3px 5px);
+}
+
+/* What the goal means for its time: the compiler's level and scope, read before approving. */
+.scope-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+/* A proposed map, next to the plan the learner has; and an addition, from asking to deciding. */
+.remap-panel,
+.addition-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px;
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+.addition-wait {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.addition-wait .idea-field {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  gap: 8px;
+}
+.addition-wait .idea-dot {
+  width: 10px;
+  height: 10px;
+}
+/* The compiler's word that a request reads like a goal of its own. */
+.addition-misfit {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(232, 194, 122, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(232, 194, 122, 0.22);
+  color: var(--text-soft);
+}
+.addition-skills,
+.addition-changed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.addition-skills li {
+  position: relative;
+  padding-left: 16px;
+  color: var(--text-soft);
+}
+.addition-skills li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.addition-changed {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+/* A skill the learner added in their own words: a quiet line under it. */
+.added-mark {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.background-goal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Idea field (plan preview) ---------- */
+
+.idea-field-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.idea-field {
+  list-style: none;
+  margin: 0;
+  padding: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.idea-dot {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: background 250ms ease-out, border-color 250ms ease-out, transform 250ms ease-out, opacity 250ms ease-out;
+}
+.idea-dot.is-deep {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-halo);
+}
+.idea-dot.is-overview {
+  border: 2px solid var(--accent);
+}
+.idea-dot.is-known {
+  background: var(--text);
+}
+.idea-dot.is-cut {
+  border: 1.5px dashed var(--node-muted);
+  transform: scale(0.8);
+}
+.idea-field li.idea-dot {
+  cursor: default;
+  outline: none;
+}
+.idea-field li.idea-dot:hover,
+.idea-field li.idea-dot:focus-visible {
+  transform: scale(1.25);
+}
+.idea-field li.idea-dot:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-halo), 0 0 0 4px var(--accent);
+}
+.shared-mark {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c98500;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+/* A simplified idea: taught as its core intuition, below what the goal asks. */
+.simplified-mark {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 6px;
+  height: 2px;
+  margin-left: -3px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+}
+.simplified-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
+.idea-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding-left: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.idea-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.idea-legend .idea-dot {
+  width: 12px;
+  height: 12px;
+}
+.idea-field.is-loading .idea-dot {
+  animation: dot-wave 1.6s ease-in-out infinite;
+}
+@keyframes dot-wave {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+    border-color: var(--accent);
+  }
+}

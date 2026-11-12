@@ -12,8 +12,10 @@ import { answerFor, getProblem } from '../store/practice';
 import { getSession, listSessionEvents, listSessions } from '../store/sessions';
 import type { SessionRecord } from '../store/sessions';
 import { loadKnowledge } from './knowledge';
-import { publicCard } from './session';
-import type { Aside, FreeSession, PublicCard, SessionState } from './session';
+import { publicCard } from './sessionView';
+import type { Aside } from './sessionAsides';
+import type { FreeSession, SessionState } from './sessionState';
+import type { PublicCard } from './sessionView';
 
 export interface TrailSummary {
   id: string;

@@ -1,0 +1,139 @@
+/* Colour, type and spacing tokens (docs/visual-design.md), and the theme Tailwind reads. */
+
+/*
+ * Atlas (docs/visual-design.md). Every colour is a token so a light theme can be added later.
+ * Spacing steps: 4 6 8 10 12 14 16 18 22 24 28 32 36 40 48 56 72. Radius: 10 12 14 18 999.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #141311;
+  --bg-panel: #171613;
+  --surface: #1c1b18;
+  --surface-raised: #1e1c19;
+  --surface-selected: #24221e;
+  --chip-selected: #2c2a25;
+  --border: #262420;
+  --border-strong: #2e2b26;
+  --ring: #3a3732;
+  --node-muted: #4a463f;
+  --text: #eeeae2;
+  --text-soft: #e4dfd5;
+  --text-button: #d8d3c8;
+  --text-secondary: #ada79b;
+  --text-muted: #8c877c;
+  --text-faint: #6f6a60;
+  --accent: #8ea4ff;
+  --accent-text: #b4c2ff;
+  --accent-text-hover: #d3dcff;
+  --accent-halo: rgba(142, 164, 255, 0.18);
+  --accent-tint: rgba(142, 164, 255, 0.14);
+  /* Not part of the palette proper: a muted tone for failures only, never competing with the accent. */
+  --danger-text: #e3a59b;
+  --danger-fill: #e3a59b;
+  --danger-fill-hover: #ecb8af;
+  --legend-beyond: #5a554c;
+  --bg-sidebar: #181715;
+  /* Over the macOS sidebar material: dark and warm enough that the palette keeps its warmth. */
+  --bg-sidebar-translucent: rgba(24, 22, 19, 0.62);
+  --hover: rgba(238, 234, 226, 0.05);
+  --selected: rgba(238, 234, 226, 0.09);
+  /* Code in answers: muted, warm, never louder than the text around it. */
+  --code-keyword: #b4c2ff;
+  --code-builtin: #d6c08f;
+  --code-string: #a9c99a;
+  --code-number: #e0a988;
+  --code-decorator: #c7a6e8;
+  --code-comment: #6f6a60;
+  /* lines of a plot, in order */
+  --plot-1: #8ea4ff;
+  --plot-2: #d6c08f;
+  --plot-3: #a9c99a;
+  --plot-4: #e0a988;
+}
+
+@theme inline {
+  --font-sans: 'Geist', -apple-system, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --color-bg: var(--bg);
+  --color-panel: var(--bg-panel);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-selected: var(--surface-selected);
+  --color-chip: var(--chip-selected);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ring: var(--ring);
+  --color-node-muted: var(--node-muted);
+  --color-text: var(--text);
+  --color-soft: var(--text-soft);
+  --color-button: var(--text-button);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger-text);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-text-hover);
+}
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--ring) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--node-muted) padding-box;
+}
+::selection {
+  background: rgba(142, 164, 255, 0.32);
+}

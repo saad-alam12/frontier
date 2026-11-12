@@ -23,7 +23,7 @@ import { abandonSession, askTutor, currentSession, pauseSession, respond, startS
 import { trail } from './trails';
 import { SessionWork } from './sessionWork';
 import { settleGrading } from './practice';
-import type { SessionState } from './session';
+import type { SessionState } from './sessionState';
 import type { Grade } from '../agents/tutor';
 import type { IdeaFinished } from '../core/cards';
 import { reviewsByCard } from '../store/cards';

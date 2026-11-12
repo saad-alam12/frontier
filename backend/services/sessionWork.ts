@@ -9,7 +9,7 @@ import type { Stage } from '../core/session';
 import { CommitGate } from '../llm/cancel';
 import { isCancelled } from '../llm/provider';
 import { nowIso } from '../store/db';
-import type { PublicCard } from './session';
+import type { PublicCard } from './sessionView';
 
 export type WorkKind = 'start' | 'respond';
 

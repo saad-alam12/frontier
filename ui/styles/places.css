@@ -1,0 +1,432 @@
+/* Today, an idea's card, the Map, Lookup and Trails. */
+
+/* ---------- Today ---------- */
+
+.next-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.next-card .mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-halo);
+}
+.fading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 44px;
+  align-items: center;
+  gap: 16px;
+}
+.recall-pct {
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.forecast-bars {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+  height: 72px;
+}
+.forecast-bars > span {
+  display: block;
+  border-radius: 3px 3px 0 0;
+  background: var(--node-muted);
+  min-height: 2px;
+}
+.forecast-bars > span.is-today {
+  background: var(--accent);
+}
+.forecast-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Node card (Map, Lookup) ---------- */
+
+.node-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.link-button.idea-link {
+  font-size: inherit;
+}
+.idea-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.idea-link[data-sep]::after {
+  content: attr(data-sep);
+  color: var(--text-muted);
+}
+.depth-ladder {
+  display: flex;
+  gap: 6px;
+}
+.depth-ladder .rung {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.depth-ladder .rung.is-reached {
+  background: var(--text);
+}
+.depth-ladder .rung.is-target {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ---------- Map: a living graph that fills the window (design §8) ---------- */
+
+.map-screen {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.map-canvas canvas {
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+.map-overlay {
+  position: absolute;
+  z-index: 2;
+}
+.map-head {
+  top: 40px;
+  left: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+.map-head > * {
+  pointer-events: auto;
+}
+.map-head .t-display {
+  margin: 0;
+}
+.map-search {
+  position: relative;
+  width: 300px;
+}
+.map-search .input {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+.map-matches {
+  position: absolute;
+  z-index: 5;
+  top: 52px;
+  left: 0;
+  right: 0;
+  background: var(--surface-raised);
+}
+.link-row {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.link-row:hover {
+  color: var(--accent-text);
+}
+.map-actions {
+  top: 40px;
+  right: 40px;
+  display: flex;
+  gap: 8px;
+}
+.map-button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+  transition: color 150ms ease-out, background 150ms ease-out;
+}
+.map-button:hover:not(:disabled),
+.map-button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--surface-selected);
+}
+.map-button:disabled {
+  opacity: 0.5;
+}
+.map-zoom {
+  position: absolute;
+  right: 40px;
+  bottom: 32px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+.map-zoom .map-button {
+  min-width: 36px;
+}
+.map-panel-wrap {
+  top: 86px;
+  right: 40px;
+  bottom: 84px;
+  width: 300px;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 16px 40px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px 18px;
+}
+.panel-group + .panel-group {
+  border-top: 1px solid var(--border);
+}
+.panel-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.panel-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 0 16px;
+}
+.panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.panel-select {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.toggle-row .mini-chip {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.map-card {
+  top: 196px;
+  left: 48px;
+  bottom: 84px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 22px;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-panel) 95%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 16px 40px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+.map-card-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -6px;
+}
+.map-tip {
+  max-width: 260px;
+}
+.map-overlay.map-legend {
+  left: 48px;
+  bottom: 32px;
+  pointer-events: none;
+}
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.legend-diamond {
+  width: 7px;
+  height: 7px;
+  background: var(--node-muted);
+  transform: rotate(45deg);
+}
+.legend-bar {
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+}
+.legend-ramp {
+  width: 48px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--node-muted), var(--text));
+}
+.map-screen.is-full .map-head,
+.map-screen.is-full .map-card,
+.map-screen.is-full .map-overlay.map-legend {
+  left: 32px;
+}
+@media (max-width: 899px) {
+  .map-head {
+    left: 16px;
+    top: 24px;
+  }
+  .map-actions {
+    right: 16px;
+    top: auto;
+    bottom: 80px;
+  }
+  .map-card,
+  .map-panel-wrap {
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}
+
+/* ---------- Lookup ---------- */
+
+.lookup-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.lookup-input {
+  min-height: 52px;
+  border-radius: 999px;
+  padding: 0 22px;
+  font-size: 17px;
+}
+.lookup-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.list-card > li.is-selected {
+  background: var(--surface-selected);
+}
+.list-card > li:first-child.is-selected {
+  border-radius: 18px 18px 0 0;
+}
+.list-card > li:last-child.is-selected {
+  border-radius: 0 0 18px 18px;
+}
+
+/* ---------- Trails ---------- */
+
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.trail-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trail-entry.is-fresh {
+  animation: trail-in 260ms ease-out;
+}
+.trail-milestone {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.trail-milestone .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.trail-milestone .dot.is-done {
+  background: var(--text);
+}
+.trail-milestone .dot.is-upcoming {
+  border: 1.5px solid var(--node-muted);
+}
+@keyframes trail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trail-entry.is-fresh {
+    animation: none;
+  }
+}

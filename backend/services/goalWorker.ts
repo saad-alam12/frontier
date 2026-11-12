@@ -8,7 +8,7 @@ import type { LlmProvider } from '../llm/provider';
 import type { Database } from '../store/db';
 import { getGoal, listGoals, listMaterials } from '../store/goals';
 import { getSource } from '../store/sources';
-import { compileGoal, extractedSources, profileGoal } from './goals';
+import { compileGoal, extractedSources, profileGoal } from './goalCompile';
 import type { GoalWorkState } from './goals';
 import type { IngestionService } from './ingestion';
 import { pendingRemapNeed, proposeRemap, redrawDraft } from './remap';

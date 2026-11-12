@@ -9,7 +9,8 @@ import { addCapabilities, getGoal, listCapabilities, listTargets, markCapability
 import { seedExampleGraph } from '../store/seed/exampleGraph';
 import { listNodes } from '../store/world';
 import { additionView, applyAddition, dismissAddition, proposeAddition, requestAddition } from './addition';
-import { applyCompile, approveGoalPlan, createGoalFromForm, goalDetail } from './goals';
+import { applyCompile } from './goalCompile';
+import { approveGoalPlan, createGoalFromForm, goalDetail } from './goals';
 import { nextGoalStep } from './goalWorker';
 import { candidatesForGoal } from './planner';
 import { noteBackgroundGaps } from './remap';

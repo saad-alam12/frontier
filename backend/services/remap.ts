@@ -15,8 +15,8 @@ import { dryRun, nowIso, transaction } from '../store/db';
 import { approvePlannedDepths, getGoal, saveGaps, saveRemap } from '../store/goals';
 import { attributeTime, goalBudgetMinutes, previewPlan, spentByGoal } from './budget';
 import type { PlanPreview } from './budget';
-import { applyCompile, compileInput } from './goals';
-import type { CompileOptions } from './goals';
+import { applyCompile, compileInput } from './goalCompile';
+import type { CompileOptions } from './goalCompile';
 import { refreshGoalFields } from './knowledge';
 
 const key = (name: string) => name.trim().toLowerCase();

@@ -1,0 +1,162 @@
+/* Sheets (dialogs) and Settings. */
+
+/* ---------- Sheets (modal dialogs) ---------- */
+
+.sheet {
+  max-width: calc(100vw - 48px);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    0 24px 72px rgba(0, 0, 0, 0.55);
+}
+.sheet::backdrop {
+  background: rgba(10, 9, 8, 0.6);
+  backdrop-filter: blur(6px);
+}
+.sheet[open] {
+  animation: sheet-in 200ms ease-out;
+}
+.sheet[open]::backdrop {
+  animation: fade-in 200ms ease-out;
+}
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 28px 22px;
+}
+.sheet-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.sheet-text {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.sheet-text p {
+  margin: 0 0 10px;
+}
+.sheet-text p:last-child {
+  margin-bottom: 0;
+}
+.sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 28px;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet[open],
+  .sheet[open]::backdrop {
+    animation: none;
+  }
+}
+
+/* ---------- Settings groups (rows like the system settings app) ---------- */
+
+.settings-group {
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.settings-row:last-child {
+  border-bottom: 0;
+}
+.settings-label {
+  font-size: 14px;
+  color: var(--text);
+}
+.settings-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.settings-control .input.is-time {
+  width: 124px;
+}
+.settings-control .input {
+  width: 260px;
+  min-height: 36px;
+  font-size: 14px;
+}
+.settings-control .input.is-narrow {
+  width: 80px;
+}
+.settings-control .btn {
+  min-height: 36px;
+  font-size: 13px;
+}
+/* the erase picker: compact checkable rows, scrolling when the map is large */
+.erase-list {
+  max-height: 336px;
+  overflow-y: auto;
+  border-radius: 14px;
+}
+.erase-list > li {
+  padding: 0;
+}
+.erase-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 18px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.erase-item input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.erase-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* a list of rows inside Settings (the models) reads as one more settings group */
+.settings-list {
+  border-radius: 14px;
+}
+.settings-list > li {
+  padding: 14px 18px;
+}
+.settings-list .input {
+  min-height: 36px;
+  font-size: 14px;
+}
+.settings-path {
+  display: flex;
+  padding: 0 18px 14px;
+  margin-top: -6px;
+}
+.settings-row:has(+ .settings-path) {
+  border-bottom: 0;
+}

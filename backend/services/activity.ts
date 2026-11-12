@@ -9,7 +9,7 @@ import { logTime } from '../store/activity';
 import { getPracticeSet, listProblems, answerFor } from '../store/practice';
 import { activeSession } from '../store/sessions';
 import { timeOwners } from './budget';
-import type { SessionState } from './session';
+import type { SessionState } from './sessionState';
 
 export interface TickInput {
   /** The screen; the backend decides whether session time is free study. */
