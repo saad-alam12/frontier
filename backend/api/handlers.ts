@@ -1,23 +1,22 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ASIDE_MODES } from '../agents/tutor';
 import { activeSession } from '../store/sessions';
-import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import { app, dialog, ipcMain, net, shell } from 'electron';
 import { basename, join } from 'node:path';
-import { cheatSheetView, exportGoalNotes, goalNotesView, NOTE_CHARS, noteFor, saveNote } from '../services/notes';
+import { cheatSheetView, exportGoalNotes, goalNotesView, noteFor, saveNote } from '../services/notes';
 import { notesPdfName } from '../core/notes';
-import { editIdea, mergeCandidates, mergeIdeas, NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
+import { editIdea, mergeCandidates, mergeIdeas } from '../services/mapEdit';
 import { weekReview } from '../services/weekReview';
 import { watchedFolderViews } from '../services/folderWatch';
 import { misconceptionsView } from '../services/misconceptions';
 import { dismissMisconception } from '../services/bugs';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SettingsView, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
+import { checkInput } from './inputs';
 import type { AppContext } from '../context';
 import { getSource } from '../store/sources';
-import { SettingsPatchSchema, modelOptions } from '../settings/schema';
+import { modelOptions } from '../settings/schema';
 import type { Settings } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
@@ -29,14 +28,14 @@ import { tick } from '../services/activity';
 import { statsView } from '../services/stats';
 import { cancelProbe, createProbe, openProbe, submitProbe } from '../services/probe';
 import { planSession } from '../services/planner';
-import { abandonSession, currentSession, pauseSession, respond, startSession, askTutor, ASIDE_MAX_CHARS } from '../services/session';
+import { abandonSession, currentSession, pauseSession, respond, startSession, askTutor } from '../services/session';
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { refreshGoalFields } from '../services/knowledge';
 import { currentPractice, endPracticeSet, handInExam, practiceView, resumeGrading, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
-import { EraseRequestSchema, eraseFromMap, previewErase, removeSource } from '../services/erase';
-import { MAX_TURNS, lookup, openCard } from '../services/lookup';
+import { eraseFromMap, previewErase, removeSource } from '../services/erase';
+import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
 import { deleteGoal, listGoals, requestRemap, startUnverified } from '../store/goals';
 import { getProbeSet } from '../store/probes';
@@ -45,15 +44,12 @@ import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { getDrafts, setDraft } from '../store/drafts';
 import { attachmentDataUrl, saveAttachment } from '../store/attachments';
-import { MAX_CODE_CHARS } from '../core/code';
-import { FigureRequestSchema, figureView } from '../services/figures';
+import { figureView } from '../services/figures';
 import { usageView } from '../services/usage';
 import { answerDialogue, dialogueView, endDialogue, openDialogueView, startDialogue } from '../services/dialogue';
-import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
+import { cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
 
 const execFileAsync = promisify(execFile);
-const CodeRunSchema = z.object({ source: z.string().max(MAX_CODE_CHARS, 'The code is too long to run.'), key: z.string().min(1).max(80) });
-const CodeInstallSchema = z.object({ package: z.string().min(1).max(100), key: z.string().min(1).max(80) });
 
 type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> | ApiOutput<N> };
 
@@ -112,7 +108,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'backups.list': () => ctx.backups(),
     'backups.create': () => ctx.backupNow(),
     'backups.restore': ({ file }) => {
-      ctx.restoreBackup(z.string().parse(file));
+      ctx.restoreBackup(file);
       return null;
     },
     'backups.showFolder': async () => {
@@ -122,7 +118,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'settings.get': () => forWindow(ctx.settings.get()),
     'settings.update': (patch) => {
       const previous = ctx.settings.get();
-      const next = ctx.settings.update(SettingsPatchSchema.parse(patch));
+      const next = ctx.settings.update(patch);
       ctx.onSettingsChanged(previous);
       return forWindow(next);
     },
@@ -138,7 +134,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return { sourceId: source.id, existed };
     },
     // the system's own network stack, so a proxy set on the computer applies
-    'library.addLink': ({ url }) => addLink({ ingestion: ctx.ingestion(), fetcher: (address, init) => net.fetch(address, init), userAgent: `Frontier/${ctx.version}` }, z.string().max(2000).parse(url)),
+    'library.addLink': ({ url }) => addLink({ ingestion: ctx.ingestion(), fetcher: (address, init) => net.fetch(address, init), userAgent: `Frontier/${ctx.version}` }, url),
     'library.addFiles': async () => {
       const result = await dialog.showOpenDialog({
         properties: ['openFile', 'multiSelections'],
@@ -147,7 +143,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return addFiles(result.canceled ? [] : result.filePaths);
     },
     'library.addPaths': async ({ paths }) => {
-      const result = await addFiles(z.array(z.string()).max(200).parse(paths));
+      const result = await addFiles(paths);
       // dropped anywhere on the window: the Library may not be the screen that is open
       if (result.skipped.length) ctx.emit('app.toast', { kind: 'error', message: result.skipped.join(' ') });
       return result;
@@ -176,17 +172,16 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
     'library.watchedFolders': () => watchedFolderViews(ctx.db()),
     'library.watchFolder': async ({ goalId }) => {
-      const goal = z.string().min(1).nullable().parse(goalId ?? null);
       const window = ctx.window();
       const options: Electron.OpenDialogOptions = { title: 'Choose a folder to watch', properties: ['openDirectory'] };
       const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       const path = result.filePaths[0];
       if (result.canceled || !path) return null;
-      const added = await ctx.folderWatcher().add(path, goal);
+      const added = await ctx.folderWatcher().add(path, goalId);
       return { added, folders: await watchedFolderViews(ctx.db()) };
     },
     'library.unwatchFolder': async ({ path }) => {
-      ctx.folderWatcher().remove(z.string().min(1).parse(path));
+      ctx.folderWatcher().remove(path);
       return watchedFolderViews(ctx.db());
     },
     'library.scanFolders': async () => {
@@ -205,7 +200,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'notes.goal': ({ goalId }) => goalNotesView(ctx.db(), String(goalId)),
     'notes.sheet': ({ goalId, all }) => cheatSheetView(ctx.db(), String(goalId), { all: all === true }),
     'notes.idea': ({ nodeId }) => ({ note: noteFor(ctx.db(), String(nodeId)) }),
-    'notes.saveIdea': ({ nodeId, text }) => saveNote(ctx.db(), String(nodeId), z.string().max(NOTE_CHARS, `A note can be at most ${NOTE_CHARS} characters.`).parse(text)),
+    'notes.saveIdea': ({ nodeId, text }) => saveNote(ctx.db(), nodeId, text),
     'notes.print': async () => {
       const window = ctx.window();
       if (!window) return { printed: false };
@@ -216,7 +211,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const window = ctx.window();
       if (!window) return { path: null };
       const title = goalNotesView(ctx.db(), String(goalId)).title;
-      const base = notesPdfName(title, z.enum(['notes', 'sheet']).parse(kind));
+      const base = notesPdfName(title, kind);
       const result = await dialog.showSaveDialog(window, { defaultPath: join(app.getPath('documents'), base), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
       if (result.canceled || !result.filePath) return { path: null };
       const pdf = await window.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { top: 0.5, bottom: 0.5, left: 0.55, right: 0.55 } });
@@ -239,7 +234,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return detail(goalId);
     },
     'goals.setStatus': ({ goalId, status }) => {
-      setGoalStatus(ctx.db(), goalId, z.enum(['active', 'paused', 'done']).parse(status));
+      setGoalStatus(ctx.db(), goalId, status);
       ctx.emit('goals.changed', { goalId });
       return detail(goalId);
     },
@@ -319,7 +314,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       if (snap.status !== 'active' && snap.goalId) ctx.goalWorker().refresh(snap.goalId); // a finished session may call for a new map
       return snap;
     },
-    'session.ask': ({ sessionId, mode, question }) => askTutor(ctx.practiceDeps(), sessionId, { mode: z.enum(ASIDE_MODES).parse(mode), question: z.string().max(ASIDE_MAX_CHARS).optional().parse(question) }),
+    'session.ask': ({ sessionId, mode, question }) => askTutor(ctx.practiceDeps(), sessionId, { mode, question }),
     'session.cancel': ({ sessionId }) => ctx.sessionWork.cancel(sessionId),
     'session.dismissStart': () => {
       ctx.sessionWork.dismissStart();
@@ -357,25 +352,19 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'practice.start': ({ goalId, kind, nodeIds, level, problems }) =>
       startPractice(ctx.practiceDeps(), goalId, {
         kind,
-        maxProblems: problems === undefined ? undefined : z.number().int().min(1).max(8).parse(problems),
-        focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
+        maxProblems: problems,
+        focus: nodeIds?.length ? { nodeIds, level } : undefined,
       }),
     'practice.handIn': ({ setId }) => handInExam(ctx.db(), String(setId)),
-    'dialogue.start': ({ goalId, kind }) => startDialogue(dialogueDeps(), String(goalId), z.enum(['oral', 'teach']).parse(kind)),
+    'dialogue.start': ({ goalId, kind }) => startDialogue(dialogueDeps(), goalId, kind),
     'dialogue.get': ({ dialogueId }) => dialogueView(ctx.db(), String(dialogueId)),
     'dialogue.open': ({ goalId }) => openDialogueView(ctx.db(), String(goalId)),
-    'dialogue.answer': ({ dialogueId, answer }) => answerDialogue(dialogueDeps(), String(dialogueId), z.string().max(12_000, 'The answer is too long.').parse(answer)),
+    'dialogue.answer': ({ dialogueId, answer }) => answerDialogue(dialogueDeps(), dialogueId, answer),
     'dialogue.end': ({ dialogueId }) => endDialogue(dialogueDeps(), String(dialogueId)),
     'practice.submit': ({ problemId, answer, confidence, code, attachments, quote }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code, attachments, quote }),
-    'code.run': (input) => {
-      const { source, key } = CodeRunSchema.parse(input);
-      return ctx.codeRunner().run(source, key);
-    },
-    'code.stop': ({ key }) => ({ stopped: ctx.codeRunner().stop(String(key)) }),
-    'code.install': (input) => {
-      const { package: pkg, key } = CodeInstallSchema.parse(input);
-      return ctx.codeRunner().install(pkg, key);
-    },
+    'code.run': ({ source, key }) => ctx.codeRunner().run(source, key),
+    'code.stop': ({ key }) => ({ stopped: ctx.codeRunner().stop(key) }),
+    'code.install': ({ package: pkg, key }) => ctx.codeRunner().install(pkg, key),
     'code.python': async ({ lookAgain }) => {
       if (lookAgain) ctx.codeRunner().lookAgain();
       return ctx.codeRunner().info();
@@ -387,28 +376,22 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'map.view': () => mapView(ctx.db()),
     'map.card': ({ nodeId }) => nodeCard(ctx.db(), nodeId),
-    'map.erasePreview': (request) => previewErase(ctx.db(), EraseRequestSchema.parse(request)),
+    'map.erasePreview': (request) => previewErase(ctx.db(), request),
     'map.erase': (request) => {
-      const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, figuresDir: ctx.paths().figures, isReading: (id) => ctx.ingestion().isRunning(id) }, EraseRequestSchema.parse(request));
+      const result = eraseFromMap({ db: ctx.db(), sourcesDir: ctx.paths().sources, figuresDir: ctx.paths().figures, isReading: (id) => ctx.ingestion().isRunning(id) }, request);
       for (const goalId of result.goalsToMap) ctx.goalWorker().refresh(goalId); // goals left with no map are mapped again
       return result;
     },
-    'map.editIdea': (input) => {
-      const { nodeId, name, statement } = z.object({ nodeId: z.string().min(1), name: z.string().max(NAME_CHARS * 2), statement: z.string().max(STATEMENT_CHARS * 2) }).parse(input);
+    'map.editIdea': ({ nodeId, name, statement }) => {
       const result = editIdea(ctx.db(), nodeId, { name, statement });
       // matching and Lookup read the idea by meaning: its embedding follows the new text
       if (result.changed) void ctx.ingestion().ensureEmbeddings().catch(() => undefined);
       return result;
     },
-    'map.mergeCandidates': ({ nodeId, query }) => mergeCandidates(ctx.db(), String(nodeId), z.string().max(200).optional().parse(query)),
-    'map.mergeIdeas': (input) => {
-      const { keepId, dropId } = z.object({ keepId: z.string().min(1), dropId: z.string().min(1) }).parse(input);
-      return mergeIdeas(ctx.db(), keepId, dropId);
-    },
-    'lookup.search': (input) => {
-      const { query, history } = z.object({ query: z.string().trim().min(1).max(500), history: z.array(z.object({ question: z.string().max(500), answer: z.string().max(4000) })).max(MAX_TURNS * 2).optional() }).parse(input);
-      return lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query, history);
-    },
+    'map.mergeCandidates': ({ nodeId, query }) => mergeCandidates(ctx.db(), nodeId, query),
+    'map.mergeIdeas': ({ keepId, dropId }) => mergeIdeas(ctx.db(), keepId, dropId),
+    'lookup.search': ({ query, history }) =>
+      lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query, history),
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
     'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),
@@ -419,10 +402,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'stats.view': (filter) => statsView(ctx.db(), filter),
     'stats.misconceptions': () => misconceptionsView(ctx.db()),
     'stats.dismissMisconception': ({ bugId }) => {
-      dismissMisconception(ctx.db(), z.string().min(1).parse(bugId));
+      dismissMisconception(ctx.db(), bugId);
       return misconceptionsView(ctx.db());
     },
-    'stats.week': ({ weekOf }) => weekReview(ctx.db(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().parse(weekOf ?? null)),
+    'stats.week': ({ weekOf }) => weekReview(ctx.db(), weekOf),
     'drafts.get': ({ keys }) => getDrafts(ctx.db(), keys),
     'drafts.set': ({ key, value }) => {
       setDraft(ctx.db(), key, value);
@@ -431,16 +414,15 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'attachments.save': (upload) => ({ name: saveAttachment(ctx.paths().attachments, upload) }),
     'attachments.read': ({ name }) => attachmentDataUrl(ctx.paths().attachments, name),
     'settings.usage': () => usageView(ctx.db()),
-    'figures.read': (input) => figureView(ctx.db(), ctx.paths().figures, FigureRequestSchema.parse(input).figureId),
+    'figures.read': (input) => figureView(ctx.db(), ctx.paths().figures, input.figureId),
     'cards.queue': ({ goalId }) => cardQueue(ctx.db(), goalId),
-    'cards.review': (input) => {
-      const { cardId, rating } = ReviewInputSchema.parse(input);
+    'cards.review': ({ cardId, rating, goalId }) => {
       reviewCard(ctx.db(), cardId, rating);
       cardsChanged(null);
-      return cardQueue(ctx.db(), input.goalId);
+      return cardQueue(ctx.db(), goalId);
     },
     'cards.undoReview': ({ cardId, goalId }) => {
-      undoReview(ctx.db(), z.string().parse(cardId));
+      undoReview(ctx.db(), cardId);
       cardsChanged(null);
       return cardQueue(ctx.db(), goalId, new Date(), cardId);
     },
@@ -479,8 +461,13 @@ export function registerIpc(ctx: AppContext, fromApp: (url: string) => boolean):
     if (!fromApp(event.senderFrame?.url ?? '')) return { ok: false, error: 'This page may not call Frontier.' };
     const handler = (handlers as Record<string, (input: unknown) => unknown>)[name];
     if (!handler) return { ok: false, error: `Unknown method ${name}` };
+    const checked = checkInput(name as ApiName, input);
+    if (!checked.ok) {
+      ctx.log.info(`call ${name}`, `input refused at ${checked.field || 'the top'}: ${checked.message}`);
+      return { ok: false, error: checked.message };
+    }
     try {
-      return { ok: true, value: await handler(input) };
+      return { ok: true, value: await handler(checked.data) };
     } catch (error) {
       if (!isCancelled(error)) ctx.log.error(`call ${name}`, error);
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
