@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import { app, dialog, ipcMain, net, shell } from 'electron';
 import { basename, join } from 'node:path';
-import { exportGoalNotes } from '../services/notes';
+import { cheatSheetView, exportGoalNotes, goalNotesView, NOTE_CHARS, noteFor, saveNote } from '../services/notes';
+import { notesPdfName } from '../core/notes';
 import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
@@ -172,6 +173,27 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const result = await dialog.showSaveDialog({ defaultPath: join(app.getPath('documents'), fileName), filters: [{ name: 'Markdown', extensions: ['md'] }] });
       if (result.canceled || !result.filePath) return { path: null };
       await writeFile(result.filePath, markdown, 'utf8');
+      return { path: result.filePath };
+    },
+    'notes.goal': ({ goalId }) => goalNotesView(ctx.db(), String(goalId)),
+    'notes.sheet': ({ goalId, all }) => cheatSheetView(ctx.db(), String(goalId), { all: all === true }),
+    'notes.idea': ({ nodeId }) => ({ note: noteFor(ctx.db(), String(nodeId)) }),
+    'notes.saveIdea': ({ nodeId, text }) => saveNote(ctx.db(), String(nodeId), z.string().max(NOTE_CHARS, `A note can be at most ${NOTE_CHARS} characters.`).parse(text)),
+    'notes.print': async () => {
+      const window = ctx.window();
+      if (!window) return { printed: false };
+      const printed = await new Promise<boolean>((resolve) => window.webContents.print({}, (success) => resolve(success)));
+      return { printed };
+    },
+    'notes.savePdf': async ({ goalId, kind }) => {
+      const window = ctx.window();
+      if (!window) return { path: null };
+      const title = goalNotesView(ctx.db(), String(goalId)).title;
+      const base = notesPdfName(title, z.enum(['notes', 'sheet']).parse(kind));
+      const result = await dialog.showSaveDialog(window, { defaultPath: join(app.getPath('documents'), base), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (result.canceled || !result.filePath) return { path: null };
+      const pdf = await window.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { top: 0.5, bottom: 0.5, left: 0.55, right: 0.55 } });
+      await writeFile(result.filePath, pdf);
       return { path: result.filePath };
     },
     'goals.create': ({ form, draft }) => {

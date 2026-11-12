@@ -40,6 +40,8 @@ export class AppContext {
   sink: EventSink = () => {};
   /** Told when settings changed, for what lives outside this context (the number on the app's icon). */
   afterSettings: () => void = () => {};
+  /** The app's window, for printing what it shows; the app sets it. */
+  window: () => Electron.BrowserWindow | null = () => null;
   private cachedProvider: ThrottledProvider | null = null;
   private cachedDb: Database | null = null;
   /** Databases of data folders the learner switched away from: closed at quit, never under work that still writes to them. */

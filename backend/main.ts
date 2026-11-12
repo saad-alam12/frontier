@@ -162,6 +162,7 @@ void app.whenReady().then(() => {
     send(event, payload);
     if (event === 'cards.changed') updateBadge(ctx);
   };
+  ctx.window = () => mainWindow;
   registerIpc(ctx, (url) => isAppPage(url, appUrl()));
   createWindow();
   ctx.backupIfDue();

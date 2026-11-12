@@ -32,6 +32,8 @@ import { SessionMaker } from '../backend/services/sessionMaker';
 import { SessionWork } from '../backend/services/sessionWork';
 import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
 import { answerDialogue, startDialogue } from '../backend/services/dialogue';
+import { saveNote } from '../backend/services/notes';
+import { appendSessionEvent, listEndedSessions } from '../backend/store/sessions';
 
 const [folderArg, ...flags] = process.argv.slice(2);
 /** A diagram and a plot for the explanation (`--drawings`), as the tutor may draw them. */
@@ -249,6 +251,19 @@ const adding = new FakeProvider({
 });
 await proposeAddition({ db, provider: adding }, pricing.id);
 refreshGoalFields(db);
+
+// the learner's note on an idea and an example they asked for in an earlier session, for the goal's notes
+saveNote(db, id('nash'), 'Check each cell in turn: hold the other firm fixed, then ask whether moving pays.');
+const pastSession = listEndedSessions(db, exam.id, 1)[0];
+if (pastSession) {
+  appendSessionEvent(db, pastSession.id, 'aside', {
+    nodeId: id('nash'),
+    stage: 'explain',
+    mode: 'example',
+    question: '',
+    answer: 'Two cafés on one street both charge 3 euros. If either raises to 4 it loses its customers to the other, and dropping to 2 loses money on every cup: neither gains by moving alone, so (3, 3) is stable.',
+  });
+}
 
 // a mock exam under way, one problem answered and graded in the background (`--exam`)
 if (flags.includes('--exam')) {

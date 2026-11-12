@@ -95,3 +95,25 @@ export function listSessionEvents(db: Database, sessionId: string): SessionEvent
     payload: parseJson<Record<string, unknown>>(r.payload, {}),
   }));
 }
+
+/**
+ * Worked examples the tutor wrote on these ideas, newest first: the worked-example cards of sessions
+ * and the examples the learner asked for while a card was open.
+ */
+export function workedExamplesFor(db: Database, nodeIds: Iterable<string>): { nodeId: string; markdown: string; at: string }[] {
+  const ids = [...nodeIds];
+  if (ids.length === 0) return [];
+  const rows = db
+    .prepare(
+      `SELECT payload, at FROM session_events
+       WHERE ((kind = 'card' AND json_extract(payload, '$.stage') = 'support') OR (kind = 'aside' AND json_extract(payload, '$.mode') = 'example'))
+         AND json_extract(payload, '$.nodeId') IN (SELECT value FROM json_each(?))
+       ORDER BY at DESC, rowid DESC`,
+    )
+    .all(JSON.stringify(ids)) as { payload: string; at: string }[];
+  return rows.flatMap((r) => {
+    const p = parseJson<{ nodeId?: string; card?: { markdown?: unknown }; answer?: unknown }>(r.payload, {});
+    const markdown = typeof p.card?.markdown === 'string' ? p.card.markdown : typeof p.answer === 'string' ? p.answer : null;
+    return p.nodeId && markdown?.trim() ? [{ nodeId: p.nodeId, markdown, at: r.at }] : [];
+  });
+}

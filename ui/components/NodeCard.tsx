@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
+import { IdeaNote } from './IdeaNote';
 import { VerticalPath } from './paths';
 import { depthName } from '../lib/stages';
 
@@ -64,6 +65,8 @@ export function NodeCardView({
           {card.handle && <div className="t-caption text-secondary">Handle: {card.handle}</div>}
         </div>
       )}
+
+      <IdeaNote key={card.id} nodeId={card.id} note={card.note} />
 
       <div className="flex flex-col gap-[10px]">
         <div className="depth-ladder" role="img" aria-label={`Depth ${card.depth} of 5${card.targetDepth ? `, target ${card.targetDepth}` : ''}`}>

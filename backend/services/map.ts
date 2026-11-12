@@ -11,6 +11,7 @@ import { PASS_SCORE } from '../core/types';
 import type { Depth, KnowledgeNode, Tier } from '../core/types';
 import type { Database } from '../store/db';
 import { listBugsForNode } from '../store/bugs';
+import { ideaNotesFor } from '../store/ideaNotes';
 import { cardCountsByNode } from '../store/cards';
 import { firstPasses } from '../store/evidence';
 import { listGoals, listTargets } from '../store/goals';
@@ -115,6 +116,8 @@ export interface NodeCard {
   tier: Tier;
   ownStatement: string | null;
   handle: string | null;
+  /** The learner's free note on it. */
+  note: string | null;
   /** One entry per chain into this idea (alternative arguments are separate). */
   builtOn: IdeaRef[][];
   leadsTo: IdeaRef[];
@@ -153,6 +156,7 @@ export function nodeCard(db: Database, nodeId: string, now = new Date()): NodeCa
     recall: state ? recallProbability(state.fsrs, now) : 0,
     tier: state?.tier ?? 'archive',
     ownStatement: state?.ownStatement ?? null,
+    note: ideaNotesFor(db, [node.id]).get(node.id) ?? null,
     handle: state?.handle ?? null,
     builtOn: (view.index.into.get(node.id) ?? []).map((c) => c.premises.map(ref)),
     leadsTo: [...new Set((view.index.outOf.get(node.id) ?? []).map((c) => c.conclusion))].map(ref),

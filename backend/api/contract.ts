@@ -35,6 +35,7 @@ import type { CodeAnswer } from '../core/code';
 import type { InstallOutcome, PythonInfo, RunOutcome } from '../services/codeRunner';
 import type { UsageView } from '../services/usage';
 import type { DialogueView } from '../services/dialogue';
+import type { CheatSheetView, GoalNotesView } from '../services/notes';
 import type { DialogueKind } from '../store/dialogues';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
@@ -87,6 +88,7 @@ export type { InstallOutcome, PythonInfo, RunOutcome, UsageView };
 export type { Preset } from '../settings/schema';
 export type { ExamReport } from '../core/exam';
 export type { DialogueKind, DialogueView };
+export type { CheatSheetView, GoalNotesView, NoteIdeaView } from '../services/notes';
 
 export interface AppInfo {
   version: string;
@@ -132,6 +134,18 @@ export interface ApiMethods {
   'goals.get': { input: { goalId: string }; output: GoalDetail };
   /** Save the goal as Markdown notes where the learner chooses; null when they cancel. */
   'goals.exportNotes': { input: { goalId: string }; output: { path: string | null } };
+  /** A goal's notes: per skill, each idea with own words, handle, free note, worked examples and flashcards. */
+  'notes.goal': { input: { goalId: string }; output: GoalNotesView };
+  /** The goal on one page before an exam; `all` keeps every idea. */
+  'notes.sheet': { input: { goalId: string; all?: boolean }; output: CheatSheetView };
+  /** The learner's free note on an idea. */
+  'notes.idea': { input: { nodeId: string }; output: { note: string | null } };
+  /** Save the learner's free note on an idea; empty removes it. */
+  'notes.saveIdea': { input: { nodeId: string; text: string }; output: { nodeId: string; note: string | null } };
+  /** Print what the window shows (the notes or the sheet) with the system's print dialog. */
+  'notes.print': { input: undefined; output: { printed: boolean } };
+  /** Save what the window shows as a PDF where the learner chooses; null when they cancel. */
+  'notes.savePdf': { input: { goalId: string; kind: 'notes' | 'sheet' }; output: { path: string | null } };
   /**
    * Creates the goal with its material; reading, profiling and compiling continue in the background.
    * A draft is compiled and previewed; it joins the plan when approved.

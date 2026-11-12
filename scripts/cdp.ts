@@ -7,6 +7,7 @@
  * (the sandbox folder holds a settings.json whose `dataFolder` points at a test folder). Then:
  *   npx tsx scripts/cdp.ts 9333 shot out.png      saves a PNG of the window
  *   npx tsx scripts/cdp.ts 9333 eval "document.title"   prints the result as JSON (promises awaited)
+ *   npx tsx scripts/cdp.ts 9333 print out.png     saves a PNG of the window with its print styles
  */
 import { writeFileSync } from 'node:fs';
 
@@ -17,8 +18,8 @@ interface Target {
 }
 
 const [portArg, command, arg] = process.argv.slice(2);
-if (!portArg || !command || !arg || !['shot', 'eval'].includes(command)) {
-  console.error('usage: tsx scripts/cdp.ts <port> shot <file.png> | eval "<expression>"');
+if (!portArg || !command || !arg || !['shot', 'eval', 'print'].includes(command)) {
+  console.error('usage: tsx scripts/cdp.ts <port> shot <file.png> | print <file.png> | eval "<expression>"');
   process.exit(2);
 }
 
@@ -50,6 +51,13 @@ function send<T>(method: string, params: Record<string, unknown> = {}): Promise<
 
 if (command === 'shot') {
   const { data } = await send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
+  writeFileSync(arg, Buffer.from(data, 'base64'));
+  console.log(arg);
+} else if (command === 'print') {
+  // Electron's window offers no PDF over this protocol; the print styles show on screen instead
+  await send('Emulation.setEmulatedMedia', { media: 'print' });
+  const { data } = await send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
+  await send('Emulation.setEmulatedMedia', { media: '' });
   writeFileSync(arg, Buffer.from(data, 'base64'));
   console.log(arg);
 } else {

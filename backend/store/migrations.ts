@@ -499,6 +499,17 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 21,
+    // The learner's free note on an idea (you layer); it goes with the idea when the idea is erased.
+    sql: `
+      CREATE TABLE idea_notes (
+        node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

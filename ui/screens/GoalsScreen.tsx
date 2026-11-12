@@ -9,6 +9,7 @@ import { GoalFormScreen } from './goals/GoalForm';
 import { GoalPage } from './goals/GoalPage';
 import { GoalWizard } from './goals/GoalWizard';
 import { DialogueScreen } from './DialogueScreen';
+import { NotesScreen } from './NotesScreen';
 import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
 import { startSessionInBackground } from '../lib/sessionWork';
 import type { ChooseInit } from '../components/ChooseSheet';
@@ -21,7 +22,9 @@ export type GoalsView =
   | { name: 'edit'; goalId: string }
   | { name: 'draft'; goalId: string }
   /** An oral exam or a teach-back on the goal. */
-  | { name: 'talk'; goalId: string; dialogueId: string };
+  | { name: 'talk'; goalId: string; dialogueId: string }
+  /** The goal's notes and cheat sheet. */
+  | { name: 'notes'; goalId: string };
 
 export function GoalsScreen({
   onNavigate,
@@ -100,6 +103,12 @@ export function GoalsScreen({
     );
   }
 
+  if (view.name === 'notes') {
+    const goalId = view.goalId;
+    const detail = find(goalId);
+    return <NotesScreen key={goalId} goalId={goalId} goalTitle={detail ? goalName(detail) : ''} onBack={() => setView({ name: 'goal', goalId })} onBackToGoals={() => setView({ name: 'list' })} />;
+  }
+
   if (view.name === 'goal') {
     const detail = find(view.goalId);
     if (detail) {
@@ -120,6 +129,7 @@ export function GoalsScreen({
           onReviewCards={() => onReviewCards(detail.goal.id)}
           onOpenPractice={onOpenPractice}
           onTalk={(dialogueId) => setView({ name: 'talk', goalId: detail.goal.id, dialogueId })}
+          onOpenNotes={() => setView({ name: 'notes', goalId: detail.goal.id })}
         />
       );
     }

@@ -42,6 +42,7 @@ export function GoalPage({
   onReviewCards,
   onOpenPractice,
   onTalk,
+  onOpenNotes,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -59,6 +60,8 @@ export function GoalPage({
   onOpenPractice: (setId: string) => void;
   /** Open an oral exam or a teach-back that just started. */
   onTalk: (dialogueId: string) => void;
+  /** Open the goal's notes and cheat sheet. */
+  onOpenNotes: () => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -78,13 +81,6 @@ export function GoalPage({
       live = false;
     };
   }, [goal.id]);
-  /** Where the notes were saved, for a short confirmation. */
-  const [exported, setExported] = useState<string | null>(null);
-  useEffect(() => {
-    if (!exported) return;
-    const t = window.setTimeout(() => setExported(null), 2400);
-    return () => window.clearTimeout(t);
-  }, [exported]);
   /** The goal an open session belongs to (null for a free session); undefined when none is open. */
   const [openSession, setOpenSession] = useState<string | null | undefined>(undefined);
 
@@ -223,19 +219,8 @@ export function GoalPage({
       <div className="section-head">
         <Breadcrumb items={[{ label: 'Goals', onClick: onBack }, { label: goalName(detail) }]} />
         <span className="flex shrink-0 items-baseline gap-[18px]">
-          <button
-            type="button"
-            className="link-button"
-            title="Save this goal's ideas, your own words and your flashcards as a Markdown file"
-            disabled={busy !== null}
-            onClick={() =>
-              void run('export', async () => {
-                const { path } = await call('goals.exportNotes', { goalId: goal.id });
-                setExported(path);
-              })
-            }
-          >
-            {exported ? 'Notes saved' : 'Export notes'}
+          <button type="button" className="link-button" title="Your own words, notes, worked examples and flashcards; a cheat sheet; print or PDF" onClick={onOpenNotes}>
+            Notes
           </button>
           <button type="button" className="link-button" onClick={onEdit}>
             Edit goal
