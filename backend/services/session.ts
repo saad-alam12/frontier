@@ -521,7 +521,7 @@ async function respondToPhase(deps: SessionDeps, session: SessionRecord<SessionS
         state.phase = 'close';
         break;
       }
-      submitPracticeAnswer(deps, problem.id, response.answer, response.confidence ?? null, { code: response.code });
+      submitPracticeAnswer(deps, problem.id, response.answer, response.confidence ?? null, { code: response.code, attachments: response.attachments, quote: response.quote });
       state.practiceRevealed = problem.id;
       appendSessionEvent(db, sessionId, 'practice-answer', { setId, problemId: problem.id });
       break;

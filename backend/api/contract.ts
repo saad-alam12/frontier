@@ -237,7 +237,8 @@ export interface ApiMethods {
   /** `problems`: at most this many (the time the learner has on Today). */
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel; problems?: number }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
-  'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer }; output: PracticeView };
+  /** `attachments`: stored image names (attachments.save); `quote`: the part of the problem the answer replies to. */
+  'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer; attachments?: string[]; quote?: string }; output: PracticeView };
   /** An oral exam or a teach-back on a goal's learned ideas: it opens with the first question. */
   'dialogue.start': { input: { goalId: string; kind: DialogueKind }; output: DialogueView };
   'dialogue.get': { input: { dialogueId: string }; output: DialogueView };

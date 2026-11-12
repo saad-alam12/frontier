@@ -108,6 +108,41 @@ describe('code in answers (B19)', () => {
     expect(stored?.score).toBeCloseTo(0.8);
   });
 
+  it('a practice answer can be a photo of handwritten work replying to part of the problem', async () => {
+    const { db, ids, attachmentsDir } = world();
+    const nash = ids.get('nash') as string;
+    const goal = createGoal(db, 'Pass the game theory exam');
+    addCapabilities(db, goal.id, [{ statement: 'Can find equilibria', targets: [{ nodeId: nash, depth: 3 }] }]);
+    refreshGoalFields(db);
+    recordEvidence(db, { nodeId: nash, kind: 'explain', score: 0.9, reasoning: 'learned', at: new Date(Date.now() - 60 * 86_400_000).toISOString() });
+    const graded: CompleteRequest<unknown>[] = [];
+    const provider = new FakeProvider({
+      problemGenerator: (req: CompleteRequest<unknown>) => {
+        const specs = [...(req.messages[0]?.content ?? '').matchAll(/### Problem (\d+)/g)].map((m) => Number(m[1]));
+        return { problems: specs.map((index) => ({ index, statement: 'Find the pure equilibria of the game with payoffs (3,3), (0,5), (5,0), (1,1).', solution: 'Only (1,1) survives.', rubric: ['checks deviations', 'finds (1,1)'] })) };
+      },
+      grader: (req: CompleteRequest<unknown>) => {
+        graded.push(req);
+        const ideas = [...(req.messages[0]?.content ?? '').matchAll(/- \[(node_[a-z0-9_]+)\]/g)].map((m) => ({ nodeId: m[1] as string, score: 7 }));
+        return { score: 7, feedback: 'Right cell, one deviation unchecked.', ideas, misconception: null };
+      },
+    });
+    const deps = { db, provider, attachmentsDir };
+    const set = await startPractice(deps, goal.id, { focus: { nodeIds: [nash] } });
+    const problem = set?.problems[0];
+    const photo = saveImageFile(attachmentsDir, PNG, 'image/png');
+    // an image that was never saved is refused before anything is stored
+    expect(() => submitPracticeAnswer(deps, problem?.id ?? '', '', null, { attachments: [`${'0'.repeat(64)}.png`] })).toThrow(/not saved/);
+    const view = submitPracticeAnswer(deps, problem?.id ?? '', '', 0.66, { attachments: [photo], quote: 'payoffs (3,3), (0,5)' });
+    expect(view.problems[0]?.answer).toMatchObject({ attachments: [photo], quote: 'payoffs (3,3), (0,5)' });
+    await settleGrading();
+    // an image alone is an answer, not "no idea"
+    expect(graded).toHaveLength(1);
+    expect(graded[0]?.messages[0]?.images).toHaveLength(1);
+    expect(graded[0]?.messages[0]?.content).toContain('## The learner is replying to this part of the problem\n"payoffs (3,3), (0,5)"');
+    expect(graded[0]?.messages[0]?.content).toContain('The learner attached an image to the answer');
+  });
+
   it('Settings keep the Python path, also when another field of the file is broken', () => {
     expect(SettingsSchema.parse({}).pythonPath).toBe('');
     expect(SettingsPatchSchema.parse({ pythonPath: '/opt/homebrew/bin/python3' })).toEqual({ pythonPath: '/opt/homebrew/bin/python3' });

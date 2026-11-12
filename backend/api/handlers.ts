@@ -343,7 +343,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'dialogue.open': ({ goalId }) => openDialogueView(ctx.db(), String(goalId)),
     'dialogue.answer': ({ dialogueId, answer }) => answerDialogue(dialogueDeps(), String(dialogueId), z.string().max(12_000, 'The answer is too long.').parse(answer)),
     'dialogue.end': ({ dialogueId }) => endDialogue(dialogueDeps(), String(dialogueId)),
-    'practice.submit': ({ problemId, answer, confidence, code }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code }),
+    'practice.submit': ({ problemId, answer, confidence, code, attachments, quote }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code, attachments, quote }),
     'code.run': (input) => {
       const { source, key } = CodeRunSchema.parse(input);
       return ctx.codeRunner().run(source, key);

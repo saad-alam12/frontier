@@ -1,11 +1,13 @@
 import { plainError } from '../lib/errors';
-import { useCallback, useEffect, useState } from 'react';
-import type { CodeAnswer, PracticeView } from '../../backend/api/contract';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PracticeView } from '../../backend/api/contract';
 import { call, onEvent } from '../api';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { PracticeFlow } from '../components/PracticeFlow';
+import type { PracticeAnswerExtras } from '../components/PracticeFlow';
+import { QuoteReply } from '../components/QuoteReply';
 import { VerticalPath } from '../components/paths';
 import { ConfirmDialog } from '../components/Dialog';
 import { ExamReportView, formatLeft, useSecondsLeft } from '../components/ExamReport';
@@ -17,6 +19,7 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmHandIn, setConfirmHandIn] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   const left = useSecondsLeft(view?.exam && !view.exam.over ? view.exam.endsAt : null);
 
   const refresh = useCallback(async () => {
@@ -33,11 +36,11 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
     });
   }, [refresh, setId]);
 
-  const submit = async (problemId: string, answer: string, confidence: number | null, code?: CodeAnswer) => {
+  const submit = async (problemId: string, answer: string, confidence: number | null, extras: PracticeAnswerExtras) => {
     setBusy(true);
     setError(null);
     try {
-      const next = await call('practice.submit', { problemId, answer, confidence, ...(code ? { code } : {}) });
+      const next = await call('practice.submit', { problemId, answer, confidence, ...extras });
       setView(next);
       // an exam goes straight on to the next problem: nothing is revealed until it is handed in
       if (!next.exam) setRevealed(problemId);
@@ -133,7 +136,9 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
   );
 
   return (
-    <Screen aside={aside} asideLabel={mock ? 'Mock exam' : 'This set'}>
+    <Screen aside={aside} asideLabel={mock ? 'Mock exam' : 'This set'} mainRef={mainRef}>
+      {/* select part of a problem to reply to it */}
+      <QuoteReply containerRef={mainRef} />
       <div className="flex flex-col gap-[26px]">
         <Breadcrumb items={[{ label: 'Today', onClick: onBack }, { label: view.goalTitle || 'Practice' }, { label: mock ? 'Mock exam' : 'Practice' }]} />
         <div className="flex flex-col gap-[14px]">
@@ -146,7 +151,7 @@ export function PracticeScreen({ setId, onBack }: { setId: string; onBack: () =>
       </div>
       {error && <Notice error>{error}</Notice>}
       {exam?.over && exam.report && <ExamReportView report={exam.report} names={new Map(view.problems.flatMap((p) => (p.ideas ?? []).map((i) => [i.nodeId, i.name] as const)))} />}
-      <PracticeFlow view={view} revealedId={revealed} busy={busy} onSubmit={(id, a, c, code) => void submit(id, a, c, code)} onNext={() => setRevealed(null)} />
+      <PracticeFlow view={view} revealedId={revealed} busy={busy} onSubmit={(id, a, c, extras) => void submit(id, a, c, extras)} onNext={() => setRevealed(null)} />
       {exam?.over && (
         <div className="button-row border-t border-line pt-[18px]">
           <Button kind="primary" onClick={onBack}>

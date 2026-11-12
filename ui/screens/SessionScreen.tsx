@@ -550,7 +550,7 @@ function PhaseView({ snap, busy, refocus, onSend, onAsk, onDone }: { snap: Sessi
             <h2 className="t-heading m-0">Before we close: practice</h2>
             <p className="m-0 text-soft">A few ideas from earlier sessions are starting to fade. These problems use them together; they never say which.</p>
           </div>
-          <PracticeFlow view={snap.practice} revealedId={snap.practiceRevealed} busy={busy} onSubmit={(_id, answer, confidence, code) => onSend({ answer, confidence: confidence ?? undefined, ...(code ? { code } : {}) })} onNext={() => onSend({ answer: '' })} />
+          <PracticeFlow view={snap.practice} revealedId={snap.practiceRevealed} busy={busy} onSubmit={(_id, answer, confidence, extras) => onSend({ answer, confidence: confidence ?? undefined, ...(extras.code ? { code: extras.code } : {}), ...(extras.attachments ? { attachments: extras.attachments } : {}), ...(extras.quote ? { quote: extras.quote } : {}) })} onNext={() => onSend({ answer: '' })} />
         </section>
       ) : null;
     case 'close':

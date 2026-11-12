@@ -2,6 +2,7 @@ import type { PracticeProblemView, PracticeView } from '../../backend/api/contra
 import { confidenceLabel } from '../../backend/core/types';
 import type { CodeAnswer as CodeAnswerValue } from '../../backend/api/contract';
 import { AnswerActions, AnswerSurface } from './AnswerSurface';
+import { ResponseExtras, clearAnswerExtras, useAnswerExtras, withExtras } from './AnswerExtras';
 import { CodeAnswer, SentCode, codeOf } from './CodeAnswer';
 import type { CodeDraft } from './CodeAnswer';
 import { Button } from './controls';
@@ -12,7 +13,13 @@ type Draft = { answer: string; confidence: number | null; code?: CodeDraft | nul
 const EMPTY: Draft = { answer: '', confidence: null, code: null };
 
 /** An answer to a practice problem as the screens send it. */
-export type PracticeSubmit = (problemId: string, answer: string, confidence: number | null, code?: CodeAnswerValue) => void;
+/** What goes with a practice answer besides its text: code, attached images, the part of the problem it replies to. */
+export interface PracticeAnswerExtras {
+  code?: CodeAnswerValue;
+  attachments?: string[];
+  quote?: string;
+}
+export type PracticeSubmit = (problemId: string, answer: string, confidence: number | null, extras: PracticeAnswerExtras) => void;
 
 const RUNG_LABEL = ['Worked example', 'Finish the solution', 'Exercise', 'Several ideas at once', 'Find the way in'];
 
@@ -71,11 +78,14 @@ function OpenProblem({ problem, index, total, busy, onSubmit, exam }: { problem:
   const key = `practice:${problem.id}`;
   const drafts = useDrafts<Draft>([key], EMPTY);
   const draft = drafts.values[key] ?? EMPTY;
-  /** "No idea" sends nothing else; an answer goes with its code and the code's last run. */
+  const extras = useAnswerExtras();
+  /** "No idea" sends nothing else; an answer goes with its code (and its last run), images and quote. */
   const send = (answer: string, noIdea = false) => {
     if (busy) return;
     drafts.set(key, EMPTY);
-    onSubmit(problem.id, answer, draft.confidence, noIdea ? undefined : codeOf(draft.code));
+    const attached = withExtras({ answer }, extras);
+    onSubmit(problem.id, answer, draft.confidence, noIdea ? {} : { code: codeOf(draft.code), attachments: attached.attachments, quote: attached.quote });
+    clearAnswerExtras();
   };
   return (
     <section className="flex flex-col gap-[32px]">
@@ -91,6 +101,7 @@ function OpenProblem({ problem, index, total, busy, onSubmit, exam }: { problem:
         onConfidence={(confidence) => drafts.set(key, { ...draft, confidence })}
         rows={5}
         disabled={busy}
+        extras
       />
       <CodeAnswer draft={draft.code ?? null} onChange={(code) => drafts.set(key, { ...draft, code })} starter={problem.code?.starter} disabled={busy} onSubmit={() => send(draft.answer)} />
       <div className="flex flex-col gap-[10px]">
@@ -110,7 +121,8 @@ function AnsweredProblem({ problem, index, total, examOpen }: { problem: Practic
       {!answer && !examOpen && <div className="answer-block learner-text text-muted">Not answered</div>}
       {answer && (
         <div className="answer-block flex flex-col gap-[8px]">
-          {answer.text.trim() ? <div className="learner-text whitespace-pre-wrap">{answer.text}</div> : answer.code ? null : <div className="learner-text text-muted">No idea</div>}
+          <ResponseExtras response={{ attachments: answer.attachments, quote: answer.quote ?? undefined }} />
+          {answer.text.trim() ? <div className="learner-text whitespace-pre-wrap">{answer.text}</div> : answer.code || answer.attachments.length ? null : <div className="learner-text text-muted">No idea</div>}
           {answer.code && <SentCode code={answer.code} />}
           {answer.confidence !== null && <div className="t-caption text-muted">{capitalize(confidenceLabel(answer.confidence))}</div>}
         </div>

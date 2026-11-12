@@ -170,7 +170,7 @@ export interface PracticeProblemView {
   rung: number;
   cue: number;
   presentation: Presentation;
-  answer: { text: string; confidence: number | null; code: CodeAnswer | null } | null;
+  answer: { text: string; confidence: number | null; code: CodeAnswer | null; attachments: string[]; quote: string | null } | null;
   /** Starter code when the problem is answered in code. */
   code: CodeStarter | null;
   solution: string | null;
@@ -191,7 +191,7 @@ export function practiceView(db: Database, setId: string, now = new Date()): Pra
     const ideaScores = answer && answer.score !== null ? ideaScoresForProblem(db, p.id) : new Map<string, number>();
     // an exam shows nothing of the solution or the grade until it is handed in; then every problem's solution shows
     if (clock && !clock.over) {
-      return { id: p.id, statement: p.statement, rung: p.rung, cue: p.cue, presentation: p.presentation, answer: answer ? { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null } : null, code: p.code, solution: null, grade: null, ideas: null };
+      return { id: p.id, statement: p.statement, rung: p.rung, cue: p.cue, presentation: p.presentation, answer: answer ? sentAnswer(answer) : null, code: p.code, solution: null, grade: null, ideas: null };
     }
     const shown = Boolean(answer) || Boolean(clock?.over);
     return {
@@ -200,7 +200,7 @@ export function practiceView(db: Database, setId: string, now = new Date()): Pra
       rung: p.rung,
       cue: p.cue,
       presentation: p.presentation,
-      answer: answer ? { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null } : null,
+      answer: answer ? sentAnswer(answer) : null,
       code: p.code,
       solution: shown ? p.solution : null,
       grade: answer && answer.score !== null ? { score: Math.round(answer.score * 100) / 10, feedback: answer.feedback ?? '' } : null,
@@ -387,7 +387,19 @@ export async function settleGrading(): Promise<void> {
  * One attempt: store the answer and reveal the solution at once; the grade arrives in the
  * background. A second submit for the same problem changes nothing.
  */
-export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answer: string, confidence: number | null, extras: { code?: CodeAnswer } = {}): PracticeView {
+/** An answer as the learner sent it: the text, its code, the images attached and the part of the problem it replies to. */
+function sentAnswer(answer: AnswerRecord): NonNullable<PracticeProblemView['answer']> {
+  return { text: answer.answer, confidence: answer.confidence, code: answer.extras.code ?? null, attachments: answer.extras.attachments ?? [], quote: answer.extras.quote ?? null };
+}
+
+/** What can go with a practice answer besides its text. */
+export interface PracticeExtras {
+  code?: CodeAnswer;
+  attachments?: string[];
+  quote?: string;
+}
+
+export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answer: string, confidence: number | null, extras: PracticeExtras = {}): PracticeView {
   const problem = getProblem(deps.db, problemId);
   if (!problem) throw new Error(`unknown problem ${problemId}`);
   const set = getPracticeSet(deps.db, problem.setId);
@@ -401,14 +413,20 @@ export function submitPracticeAnswer(deps: PracticeDeps, problemId: string, answ
   return practiceView(deps.db, problem.setId);
 }
 
-/** What the renderer sends besides the text is checked here: the code must fit and its plots must be stored images. */
-function checkedExtras(deps: PracticeDeps, extras: { code?: CodeAnswer }): ResponseExtras {
-  const parsed = ResponseExtrasSchema.safeParse({ code: extras.code?.source.trim() ? extras.code : undefined });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'The code is not valid.');
-  const plots = parsed.data.code?.run?.plots ?? [];
+/** What the renderer sends besides the text is checked here: sizes, and that images and plots are stored files. */
+function checkedExtras(deps: PracticeDeps, extras: PracticeExtras): ResponseExtras {
+  const parsed = ResponseExtrasSchema.safeParse({
+    code: extras.code?.source.trim() ? extras.code : undefined,
+    attachments: extras.attachments?.length ? extras.attachments : undefined,
+    quote: extras.quote?.trim() ? extras.quote : undefined,
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'The answer is not valid.');
   const dir = deps.attachmentsDir;
+  const images = parsed.data.attachments ?? [];
+  if (images.length && (!dir || !images.every((name) => attachmentExists(dir, name)))) throw new Error('An attached image was not saved. Attach it again.');
+  const plots = parsed.data.code?.run?.plots ?? [];
   if (plots.length && (!dir || !plots.every((name) => attachmentExists(dir, name)))) throw new Error('A plot of the run was not saved. Run the code again.');
-  return parsed.data.code ? { code: parsed.data.code } : {};
+  return { ...(parsed.data.code ? { code: parsed.data.code } : {}), ...(images.length ? { attachments: images } : {}), ...(parsed.data.quote ? { quote: parsed.data.quote } : {}) };
 }
 
 function track(deps: PracticeDeps, record: AnswerRecord): void {
@@ -453,6 +471,8 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
     confidence: answer.confidence,
     code: answer.extras.code,
     plots: plotsOf(deps, answer.extras.code),
+    attachments: storedImages(deps, answer.extras.attachments),
+    quote: answer.extras.quote,
     cards: cardsToJudge(db, withPremises(problem.nodeIds, view)),
     misconceptions: problem.nodeIds.flatMap((id) => listBugsForNode(db, id).map((b) => ({ nodeId: id, description: b.description }))),
   });
@@ -485,9 +505,13 @@ export async function gradeAnswer(deps: PracticeDeps, answer: AnswerRecord): Pro
 
 /** The plots a run of the answer's code drew, for the grader to see; a missing file is left out. */
 function plotsOf(deps: PracticeDeps, code: CodeAnswer | undefined): LlmImage[] | undefined {
+  return storedImages(deps, code?.run?.plots);
+}
+
+/** Stored images by name, read for a model call; ones no longer on disk are left out. */
+function storedImages(deps: PracticeDeps, names: string[] | undefined): LlmImage[] | undefined {
   const dir = deps.attachmentsDir;
-  const names = code?.run?.plots ?? [];
-  if (!dir || names.length === 0) return undefined;
+  if (!dir || !names?.length) return undefined;
   return names.filter((name) => attachmentExists(dir, name)).map((name) => readAttachment(dir, name));
 }
 
