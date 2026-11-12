@@ -53,6 +53,7 @@ Fill these in during M0:
 - `npm test` — unit and integration tests (no network)
 - `npm run typecheck`, `npm run lint`
 - `npm run build` — build the desktop app
+- `npm run smoke` — build the app, start it on a fresh sandbox and open every place (no model; on Linux under `xvfb-run -a`)
 
 ## Cloud and local workflow
 - Building happens in Claude Code cloud sessions on the GitHub repo. Any

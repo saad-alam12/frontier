@@ -490,6 +490,8 @@ Rules:
 
 **Time limits.** A model call that never answers is stopped: five minutes for a call the learner waits on (eight for a fresh explanation after a worked example), fifteen for background work, counted from when the call starts rather than while it waits for a place. A stopped call is a failure like any other (logged, and retried where the work retries), never mistaken for the learner stopping it, and its place in the queue is free again.
 
+**Checks.** Besides the unit and integration tests (no network, no model), `npm run smoke` builds the app, starts it on a fresh sandbox data folder in a temporary folder, opens every place in the sidebar, a goal's page and its notes and an idea on the Map, and fails on any error the page throws. Tests also cover upgrading a database written by an older version (its data kept, old passages indexed, a backup made first) and the Agent SDK provider's own code with the SDK replaced by a stand-in.
+
 **The log.** Errors do not vanish: a call from the window that fails, a model call that fails (with its role), background work that tells the learner something went wrong, and anything nothing caught are written to `frontier.log` beside the settings file, with the time and where it was thrown. It holds error messages only, never the learner's words, a prompt or a key. Past a megabyte it becomes `frontier.log.1` and a new file starts. Settings has "Show log".
 
 ---

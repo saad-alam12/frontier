@@ -131,21 +131,27 @@ function remind(ctx: AppContext): void {
   }
 }
 
-/** The API key sealed with the system's keychain (Electron's safeStorage), never in plain text. */
-const keychain: SecretBox = {
-  available: () => safeStorage.isEncryptionAvailable(),
-  seal: (text) => safeStorage.encryptString(text).toString('base64'),
-  open: (sealed) => safeStorage.decryptString(Buffer.from(sealed, 'base64')),
-};
+/**
+ * The API key sealed with the system's keychain (Electron's safeStorage), never in plain text. Whether
+ * there is one is asked once at start; Linux's plain-text fallback, with no keyring, does not count.
+ */
+async function keychain(): Promise<SecretBox> {
+  const usable = (await safeStorage.isAsyncEncryptionAvailable().catch(() => false)) && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text');
+  return {
+    available: () => usable,
+    seal: (text) => safeStorage.encryptString(text).toString('base64'),
+    open: (sealed) => safeStorage.decryptString(Buffer.from(sealed, 'base64')),
+  };
+}
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   if (!first) return;
   const ctx = new AppContext(
     app.getVersion(),
     join(app.getPath('userData'), 'settings.json'),
     join(app.getPath('home'), 'Frontier'),
     new ChromiumPageRenderer(),
-    keychain,
+    await keychain(),
   );
   context = ctx;
   ctx.log.info('app', `Frontier ${app.getVersion()} started on ${process.platform}`);

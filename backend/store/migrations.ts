@@ -550,11 +550,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
   },
 ];
 
-export function runMigrations(db: DatabaseSync): void {
+/** Bring the schema up to date, or (for upgrade tests) only up to `upTo`. */
+export function runMigrations(db: DatabaseSync, upTo = Infinity): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
   let version = row.user_version;
   for (const m of MIGRATIONS) {
     if (m.version <= version) continue;
+    if (m.version > upTo) break;
     db.exec('BEGIN');
     try {
       db.exec(m.sql);
