@@ -62,7 +62,7 @@ export class Semaphore {
  * Calls the learner is waiting on (an answer being judged, a session being planned, a lookup). They
  * get a lane of their own, so they never queue behind sources being read or goals being mapped.
  */
-const WAITED_ON: ReadonlySet<Role> = new Set<Role>(['tutor', 'tutorEscalation', 'planner', 'sessionPlanner', 'prober', 'problemGenerator', 'librarian', 'connectionTest']);
+const WAITED_ON: ReadonlySet<Role> = new Set<Role>(['tutor', 'tutorEscalation', 'planner', 'sessionPlanner', 'prober', 'problemGenerator', 'librarian', 'examiner', 'connectionTest']);
 const WAITED_ON_LIMIT = 2;
 
 /**

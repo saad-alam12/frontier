@@ -34,6 +34,8 @@ import type { GoalBudget } from '../core/types';
 import type { CodeAnswer } from '../core/code';
 import type { InstallOutcome, PythonInfo, RunOutcome } from '../services/codeRunner';
 import type { UsageView } from '../services/usage';
+import type { DialogueView } from '../services/dialogue';
+import type { DialogueKind } from '../store/dialogues';
 import type { ImageUpload } from '../core/attachments';
 import type { CardInput, CardListFilter, CardListView, CardPreferences, CardQueueView, CardStats, CardSummary, CardView, DraftRequest, GoalCardSettings, ReviewCardView } from '../services/cards';
 import type { CardText } from '../agents/cardWriter';
@@ -84,6 +86,7 @@ export type { CodeAnswer, CodeRun, CodeStarter } from '../core/code';
 export type { InstallOutcome, PythonInfo, RunOutcome, UsageView };
 export type { Preset } from '../settings/schema';
 export type { ExamReport } from '../core/exam';
+export type { DialogueKind, DialogueView };
 
 export interface AppInfo {
   version: string;
@@ -214,6 +217,14 @@ export interface ApiMethods {
   'practice.start': { input: { goalId: string; kind: 'compound' | 'mock'; nodeIds?: string[]; level?: PracticeLevel; problems?: number }; output: PracticeView | null };
   /** One attempt: stores the answer and returns the set with the solution revealed; the grade follows as an event. */
   'practice.submit': { input: { problemId: string; answer: string; confidence: number | null; code?: CodeAnswer }; output: PracticeView };
+  /** An oral exam or a teach-back on a goal's learned ideas: it opens with the first question. */
+  'dialogue.start': { input: { goalId: string; kind: DialogueKind }; output: DialogueView };
+  'dialogue.get': { input: { dialogueId: string }; output: DialogueView };
+  /** The goal's conversation left open half-way, to continue. */
+  'dialogue.open': { input: { goalId: string }; output: DialogueView | null };
+  'dialogue.answer': { input: { dialogueId: string; answer: string }; output: DialogueView };
+  /** End it now: the verdict on what was said so far. */
+  'dialogue.end': { input: { dialogueId: string }; output: DialogueView };
   /** Hand in a mock exam: its solutions, grades and report show; unanswered problems count zero in its score. */
   'practice.handIn': { input: { setId: string }; output: PracticeView };
   /** Leave a set as it stands: answered problems count, the rest write nothing. */
@@ -298,6 +309,8 @@ export interface ApiEvents {
   'session.maker': { maker: MakerView | null };
   /** Cards were added, changed or reviewed (automatic cards land in the background). */
   'cards.changed': { goalId: string | null };
+  /** The examiner's next turn of an oral exam or a teach-back, as it is written. */
+  'dialogue.writing': { dialogueId: string; text: string };
 }
 export type EventName = keyof ApiEvents;
 

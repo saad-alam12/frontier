@@ -41,6 +41,7 @@ import { attachmentDataUrl, saveAttachment } from '../store/attachments';
 import { MAX_CODE_CHARS } from '../core/code';
 import { FigureRequestSchema, figureView } from '../services/figures';
 import { usageView } from '../services/usage';
+import { answerDialogue, dialogueView, endDialogue, openDialogueView, startDialogue } from '../services/dialogue';
 import { ReviewInputSchema, cardPreferences, cardQueue, cardStats, cardSummary, draftFor, findIdeas, goalCardSettings, listCardViews, removeCard, reviewCard, saveCard, saveCardPreferences, saveGoalCards, suspendCard, undoReview } from '../services/cards';
 
 const execFileAsync = promisify(execFile);
@@ -57,6 +58,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     if (!d) throw new Error('unknown goal');
     return d;
   };
+  const dialogueDeps = () => ({ db: ctx.db(), provider: ctx.provider(), onWriting: (dialogueId: string, text: string) => ctx.emit('dialogue.writing', { dialogueId, text }) });
   /** Add files to the library unread and guess what each is for; reading starts once a goal uses them. */
   const addMaterials = async (paths: string[]): Promise<MaterialCandidate[]> => {
     const out: MaterialCandidate[] = [];
@@ -310,6 +312,11 @@ export function buildHandlers(ctx: AppContext): Handlers {
         focus: nodeIds?.length ? { nodeIds: z.array(z.string()).max(40).parse(nodeIds), level: z.enum(['easier', 'normal', 'harder']).optional().parse(level) } : undefined,
       }),
     'practice.handIn': ({ setId }) => handInExam(ctx.db(), String(setId)),
+    'dialogue.start': ({ goalId, kind }) => startDialogue(dialogueDeps(), String(goalId), z.enum(['oral', 'teach']).parse(kind)),
+    'dialogue.get': ({ dialogueId }) => dialogueView(ctx.db(), String(dialogueId)),
+    'dialogue.open': ({ goalId }) => openDialogueView(ctx.db(), String(goalId)),
+    'dialogue.answer': ({ dialogueId, answer }) => answerDialogue(dialogueDeps(), String(dialogueId), z.string().max(12_000, 'The answer is too long.').parse(answer)),
+    'dialogue.end': ({ dialogueId }) => endDialogue(dialogueDeps(), String(dialogueId)),
     'practice.submit': ({ problemId, answer, confidence, code }) => submitPracticeAnswer(ctx.practiceDeps(), problemId, answer, confidence, { code }),
     'code.run': (input) => {
       const { source, key } = CodeRunSchema.parse(input);

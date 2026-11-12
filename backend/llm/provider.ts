@@ -14,6 +14,7 @@ export const ROLES = [
   'librarian',
   'sessionPlanner',
   'cardWriter',
+  'examiner',
   'connectionTest',
 ] as const;
 export type Role = (typeof ROLES)[number];

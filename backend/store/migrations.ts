@@ -483,6 +483,22 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE practice_sets ADD COLUMN handed_in_at TEXT;
     `,
   },
+  {
+    version: 20,
+    // An oral exam or a teach-back: a conversation about a few learned ideas, judged at its end.
+    sql: `
+      CREATE TABLE dialogues (
+        id TEXT PRIMARY KEY,
+        goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('oral', 'teach')),
+        node_ids TEXT NOT NULL,
+        turns TEXT NOT NULL DEFAULT '[]',
+        verdict TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

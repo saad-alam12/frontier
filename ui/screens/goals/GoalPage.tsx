@@ -1,9 +1,9 @@
 import { dueIn } from '../../lib/dueIn';
 import { plainError } from '../../lib/errors';
 import { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { MessagesSquare, RotateCcw } from 'lucide-react';
 import { call, isCancelled } from '../../api';
-import type { GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, PracticeLevel, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
+import type { DialogueView, GoalBudget, GoalDetail, GoalLevel, GoalProgress, MaterialRole, MaterialView, PlanPreview, PracticeLevel, ProbeAnswerInput, ProbeOutcome, ProbeView, RemapView } from '../../../backend/api/contract';
 import { formatHours } from '../../../backend/core/budget';
 import { MAX_FREE_IDEAS } from '../../../backend/core/freeSession';
 import { OWNED_DEPTH } from '../../../backend/core/types';
@@ -41,6 +41,7 @@ export function GoalPage({
   onNewGoal,
   onReviewCards,
   onOpenPractice,
+  onTalk,
 }: {
   detail: GoalDetail;
   onBack: () => void;
@@ -56,6 +57,8 @@ export function GoalPage({
   onReviewCards: () => void;
   /** Open a practice set that was just written. */
   onOpenPractice: (setId: string) => void;
+  /** Open an oral exam or a teach-back that just started. */
+  onTalk: (dialogueId: string) => void;
 }) {
   const { goal } = detail;
   const [probe, setProbe] = useState<ProbeView | null>(null);
@@ -66,6 +69,15 @@ export function GoalPage({
   const [open, setOpen] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState(false);
   const [adding, setAdding] = useState(false);
+  /** An oral exam or teach-back left half-way. */
+  const [openTalk, setOpenTalk] = useState<DialogueView | null>(null);
+  useEffect(() => {
+    let live = true;
+    void call('dialogue.open', { goalId: goal.id }).then((d) => live && setOpenTalk(d));
+    return () => {
+      live = false;
+    };
+  }, [goal.id]);
   /** Where the notes were saved, for a short confirmation. */
   const [exported, setExported] = useState<string | null>(null);
   useEffect(() => {
@@ -106,6 +118,13 @@ export function GoalPage({
       const set = await call('practice.start', { goalId: goal.id, kind: 'compound', nodeIds, level });
       if (set) onOpenPractice(set.id);
       else setError('Nothing to practise here yet. Practice is for ideas you have learned. A session teaches the rest.');
+    });
+
+  /** An oral exam or a teach-back on the goal's learned ideas; it opens with the first question. */
+  const talk = (kind: 'oral' | 'teach') =>
+    run(kind, async () => {
+      const dialogue = await call('dialogue.start', { goalId: goal.id, kind });
+      onTalk(dialogue.id);
     });
 
   const setStatus = (status: 'active' | 'paused' | 'done') =>
@@ -352,6 +371,31 @@ export function GoalPage({
           <Button disabled={busy !== null} onClick={() => void practise(detail.missed.map((m) => m.nodeId), 'normal')}>
             {busy === 'practise' ? 'Writing problems…' : 'Practise again'}
           </Button>
+        </div>
+      )}
+
+      {goal.status === 'active' && compiled && (
+        <div className="cards-line">
+          <MessagesSquare size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span>
+            <strong>Talk it through</strong> with an examiner who asks why, or a beginner you teach
+          </span>
+          <span className="ml-auto flex shrink-0 gap-[8px]">
+            {openTalk ? (
+              <Button disabled={busy !== null} onClick={() => onTalk(openTalk.id)}>
+                {openTalk.kind === 'oral' ? 'Continue the oral exam' : 'Continue teaching'}
+              </Button>
+            ) : (
+              <>
+                <Button disabled={busy !== null} onClick={() => void talk('oral')}>
+                  {busy === 'oral' ? 'Starting…' : 'Oral exam'}
+                </Button>
+                <Button disabled={busy !== null} onClick={() => void talk('teach')}>
+                  {busy === 'teach' ? 'Starting…' : 'Teach it back'}
+                </Button>
+              </>
+            )}
+          </span>
         </div>
       )}
 

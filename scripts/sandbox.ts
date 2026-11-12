@@ -31,6 +31,7 @@ import { proposeAddition, requestAddition } from '../backend/services/addition';
 import { SessionMaker } from '../backend/services/sessionMaker';
 import { SessionWork } from '../backend/services/sessionWork';
 import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
+import { answerDialogue, startDialogue } from '../backend/services/dialogue';
 
 const [folderArg, ...flags] = process.argv.slice(2);
 if (!folderArg) {
@@ -250,6 +251,14 @@ if (flags.includes('--exam')) {
   const mock = await startPractice(examDeps, exam.id, { kind: 'mock', maxProblems: 3 });
   if (mock?.problems[0]) submitPracticeAnswer(examDeps, mock.problems[0].id, 'Low, low: neither firm gains by raising its price alone.', 0.66);
   await settleGrading();
+}
+
+// an oral exam on the exam goal, two questions in (`--talk`)
+if (flags.includes('--talk')) {
+  const questions = ['Say in your own words what makes a pair of strategies a Nash equilibrium.', 'Good. Now suppose one firm can commit to its price first. Does the same pair stay stable, and why?'];
+  const examiner = new FakeProvider({ examiner: [{ say: questions[0], done: false, verdict: null }, { say: questions[1], done: false, verdict: null }] });
+  const talk = await startDialogue({ db, provider: examiner }, exam.id, 'oral');
+  await answerDialogue({ db, provider: examiner }, talk.id, 'Each player is already playing a best response to the other, so neither gains by changing alone.');
 }
 
 // an open session at its first explanation (which shows the lecture's figure), past the recall and the orientation

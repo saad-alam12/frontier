@@ -55,6 +55,8 @@ export interface EvidenceContext {
   /** Hints the learner took on the question; the score is already what the answer counts for with them. */
   hints?: number;
   problemId?: string;
+  /** The oral exam or teach-back the evidence came from. */
+  dialogueId?: string;
 }
 
 export interface Evidence {

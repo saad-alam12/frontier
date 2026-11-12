@@ -8,12 +8,20 @@ import { BudgetBar } from '../components/budget';
 import { GoalFormScreen } from './goals/GoalForm';
 import { GoalPage } from './goals/GoalPage';
 import { GoalWizard } from './goals/GoalWizard';
+import { DialogueScreen } from './DialogueScreen';
 import { ASSESSMENT_LABEL, formatDate, goalName } from './goals/labels';
 import { startSessionInBackground } from '../lib/sessionWork';
 import type { ChooseInit } from '../components/ChooseSheet';
 
 /** `text` starts a new goal with a sentence (an addition that reads like a goal of its own). */
-export type GoalsView = { name: 'list' } | { name: 'new'; text?: string } | { name: 'goal'; goalId: string } | { name: 'edit'; goalId: string } | { name: 'draft'; goalId: string };
+export type GoalsView =
+  | { name: 'list' }
+  | { name: 'new'; text?: string }
+  | { name: 'goal'; goalId: string }
+  | { name: 'edit'; goalId: string }
+  | { name: 'draft'; goalId: string }
+  /** An oral exam or a teach-back on the goal. */
+  | { name: 'talk'; goalId: string; dialogueId: string };
 
 export function GoalsScreen({
   onNavigate,
@@ -78,6 +86,20 @@ export function GoalsScreen({
     }
   }
 
+  if (view.name === 'talk') {
+    const goalId = view.goalId;
+    const detail = find(goalId);
+    return (
+      <DialogueScreen
+        key={view.dialogueId}
+        dialogueId={view.dialogueId}
+        goalTitle={detail ? goalName(detail) : ''}
+        onBack={() => void refresh().then(() => setView({ name: 'goal', goalId }))}
+        onBackToGoals={() => void refresh().then(() => setView({ name: 'list' }))}
+      />
+    );
+  }
+
   if (view.name === 'goal') {
     const detail = find(view.goalId);
     if (detail) {
@@ -97,6 +119,7 @@ export function GoalsScreen({
           onLearn={(nodeIds) => onChoose({ goalId: detail.goal.id, pick: nodeIds })}
           onReviewCards={() => onReviewCards(detail.goal.id)}
           onOpenPractice={onOpenPractice}
+          onTalk={(dialogueId) => setView({ name: 'talk', goalId: detail.goal.id, dialogueId })}
         />
       );
     }

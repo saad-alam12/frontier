@@ -41,6 +41,8 @@ export const DEFAULT_CHOICES: Record<Role, ModelChoice> = {
   // The learner waits on both: a session they described, a flashcard drafted from a selection.
   sessionPlanner: { model: 'claude-opus-5-5', effort: 'medium' },
   cardWriter: { model: 'claude-sonnet-5-5', effort: 'medium' },
+  // the learner waits on each follow-up of an oral exam or a teach-back
+  examiner: { model: 'claude-opus-5-5', effort: 'medium' },
   connectionTest: { model: 'claude-haiku-5-5', effort: 'medium' },
 };
 
@@ -67,6 +69,7 @@ export const PRESET_CHOICES: Record<Preset, Record<Role, ModelChoice>> = {
     librarian: sonnet('medium'),
     sessionPlanner: opus('high'),
     cardWriter: sonnet('high'),
+    examiner: opus('high'),
     connectionTest: haiku('medium'),
   },
   balanced: DEFAULT_CHOICES,
@@ -84,6 +87,7 @@ export const PRESET_CHOICES: Record<Preset, Record<Role, ModelChoice>> = {
     librarian: haiku('low'),
     sessionPlanner: sonnet('medium'),
     cardWriter: haiku('medium'),
+    examiner: sonnet('medium'),
     connectionTest: haiku('low'),
   },
 };

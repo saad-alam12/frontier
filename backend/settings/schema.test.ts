@@ -12,7 +12,8 @@ describe('model and effort per role', () => {
     expect(modelChoice(defaults, 'goalCompiler')).toEqual({ model: 'claude-opus-5-5', effort: 'xhigh' });
     expect(modelChoice(defaults, 'extractor')).toEqual({ model: 'claude-haiku-5-5', effort: 'medium' });
     expect(modelChoice(defaults, 'tutorEscalation')).toEqual({ model: 'claude-opus-5-5', effort: 'xhigh' });
-    expect(Object.keys(DEFAULT_CHOICES)).toHaveLength(13);
+    expect(modelChoice(defaults, 'examiner')).toEqual({ model: 'claude-opus-5-5', effort: 'medium' });
+    expect(Object.keys(DEFAULT_CHOICES)).toHaveLength(14);
   });
 
   it("takes overrides; a changed model without an effort gets that model's default", () => {

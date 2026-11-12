@@ -21,6 +21,7 @@ const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'librarian', label: 'Librarian', does: 'Answers lookups (with lookup)' },
   { role: 'sessionPlanner', label: 'Session maker', does: 'Turns what you describe into a session' },
   { role: 'cardWriter', label: 'Card writer', does: 'Writes flashcards for the facts to memorize' },
+  { role: 'examiner', label: 'Examiner', does: 'Plays the examiner of an oral exam, or a beginner you teach' },
   { role: 'connectionTest', label: 'Connection test', does: 'The test button above' },
 ];
 
