@@ -129,7 +129,7 @@ describe('contrast problems for misconceptions', () => {
   it('makes an idea due when a misconception about it is still open half a day after it was seen', () => {
     const now = new Date('2026-11-10T12:00:00Z');
     const fsrs = applyReview(emptyFsrs(), 0.9, new Date('2026-11-09T09:00:00Z'));
-    const n = (misconceptionSeen: string | null): ScheduleInput => ({ nodeId: 'a', depth: 2, targetDepth: 2, tier: 'active', fsrs, practiceCount: 0, misconceptionSeen });
+    const n = (misconceptionSeen: string | null): ScheduleInput => ({ nodeId: 'a', depth: 2, targetDepth: 2, tier: 'internalize', fsrs, practiceCount: 0, misconceptionSeen });
     expect(dueNodes([n(null)], now)).toEqual([]);
     expect(dueNodes([n('2026-11-10T08:00:00Z')], now)).toEqual([]);
     expect(dueNodes([n('2026-11-09T20:00:00Z')], now).map((d) => d.reason)).toEqual(['misconception']);
