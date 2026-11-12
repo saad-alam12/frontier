@@ -139,12 +139,12 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 | R3 Plans that fit the time and the learner, living map, Esc | Done | Owner's request after R2; 186 tests; Linux build packaged and launched; reviewed by the owner (R4 request) |
 | R4 Plan dots, erase from map, screenshots and quotes, finished look | Done | Owner's request at the R3 checkpoint; 211 tests; built in a local session on the Mac; reviewed by the owner (R5 request) |
 | R6 Overnight extras (separate branch) | Done, to review | Command palette, place shortcuts, paste text into the Library, notes export, fewer clicks, plain errors; branch `claude/r6-overnight` |
-| R7 Fixes and improvements from the review | First session done; second session next | `docs/improvement-plan.md`, approved by the owner on 2026-11-11. Every item of the first session's three groups is built (list under "Next step"). The second session's items are named there too |
+| R7 Fixes and improvements from the review | Done; checks on the Mac next | `docs/improvement-plan.md`, approved by the owner on 2026-11-11. Every approved item is built, over two sessions (lists under "Next step"); only the archived ideas are left, as the owner decided. 595 tests |
 | R5 Background work, goals by depth, your own sessions, flashcards | Done, checkpoint ready | Owner's request at the R4 checkpoint: `docs/feedback-round-5.md`; built locally with helper agents, finished in a cloud session (review fixes, §7); 298 tests |
 
 ## Next step
 
-**R7, second session (branch `claude/r7-second-session`, 2026-11-12), in progress.** Built so far, one commit each (`R7 <ID>: <title>`):
+**R7, second session done (branch `claude/r7-second-session`, 2026-11-12).** Everything the owner approved for it is built, in the owner's order, one commit each (`R7 <ID>: <title>`); 595 tests, typecheck, lint, the licence check and `npm run smoke` pass:
 - [x] B4 pages that are pictures: scans, diagrams and large figures are read from pictures of their pages, and the tutor shows the figures in the session
 - [x] C1 (rest) faster sessions: the call that grades an answer writes the card that will be shown (no card written to be thrown away); explanations appear as they are written; with an API key the fixed part of each prompt is cached
 - [x] A3 model presets in Settings (Best quality, Balanced, Light on my plan), the jobs behind "Advanced", and usage today and this week
@@ -169,11 +169,28 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 - [x] D23 speed as the map grows: measured with `npm run bench` on 2,000 ideas, then reads kept while their data is unchanged, the map's centrality and topics kept until the map changes, one-pass depth history, flashcard schedules replayed only when their reviews change. Today 880 → 324 ms, goals list 1,017 → 232 ms, Stats 1,460 → 360 ms, after an answer 281 → 111 ms
 - [x] B5 source viewer: any citation opens the source at the cited page (a PDF drawn with selectable text, other sources as text); select text to have it explained beside the page, make a flashcard, or learn it now
 
+**What is left.** Nothing of the approved plan. The archived ideas stay in `docs/notes/archived-ideas.md` and are not built unless you ask. Open points are under "Open questions for the owner": the failed model connection on your Mac (first), the MPL-2.0 note, video transcripts, trail narration, code signing. Not checked in the cloud, because they need a model, your login or a Mac: answers and explanations from a real model (streamed explanations, diagrams, the pulled-in prerequisite, the examiner, Lookup's answers and the viewer's Explain), the keychain on macOS, a call that really hangs, Python on your Mac, and long or scanned PDFs in the viewer.
+
+**For the owner, on the Mac** (about 30 minutes; a model call needs the connection to work, so start with step 3):
+1. `git fetch`, `git checkout claude/r7-second-session`, `npm install`.
+2. `npm run check:licenses` should end "all permissive"; `npm run smoke` should end "Smoke: passed" (it starts the app on a throwaway data folder, never yours).
+3. `npm run dev`. Settings → **Test connection**. If it fails, send me the message it shows and the end of the log (Settings → Show log); the rest needs a working connection.
+4. Settings: pick a preset (**Best quality**, **Balanced**, **Light on my plan**) and open **Advanced** to see each job's model; the usage line fills after a session. If you use an API key, enter it, quit and start again: it should say "Saved in the system keychain", and the settings file must not contain the key: its path is at the bottom of Settings ("Settings file: …"), and `grep -c sk- "<that path>"` should print 0.
+5. Today: **How long do you have?** → 30 minutes; start what it offers. In the session, the explanation should appear while it is written ("Writing…"); ask for a diagram or a plot in a question to the tutor; answer a card badly on purpose where a prerequisite is missing: the tutor should pull it in first and come back to the question.
+6. A question with a Python field (ask the tutor for a coding exercise, or practise a goal with code): press **Run**. A missing library (numpy, matplotlib) should install itself; without Python the app gives the commands for Terminal.
+7. A goal page: **Practise this skill now** on a skill; **Mock exam** (timed; **Hand in**; then the solutions and the report per skill); **Oral exam** and **Teach it back**; **Notes** → **Cheat sheet** → **Print** and **Save as PDF**.
+8. Practice: attach a photo of handwritten work (**Attach images**) and select part of a problem → **Reply**; the grade should mention both.
+9. Map: open an idea → **Rename or correct**, **Merge a duplicate** (on two ideas that are the same), **I know this: test me**. Its "From …, p N" line opens the source viewer at that page: select a sentence → **Explain**, **Make a flashcard**, **Learn it now**; ← and → turn pages.
+10. Lookup: ask a question your lectures answer: passages with their page, an answer that quotes them, a follow-up; a passage's page opens the viewer.
+11. Stats → **Your week** and **Misconceptions** (**Practise it**, **Not mine**).
+12. Library: **Read** on a lecture; add a slide deck or a scanned PDF and check the figures are read (open the session on an idea it covers: the tutor should show the figure); **Watch a folder** on your course folder, copy a Word, PowerPoint, EPUB or notebook file into it, press **Look now**.
+13. Optional: `npm run bench` (about a minute) times the screens on a 2,000-idea map; compare with the numbers under Decisions (R7 D23).
+
+**Next cloud session**: none is queued. Tell me what to build next, or answer the open questions; a new plan would start from your feedback on this round.
+
 **R7, first session done (branch `claude/wizardly-faraday-2jex8f`, 2026-11-11).** The owner approved every item in `docs/improvement-plan.md` and set the order (its "Build order" section). All three groups of the first session are built, one commit per item (`R7 <ID>: <title>`), 445 tests, typecheck, lint and the licence check clean.
 
-**For the owner, on the Mac:** `git fetch`, check out this branch, `npm install`, then the checks under "Open questions for the owner" (search model, reminders, model tools, licences), then `npm run dev` and try what is new: ask the tutor a question in a session and take a hint; the plan as a list; "Practise this skill now" on a goal page; Library "Add a link" and dropping a file on the window; Cards "Undo last rating"; Settings: Reminders, Backups, Show log.
-
-**Next cloud session** continues with the plan's second group, in this order unless the owner says otherwise: B4 (figures from image-heavy pages), B19 (run code), the rest of C1, A3, A4, B7, B8, B9, B10, B15, B17, C4, the rest of C5 (repeat by meaning, a Misconceptions view, contrast problems), C6, the rest of C9 (images and quotes in practice answers), C10, the rest of D16 (keychain, time limits), D19, D20, D21, D22, D23. After that: B5. Archived ideas stay in `docs/notes/archived-ideas.md`.
+**For the owner, on the Mac (first session):** `git fetch`, check out this branch, `npm install`, then the checks under "Open questions for the owner" (search model, reminders, model tools, licences), then `npm run dev` and try what is new: ask the tutor a question in a session and take a hint; the plan as a list; "Practise this skill now" on a goal page; Library "Add a link" and dropping a file on the window; Cards "Undo last rating"; Settings: Reminders, Backups, Show log.
 
 R7 items built in the first session (each with tests; details under Decisions):
 - [x] D1 a settings change keeps the other settings
