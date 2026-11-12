@@ -1,5 +1,5 @@
 import { plainError } from '../lib/errors';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FreeChoice, FreePlanView, MakerView, MapState, MapView } from '../../backend/api/contract';
 import { MAX_FREE_IDEAS, joinNames } from '../../backend/core/freeSession';
 import { call, onEvent } from '../api';
@@ -18,6 +18,8 @@ export interface ChooseInit {
   pick?: string[];
   /** "I know this: test me": each picked idea opens at the question that shows its aim. */
   testMe?: boolean;
+  /** Open on "Describe it" with this description (Learn it now, from a passage of a source). */
+  describe?: string;
 }
 
 type Mode = 'pick' | 'describe';
@@ -56,13 +58,22 @@ export function ChooseSheet({ init, onClose, onStarted, onOpenSession }: { init:
   const description = (drafts.values[DESCRIPTION_KEY] ?? EMPTY_DESCRIPTION).text;
   const ids = { search: useId(), goal: useId(), counted: useId(), describe: useId() };
 
+  // a description handed in replaces the draft once, as the sheet opens
+  const described = useRef(false);
+  useEffect(() => {
+    if (!init.describe || described.current || !drafts.ready) return;
+    described.current = true;
+    drafts.set(DESCRIPTION_KEY, { text: init.describe });
+    setMode('describe');
+  }, [init.describe, drafts.ready]);
+
   useEffect(() => {
     void call('map.view').then(setMap);
     void call('session.current').then((s) => setSessionOpen(s !== null && s.phase !== 'done'));
     void call('session.maker').then((m) => {
       setMaker(m);
       // a description still being made, or made while the sheet was closed, is what the learner came back for
-      if (m && m.status !== 'failed' && !init.pick?.length) {
+      if (m && m.status !== 'failed' && !init.pick?.length && !init.describe) {
         setMode('describe');
         setGoalId(m.goalId);
       }

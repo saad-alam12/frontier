@@ -12,7 +12,7 @@ import type { Database } from '../store/db';
 import { logEvent } from '../store/activity';
 import { listEvidenceForNode } from '../store/evidence';
 import { listEmbeddings } from '../store/embeddings';
-import { searchPassages } from '../store/sources';
+import { getSource, searchPassages } from '../store/sources';
 import type { PassageHit } from '../store/sources';
 import { recordEvidence } from './evidence';
 import type { IngestionService } from './ingestion';
@@ -141,23 +141,38 @@ export interface LookupTurn {
 /** Turns of a conversation the librarian reads for a follow-up. */
 export const MAX_TURNS = 6;
 
+/** Text the learner selected in a source, to have explained (the source viewer, B5). */
+export interface SelectedPassage {
+  sourceId: string;
+  locator: string | null;
+  text: string;
+}
+
+/** The longest selection explained; a longer one is cut. */
+export const SELECTED_MAX_CHARS = 3000;
+
 /**
  * Search, then have the librarian answer from the top cards and passages. Questions get answers; bare
  * names only hits. A follow-up searches with the question before it too, and the librarian reads the
- * conversation so far.
+ * conversation so far. With a passage the learner selected, the search is for what it says and the
+ * librarian explains it.
  */
-export async function lookup(deps: LookupDeps, query: string, history: LookupTurn[] = []): Promise<LookupAnswer> {
+export async function lookup(deps: LookupDeps, query: string, history: LookupTurn[] = [], selected?: SelectedPassage): Promise<LookupAnswer> {
   const earlier = history.slice(-MAX_TURNS);
-  const context = earlier.at(-1)?.question ?? '';
-  const hits = await searchIdeas(deps, query);
+  const passage = selected ? { ...selected, text: selected.text.slice(0, SELECTED_MAX_CHARS) } : undefined;
+  const context = passage?.text ?? earlier.at(-1)?.question ?? '';
+  const hits = await searchIdeas(deps, passage ? passage.text.slice(0, 400) : query);
   // a follow-up ("and why?") says little on its own: the question before it keeps the subject
   const contextHits = context ? (await searchIdeas(deps, context, 4)).filter((h) => !hits.some((x) => x.nodeId === h.nodeId)) : [];
   const allHits = [...hits, ...contextHits].slice(0, 8);
-  const found = searchPassages(deps.db, searchTerms(`${context} ${query}`), 4);
+  // the selection is shown to the librarian as it is; other passages say more about it
+  const found = searchPassages(deps.db, searchTerms(`${context} ${query}`), 5)
+    .filter((p) => !(passage && p.sourceId === passage.sourceId && p.locator === passage.locator))
+    .slice(0, 4);
   const passages = found.map((p, i) => ({ id: `s${i + 1}`, chunkId: p.chunkId, sourceId: p.sourceId, title: p.title, locator: p.locator, snippet: p.snippet }));
   logEvent(deps.db, 'lookup', {}, { query, hits: allHits.length, passages: passages.length, question: looksLikeQuestion(query), followUp: earlier.length > 0 });
-  const asks = looksLikeQuestion(query) || earlier.length > 0;
-  if (!deps.provider || (allHits.length === 0 && passages.length === 0) || !asks) return { hits: allHits, passages, answer: null };
+  const asks = looksLikeQuestion(query) || earlier.length > 0 || passage !== undefined;
+  if (!deps.provider || (allHits.length === 0 && passages.length === 0 && !passage) || !asks) return { hits: allHits, passages, answer: null };
   const view = loadKnowledge(deps.db);
   const cards = allHits.slice(0, 6).map((h) => ({
     id: h.nodeId,
@@ -171,6 +186,7 @@ export async function lookup(deps: LookupDeps, query: string, history: LookupTur
     result = await askLibrarian(deps.provider, query, cards, {
       passages: found.map((p, i) => ({ id: `s${i + 1}`, where: p.locator ? `${p.title}, ${p.locator}` : p.title, text: p.text })),
       history: earlier,
+      selected: passage ? { where: passageWhere(deps.db, passage), text: passage.text } : undefined,
     });
   } catch (error) {
     if (isCancelled(error)) throw error;
@@ -183,6 +199,11 @@ export async function lookup(deps: LookupDeps, query: string, history: LookupTur
     passages,
     answer: { text: result.answer, cited: result.cited.filter((id) => !passageIds.has(id)), passages: result.cited.filter((id) => passageIds.has(id)) },
   };
+}
+
+function passageWhere(db: Database, passage: SelectedPassage): string {
+  const title = getSource(db, passage.sourceId)?.title ?? 'A source';
+  return passage.locator ? `${title}, ${passage.locator}` : title;
 }
 
 /** A question rather than a name: several words, or a question word or mark. */

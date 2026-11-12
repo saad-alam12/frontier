@@ -8,6 +8,7 @@ import type { BackupInfo } from '../store/backup';
 import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/schema';
 import type { ConnectionTestResult } from '../agents/connectionTest';
 import type { DeltaItem, DeltaSummary, IdeaRef, LinkResult, MaterialCandidate, PastedText, SourceSummary } from '../services/library';
+import type { SourceDocument } from '../services/sourceView';
 import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
@@ -21,7 +22,7 @@ import type { Grade, LearnerResponse } from '../agents/tutor';
 import type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView } from '../services/practice';
 import type { TodayGoal, TodayView } from '../services/today';
 import type { MapNodeView, MapState, MapView, NodeCard } from '../services/map';
-import type { LookupAnswer, LookupHit } from '../services/lookup';
+import type { LookupAnswer, LookupHit, SelectedPassage } from '../services/lookup';
 import type { Trail, TrailItem, TrailSummary } from '../services/trails';
 import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget';
 import type { RemapView } from '../services/remap';
@@ -58,7 +59,7 @@ export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, Today
 export type { DeltaItem, IdeaRef, Effort, ModelOptions, GoalForm, GoalWorkState, MaterialView };
 export type { Assessment, Coverage, ExamProfile, GoalBudget, GoalFocus, GoalKind, GoalLevel, MaterialRole, UpcomingUnit } from '../core/types';
 export type { SkillStatus } from '../core/goals';
-export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, LinkResult, MaterialCandidate, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
+export type { Settings, SettingsPatch, ConnectionTestResult, DeltaSummary, LinkResult, MaterialCandidate, SourceDocument, SourceSummary, IngestProgress, GoalDetail, ProbeAnswerInput, ProbeOutcome, ProbeView, LessonPlan };
 export type { PublicCard, SessionSnapshot, Grade, LearnerResponse, FrontierMap, FrontierState, HistoryItem, HistoryNode, SessionHistory };
 export type { SentAnswer, SessionWorkEvent, SessionWorkView };
 export type { FreeBackgroundView, FreeChoice, FreeIdeaView, FreePlanView, MakerRequest, MakerView };
@@ -133,6 +134,8 @@ export interface ApiMethods {
   /** Read a source again into lesson-sized ideas; returns how many of its old ideas were retired. */
   'library.reread': { input: { sourceId: string }; output: { retired: number } };
   'library.delta': { input: { sourceId: string }; output: DeltaSummary };
+  /** A source to read in the viewer: its PDF, or the text of its parts. */
+  'library.document': { input: { sourceId: string }; output: SourceDocument };
   /** Folders watched for new files (a course folder), with how many of their files are in the Library. */
   'library.watchedFolders': { input: undefined; output: WatchedFolderView[] };
   /** Choose a folder to watch, for a goal or for the Library; its files are added at once. Null when cancelled. */
@@ -269,7 +272,7 @@ export interface ApiMethods {
   'map.mergeIdeas': { input: { keepId: string; dropId: string }; output: { keepId: string } };
   /** Ideas by meaning and name; a question also gets a short answer from the learner's own cards. */
   /** `history`: earlier questions and answers of the same lookup, for a follow-up. */
-  'lookup.search': { input: { query: string; history?: { question: string; answer: string }[] }; output: LookupAnswer };
+  'lookup.search': { input: { query: string; history?: { question: string; answer: string }[]; passage?: SelectedPassage }; output: LookupAnswer };
   /** Open a card from Lookup: counts as a weak review (once per idea per day). */
   'lookup.open': { input: { nodeId: string }; output: NodeCard };
   'trails.list': { input: { nodeId?: string }; output: TrailSummary[] };

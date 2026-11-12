@@ -55,7 +55,7 @@ export function CardSheet({ start, ideas: initialIdeas, goalId, sessionId, onClo
       setBack(card.back);
       setDrafted(true);
     } catch (e) {
-      if (live.current) setError(`The card could not be drafted: ${e instanceof Error ? e.message : String(e)}. You can write it yourself.`);
+      if (live.current) setError(`The card could not be drafted. ${plainError(e instanceof Error ? e.message : String(e))} You can write it yourself.`);
     } finally {
       if (live.current) setPhase('edit');
     }

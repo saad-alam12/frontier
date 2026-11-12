@@ -1,5 +1,5 @@
 import { plainError } from '../lib/errors';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
@@ -7,6 +7,8 @@ import { IdeaNote } from './IdeaNote';
 import { EditIdea } from './EditIdea';
 import { VerticalPath } from './paths';
 import { depthName } from '../lib/stages';
+import { openSource } from '../lib/sourceViewer';
+import { locatorLabel } from '../../backend/core/locators';
 
 const STATE_WORD: Record<MapState, string> = { owned: 'Yours', fringe: 'Learnable now', beyond: 'Beyond your edge' };
 const KIND_WORD = { claim: 'Claim', procedure: 'Procedure', term: 'Term' } as const;
@@ -142,7 +144,26 @@ export function NodeCardView({
 
       {(card.sources.length > 0 || card.firstSession) && (
         <div className="flex flex-col gap-[6px]">
-          {card.sources.length > 0 && <div className="t-small text-muted">From {card.sources.map((s) => (s.locator ? `${s.title}, ${s.locator}` : s.title)).join('; ')}</div>}
+          {card.sources.length > 0 && (
+            <div className="t-small text-muted">
+              From{' '}
+              {card.sources.map((s, i) => {
+                const label = s.locator ? `${s.title}, ${locatorLabel(s.locator)}` : s.title;
+                return (
+                  <Fragment key={`${s.sourceId}|${s.locator ?? ''}`}>
+                    {i > 0 && '; '}
+                    {s.viewable ? (
+                      <button type="button" className="link-button citation-link" title="Open the source here" onClick={() => openSource({ sourceId: s.sourceId, locator: s.locator, ideas: [{ id: card.id, name: card.name }] })}>
+                        {label}
+                      </button>
+                    ) : (
+                      label
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
+          )}
           {card.firstSession && onTrail && (
             <button type="button" className="link-button self-start" onClick={() => onTrail(card.firstSession?.id ?? '')}>
               First taught {formatDay(card.firstSession.date)}: {card.firstSession.title}

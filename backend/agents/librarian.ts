@@ -41,7 +41,7 @@ export async function askLibrarian(
   provider: LlmProvider,
   question: string,
   cards: LibrarianCard[],
-  extra: { passages?: LibrarianPassage[]; history?: { question: string; answer: string }[] } = {},
+  extra: { passages?: LibrarianPassage[]; history?: { question: string; answer: string }[]; selected?: { where: string; text: string } } = {},
 ): Promise<{ answer: string; cited: string[] }> {
   const body = cards
     .map((c) => `### [${c.id}] ${c.name}\n${c.statement}${c.ownStatement ? `\nIn the learner's words: "${c.ownStatement}"` : ''}${c.builtOn.length ? `\nBuilt on: ${c.builtOn.join('; ')}` : ''}`)
@@ -50,6 +50,7 @@ export async function askLibrarian(
   const history = extra.history ?? [];
   const sections = [
     ...(history.length ? [`## The conversation so far\n${history.map((t) => `Learner: ${t.question}\nYou: ${t.answer}`).join('\n\n')}`] : []),
+    ...(extra.selected ? [`## The passage the learner selected (${extra.selected.where})\n${extra.selected.text}`] : []),
     `## ${history.length ? 'Follow-up question' : 'Question'}\n${question}`,
     `## The learner's idea cards\n${body || '(none matched)'}`,
     ...(passages.length ? [`## Passages from the learner's sources\n${passages.map((p) => `### [${p.id}] ${p.where}\n${p.text.length > PASSAGE_CHARS ? `${p.text.slice(0, PASSAGE_CHARS)}…` : p.text}`).join('\n\n')}`] : []),

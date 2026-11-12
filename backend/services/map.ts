@@ -126,7 +126,8 @@ export interface NodeCard {
   leadsTo: IdeaRef[];
   /** From owned ideas down to this one, grounds first. */
   derivation: (IdeaRef & { owned: boolean; premises: IdeaRef[] })[];
-  sources: { sourceId: string; title: string; locator: string | null }[];
+  /** Where the idea comes from; `viewable` when the source is in the library (not a past session) and opens in the viewer. */
+  sources: { sourceId: string; title: string; locator: string | null; viewable: boolean }[];
   bugs: string[];
   /** The session where it was first taught, for the trail link. */
   firstSession: { id: string; date: string; title: string } | null;
@@ -164,7 +165,10 @@ export function nodeCard(db: Database, nodeId: string, now = new Date()): NodeCa
     builtOn: (view.index.into.get(node.id) ?? []).map((c) => c.premises.map(ref)),
     leadsTo: [...new Set((view.index.outOf.get(node.id) ?? []).map((c) => c.conclusion))].map(ref),
     derivation: derivationPath(node.id, view.index, view.owned).map((s) => ({ ...ref(s.nodeId), owned: s.owned, premises: s.premises.map(ref) })),
-    sources: node.sources.map((s) => ({ sourceId: s.sourceId, title: getSource(db, s.sourceId)?.title ?? sessionCitation(db, s.sourceId) ?? 'A source', locator: s.locator ?? null })),
+    sources: node.sources.map((s) => {
+      const source = getSource(db, s.sourceId);
+      return { sourceId: s.sourceId, title: source?.title ?? sessionCitation(db, s.sourceId) ?? 'A source', locator: s.locator ?? null, viewable: source !== undefined && source.kind !== 'session' };
+    }),
     bugs: listBugsForNode(db, node.id).map((b) => b.description),
     firstSession: session ? { id: session.id, date: session.startedAt.slice(0, 10), title: session.state.plan?.title ?? 'Session' } : null,
     simplified: listGoals(db)

@@ -27,6 +27,7 @@ import { planSession } from '../services/planner';
 import { abandonSession, currentSession, pauseSession, respond, startSession, askTutor } from '../services/session';
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { openPythonInstaller } from '../services/codeRunner';
+import { sourceDocument } from '../services/sourceView';
 import { currentPractice, endPracticeSet, handInExam, practiceView, resumeGrading, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
@@ -131,6 +132,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return undefined;
     },
     'library.delta': ({ sourceId }) => deltaForSource(ctx.db(), sourceId),
+    'library.document': ({ sourceId }) => sourceDocument(ctx.db(), ctx.paths().sources, sourceId),
     'library.watchedFolders': () => watchedFolderViews(ctx.db()),
     'library.watchFolder': async ({ goalId }) => {
       const window = ctx.window();
@@ -341,8 +343,8 @@ export function buildHandlers(ctx: AppContext): Handlers {
     },
     'map.mergeCandidates': ({ nodeId, query }) => mergeCandidates(ctx.db(), nodeId, query),
     'map.mergeIdeas': ({ keepId, dropId }) => mergeIdeas(ctx.db(), keepId, dropId),
-    'lookup.search': ({ query, history }) =>
-      lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query, history),
+    'lookup.search': ({ query, history, passage }) =>
+      lookup({ db: ctx.db(), provider: ctx.provider(), embedder: ctx.embedder(), ingestion: ctx.ingestion() }, query, history, passage),
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
     'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),

@@ -1,4 +1,6 @@
 import { Toasts } from './components/Toasts';
+import { SourceViewer } from './components/SourceViewer';
+import { onOpenSource, type SourceTarget } from './lib/sourceViewer';
 import { useWindowFileDrop } from './lib/fileDrop';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from './api';
@@ -61,6 +63,9 @@ export function App() {
   /** The command palette (⌘K) and the goals it offers, read when it opens. */
   const [palette, setPalette] = useState(false);
   const [paletteGoals, setPaletteGoals] = useState<GoalDetail[]>([]);
+  /** A source open in the viewer (from a citation, a passage or the Library). */
+  const [viewing, setViewing] = useState<(SourceTarget & { key: number }) | null>(null);
+  useEffect(() => onOpenSource((target) => setViewing({ ...target, key: Date.now() })), []);
   /** A question asked from the palette, for Lookup to answer. */
   const [lookupQuery, setLookupQuery] = useState<{ query: string; key: number } | null>(null);
   useEffect(() => {
@@ -217,6 +222,17 @@ export function App() {
           onOpenSession={() => {
             setChoose(null);
             navigate('session');
+          }}
+        />
+      )}
+      {viewing && (
+        <SourceViewer
+          key={viewing.key}
+          target={viewing}
+          onClose={() => setViewing(null)}
+          onLearn={(description) => {
+            setViewing(null);
+            openChoose({ describe: description });
           }}
         />
       )}

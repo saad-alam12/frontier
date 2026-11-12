@@ -3,6 +3,7 @@ import { nowIso, parseJson } from './db';
 import { newId } from './ids';
 import { EXTRACTION } from '../core/types';
 import type { Source, SourceKind } from '../core/types';
+import { blocksFromParts } from '../ingest/chunker';
 
 interface SourceRow {
   id: string;
@@ -216,7 +217,8 @@ export interface PassageHit {
 
 /**
  * Passages of the learner's sources (not session transcripts) that hold any of these words, best
- * first (full-text index `chunk_search`, ranked by BM25).
+ * first (full-text index `chunk_search`, ranked by BM25). A part that spans pages is narrowed to the
+ * page that holds most of the words, so a citation opens where the words are.
  */
 export function searchPassages(db: Database, words: string[], limit = 4): PassageHit[] {
   const terms = words.map((w) => w.replace(/"/g, '').trim()).filter(Boolean);
@@ -230,5 +232,18 @@ export function searchPassages(db: Database, words: string[], limit = 4): Passag
        ORDER BY bm25(chunk_search) LIMIT ?`,
     )
     .all(match, limit) as { id: string; locator: string; text: string; source_id: string; title: string; snip: string }[];
-  return rows.map((r) => ({ chunkId: r.id, sourceId: r.source_id, title: r.title, locator: r.locator, snippet: r.snip, text: r.text }));
+  return rows.map((r) => {
+    const block = blockWithWords(r.text, r.locator, terms);
+    return { chunkId: r.id, sourceId: r.source_id, title: r.title, locator: block.locator, snippet: r.snip, text: block.text };
+  });
+}
+
+/** The page (or section) of a stored part that holds most of these words; the whole part when none does. */
+function blockWithWords(text: string, locator: string, terms: string[]): { locator: string; text: string } {
+  const blocks = blocksFromParts([{ text, locator }]);
+  const words = terms.map((t) => t.toLowerCase());
+  const score = (b: { text: string }) => words.filter((w) => b.text.toLowerCase().includes(w)).length;
+  let best: { locator: string; text: string } | null = null;
+  for (const b of blocks) if (score(b) > 0 && (!best || score(b) > score(best))) best = b;
+  return best ?? { locator, text };
 }

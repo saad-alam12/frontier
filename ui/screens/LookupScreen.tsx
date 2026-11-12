@@ -6,10 +6,20 @@ import { Screen } from '../components/Shell';
 import { Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { NodeCardView } from '../components/NodeCard';
+import { openSource } from '../lib/sourceViewer';
+import { locatorLabel } from '../../backend/core/locators';
 
 const STATE_WORD = { owned: 'Yours', fringe: 'Learnable now', beyond: 'Beyond your edge' } as const;
 /** Where a passage is: its source and page. */
-const where = (p: { title: string; locator: string }) => (p.locator ? `${p.title}, ${p.locator}` : p.title);
+const where = (p: { title: string; locator: string }) => (p.locator ? `${p.title}, ${locatorLabel(p.locator)}` : p.title);
+/** A passage's place, as a link that opens the source there. */
+function PassageLink({ p, className }: { p: { sourceId: string; title: string; locator: string }; className: string }) {
+  return (
+    <button type="button" className={`link-button citation-link ${className}`} title="Open the source here" onClick={() => openSource({ sourceId: p.sourceId, locator: p.locator || null })}>
+      {where(p)}
+    </button>
+  );
+}
 
 /** Look things up in your own map: by meaning or name, answered from your own cards. */
 /** `initialQuery`: a question asked from the command palette, looked up at once. */
@@ -119,11 +129,7 @@ export function LookupScreen({ onOpenTrail, onGoDeeper, initialQuery }: { onOpen
                     <span className="t-small text-muted">Quotes</span>
                     {t.answer.passages.map((id) => {
                       const p = t.passages.find((x) => x.id === id);
-                      return p ? (
-                        <span key={id} className="t-small text-secondary">
-                          {where(p)}
-                        </span>
-                      ) : null;
+                      return p ? <PassageLink key={id} p={p} className="t-small" /> : null;
                     })}
                   </div>
                 )}
@@ -154,7 +160,7 @@ export function LookupScreen({ onOpenTrail, onGoDeeper, initialQuery }: { onOpen
           <ul className="list-card">
             {result.passages.map((p) => (
               <li key={p.id} className="flex flex-col gap-[4px]">
-                <span className="t-caption text-muted">{where(p)}</span>
+                <PassageLink p={p} className="t-caption self-start" />
                 <Markdown text={p.snippet} className="t-small text-soft lookup-snippet" />
               </li>
             ))}

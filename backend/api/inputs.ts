@@ -20,7 +20,7 @@ import { NOTE_CHARS } from '../services/notes';
 import { NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
 import { ASIDE_MAX_CHARS } from '../services/session';
 import { STATS_RANGES } from '../services/stats';
-import { MAX_TURNS } from '../services/lookup';
+import { MAX_TURNS, SELECTED_MAX_CHARS } from '../services/lookup';
 import type { ApiInput, ApiName } from './contract';
 
 const none = z.undefined();
@@ -103,6 +103,7 @@ export const INPUTS = {
   'library.remove': sourceOnly,
   'library.reread': sourceOnly,
   'library.delta': sourceOnly,
+  'library.document': sourceOnly,
   'library.watchedFolders': none,
   'library.watchFolder': z.object({ goalId: id.nullable().default(null) }),
   'library.unwatchFolder': z.object({ path: z.string().min(1).max(4_096) }),
@@ -180,7 +181,12 @@ export const INPUTS = {
   'map.editIdea': z.object({ nodeId: id, name: text(NAME_CHARS * 2), statement: text(STATEMENT_CHARS * 2) }),
   'map.mergeCandidates': z.object({ nodeId: id, query: text(200).optional() }),
   'map.mergeIdeas': z.object({ keepId: id, dropId: id }),
-  'lookup.search': z.object({ query: z.string().trim().min(1).max(500), history: z.array(z.object({ question: text(500), answer: text(4_000) })).max(MAX_TURNS * 2).optional() }),
+  'lookup.search': z.object({
+    query: z.string().trim().min(1).max(500),
+    history: z.array(z.object({ question: text(500), answer: text(4_000) })).max(MAX_TURNS * 2).optional(),
+    // a long selection is cut, never refused
+    passage: z.object({ sourceId: id, locator: z.string().max(200).nullable(), text: z.string().trim().min(1).transform((t) => t.slice(0, SELECTED_MAX_CHARS)) }).optional(),
+  }),
   'lookup.open': nodeOnly,
   'trails.list': z.object({ nodeId: id.optional() }),
   'trails.get': sessionOnly,

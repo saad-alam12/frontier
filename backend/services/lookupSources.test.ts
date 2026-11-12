@@ -35,6 +35,13 @@ describe('Lookup over the learner’s sources', () => {
     expect(searchPassages(db, ['chapter'])).toEqual([]);
   });
 
+  it('cites the page of a part that spans pages where the words are', () => {
+    const { db } = setup();
+    createSource(db, { kind: 'pdf', title: 'Lecture 3', path: null, hash: 'l3' }, [{ text: '[p1]\nGames and players.\n\n[p6]\nA Nash equilibrium is a profile of mutual best responses.', locator: 'p1–p6' }]);
+    const [hit] = searchPassages(db, ['mutual', 'responses']);
+    expect(hit).toMatchObject({ title: 'Lecture 3', locator: 'p6', text: 'A Nash equilibrium is a profile of mutual best responses.' });
+  });
+
   it('finds ideas named in a question by abbreviation or a telling word, with no search model', async () => {
     const { db, id } = setup();
     const hits = (await searchIdeas({ db }, 'difference between SPE and Nash')).map((h) => h.nodeId);

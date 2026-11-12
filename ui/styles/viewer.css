@@ -1,0 +1,186 @@
+/* The source viewer: a PDF page with selectable text, or a source's parts as text, and an explanation beside it. */
+
+.viewer {
+  width: min(1180px, calc(100vw - 48px));
+  max-width: none;
+  height: calc(100vh - 48px);
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    0 24px 72px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.viewer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.viewer::backdrop {
+  background: rgba(10, 9, 8, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px 12px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.viewer-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  font-weight: 500;
+}
+.viewer-pages {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.viewer-page-input {
+  width: 52px;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+.viewer-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.viewer-page {
+  min-width: 0;
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+  outline: none;
+}
+.viewer-explain {
+  display: flex;
+  width: 340px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-left: 1px solid var(--border);
+  overflow: auto;
+}
+.viewer-quote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* a page as printed: white, with its text laid invisibly over it so it can be selected */
+.pdf-page {
+  position: relative;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.pdf-page canvas {
+  display: block;
+}
+.pdf-text {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+.pdf-text :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+.pdf-text > span,
+.pdf-text .markedContent span {
+  font-size: calc(var(--total-scale-factor) * var(--min-font-size) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1)) scale(calc(1 / var(--min-font-size)));
+}
+.pdf-text .markedContent {
+  display: contents;
+}
+.pdf-text ::selection {
+  background: rgba(70, 100, 230, 0.32);
+}
+
+.viewer-text {
+  display: flex;
+  max-width: 720px;
+  flex-direction: column;
+  gap: 22px;
+  margin: 0 auto;
+}
+.viewer-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  line-height: 1.6;
+}
+.viewer-part.is-cited {
+  background: var(--accent-tint);
+}
+
+@media (max-width: 899px) {
+  .viewer-body {
+    flex-direction: column;
+  }
+  .viewer-explain {
+    width: auto;
+    max-height: 45%;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+/* a citation that opens its source: it reads as part of the line, and shows itself on hover */
+.link-button.citation-link {
+  display: inline;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+.link-button.citation-link:hover {
+  color: var(--accent-text);
+  text-decoration-color: currentColor;
+}

@@ -12,6 +12,8 @@ import { crc32, deflateSync } from 'node:zlib';
 import { saveImageFile } from '../backend/store/attachments';
 import { describeFigure, listFigures, setFigurePicture, syncFigurePages } from '../backend/store/figures';
 import { createSource } from '../backend/store/sources';
+import { applyMergePlan } from '../backend/store/worldWrites';
+import { makePdf } from './lib/tinyPdf';
 import { addWatchedFolder } from '../backend/store/watchedFolders';
 import { strToU8, zipSync } from 'fflate';
 import { FakeProvider } from '../backend/llm/FakeProvider';
@@ -167,7 +169,26 @@ const now = new Date();
 const daysAgo = (days: number, hour = 19) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, hour, 10);
 
 // a lecture whose page 7 is mostly a figure: its picture shows Nash equilibrium
-const lecture = createSource(db, { kind: 'pdf', title: 'Lecture 3: Equilibrium', path: null, hash: 'sandbox-lecture-3' }, [{ text: '[p7]\nThe pricing game', locator: 'p7' }]);
+// its stored copy is a real PDF, so the source viewer can draw it and its text can be selected
+const LECTURE_PAGES: string[][] = [
+  ['Lecture 3: Equilibrium', 'Game theory, winter term'],
+  ['Strategic form games', 'A game in strategic form lists the players, their strategies and their payoffs.', 'A strategy profile picks one strategy for each player.'],
+  ['Best responses', 'A best response maximizes a player\'s payoff given what the others play.', 'A player may have several best responses to the same profile.'],
+  ['Dominance', 'A strategy is strictly dominated when another strategy beats it against every choice of the others.', 'A rational player never plays a strictly dominated strategy.'],
+  ['Iterated elimination', 'Remove strictly dominated strategies, then look again: new ones may now be dominated.', 'The order of elimination does not change what survives.'],
+  ['Nash equilibrium', 'A profile is a Nash equilibrium when every strategy in it is a best response to the others.', 'No player can gain by changing their own strategy alone.'],
+  ['The pricing game', 'Two firms choose a high or a low price at the same time.', 'Whatever the other firm does, a low price earns more, so both choose low.', 'The equilibrium is low, low: both would be better off at high, high.'],
+  ['Summary', 'Best responses, dominance and equilibrium are the tools for the rest of the course.'],
+];
+const lecture = createSource(
+  db,
+  { kind: 'pdf', title: 'Lecture 3: Equilibrium', path: 'sandbox-lecture-3.pdf', hash: 'sandbox-lecture-3' },
+  [{ text: LECTURE_PAGES.map((lines, i) => `[p${i + 1}]\n${lines.join('\n')}`).join('\n\n'), locator: `p1–p${LECTURE_PAGES.length}` }],
+);
+mkdirSync(join(dataFolder, 'sources'), { recursive: true });
+writeFileSync(join(dataFolder, 'sources', 'sandbox-lecture-3.pdf'), makePdf(LECTURE_PAGES));
+// Nash equilibrium is stated on page 6 and used on page 7: its card cites both
+applyMergePlan(db, { newNodes: [], nodeUpdates: [{ nodeId: ids.get('nash') as string, aliases: [], sources: [{ sourceId: lecture.id, locator: 'p6' }] }], newChains: [], chainUpdates: [], droppedChainIds: [], coveredNodeIds: [], skippedChains: [], examples: [] });
 // lecture notes with real text, for Lookup's passages (marked read, as after reading)
 const notes = createSource(db, { kind: 'markdown', title: 'Lecture 5 notes: Sequential games', path: null, hash: 'sandbox-lecture-5' }, [
   { text: 'In a sequential game players move one after another. A strategy says what a player does at every decision node, even at nodes that are never reached.', locator: 'p2' },

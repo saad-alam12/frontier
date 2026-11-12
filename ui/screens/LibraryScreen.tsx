@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { call, onEvent } from '../api';
 import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../../backend/api/contract';
 import { WatchedFolders } from '../components/WatchedFolders';
@@ -7,6 +7,8 @@ import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../component
 import { Markdown } from '../components/Markdown';
 import { Dialog } from '../components/Dialog';
 import { plainError } from '../lib/errors';
+import { openSource } from '../lib/sourceViewer';
+import { locatorLabel } from '../../backend/core/locators';
 import { ROLE_LABEL } from './goals/labels';
 
 const CLASS_LABEL: Record<DeltaClass, string> = {
@@ -231,6 +233,7 @@ export function LibraryScreen() {
                   Read again
                 </Button>
               )}
+              {(current.chunkCount > 0 || (current.kind === 'pdf' && current.path)) && <Button onClick={() => openSource({ sourceId: current.id, locator: null })}>Read</Button>}
               {current.path && (
                 <Button kind="quiet" onClick={() => void call('library.openOriginal', { sourceId: current.id }).catch(failed)}>
                   Open original
@@ -248,6 +251,7 @@ export function LibraryScreen() {
                   <IdeaRow
                     key={item.nodeId}
                     item={item}
+                    sourceId={current.id}
                     highlighted={highlight === item.nodeId}
                     inSource={(id) => delta.items.some((i) => i.nodeId === id)}
                     onOpen={(id) => {
@@ -290,15 +294,8 @@ function sortItems(items: DeltaItem[], order: Order): DeltaItem[] {
   return order === 'source' ? items : [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** "p12" → "p 12", "p12–p14" → "pp 12–14"; headings stay as they are. */
-function formatCitation(locator: string): string {
-  const range = /^p(\d+)–p(\d+)$/.exec(locator);
-  if (range) return `pp ${range[1]}–${range[2]}`;
-  const page = /^p(\d+)$/.exec(locator);
-  return page ? `p ${page[1]}` : locator;
-}
 
-function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; highlighted: boolean; inSource: (id: string) => boolean; onOpen: (id: string) => void }) {
+function IdeaRow({ item, sourceId, highlighted, inSource, onOpen }: { item: DeltaItem; sourceId: string; highlighted: boolean; inSource: (id: string) => boolean; onOpen: (id: string) => void }) {
   const refs = (list: IdeaRef[]) =>
     list.map((r, i) => (
       <span key={r.id}>
@@ -318,7 +315,18 @@ function IdeaRow({ item, highlighted, inSource, onOpen }: { item: DeltaItem; hig
     <li id={`idea-${item.nodeId}`} className={highlighted ? 'idea-row is-highlighted' : 'idea-row'}>
       <div className="row">
         <Markdown text={item.name} inline className="font-medium" />
-        {item.citations.length > 0 && <span className="t-small min-w-0 max-w-[45%] truncate text-muted" title={item.citations.map(formatCitation).join(', ')}>{item.citations.map(formatCitation).join(', ')}</span>}
+        {item.citations.length > 0 && (
+          <span className="t-small min-w-0 max-w-[45%] truncate text-muted" title={item.citations.map(locatorLabel).join(', ')}>
+            {item.citations.map((c, i) => (
+              <Fragment key={c}>
+                {i > 0 && ', '}
+                <button type="button" className="link-button citation-link" title="Open the source here" onClick={() => openSource({ sourceId, locator: c, ideas: [{ id: item.nodeId, name: item.name }] })}>
+                  {locatorLabel(c)}
+                </button>
+              </Fragment>
+            ))}
+          </span>
+        )}
       </div>
       <Markdown text={item.statement} className="text-soft" />
       {(item.builtOn.length > 0 || item.leadsTo.length > 0) && (
