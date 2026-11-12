@@ -13,11 +13,12 @@ import { weekReview } from '../services/weekReview';
 import { watchedFolderViews } from '../services/folderWatch';
 import { misconceptionsView } from '../services/misconceptions';
 import { dismissMisconception } from '../services/bugs';
-import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SourceSummary } from './contract';
+import type { ApiEvents, ApiInput, ApiMethods, ApiName, ApiOutput, EventName, MakerView, MaterialCandidate, SettingsView, SourceSummary } from './contract';
 import { EVENT_CHANNEL, IPC_CHANNEL } from './contract';
 import type { AppContext } from '../context';
 import { getSource } from '../store/sources';
 import { SettingsPatchSchema, modelOptions } from '../settings/schema';
+import type { Settings } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
@@ -58,6 +59,8 @@ type Handlers = { [N in ApiName]: (input: ApiInput<N>) => Promise<ApiOutput<N>> 
 
 export function buildHandlers(ctx: AppContext): Handlers {
   /** Screens that count or list cards (the sidebar, Today, a goal page) refresh on this. */
+  /** The window never gets the API key back: only whether one is kept. */
+  const forWindow = (settings: Settings): SettingsView => ({ ...settings, apiKey: '', apiKeySaved: Boolean(settings.apiKey), apiKeyLost: ctx.settings.keyLost && !settings.apiKey, keychain: ctx.settings.sealsKeys() });
   const cardsChanged = (goalId: string | null) => ctx.emit('cards.changed', { goalId });
   const detail = (goalId: string) => {
     const d = goalDetail(ctx.db(), goalId, ctx.goalWorker().status(goalId));
@@ -116,12 +119,12 @@ export function buildHandlers(ctx: AppContext): Handlers {
       await shell.openPath(ctx.paths().backups);
       return null;
     },
-    'settings.get': () => ctx.settings.get(),
+    'settings.get': () => forWindow(ctx.settings.get()),
     'settings.update': (patch) => {
       const previous = ctx.settings.get();
       const next = ctx.settings.update(SettingsPatchSchema.parse(patch));
       ctx.onSettingsChanged(previous);
-      return next;
+      return forWindow(next);
     },
     'settings.modelOptions': () => modelOptions(),
     'settings.testConnection': () => runConnectionTest(ctx.provider()),

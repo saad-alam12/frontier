@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, nativeTheme, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, Notification, safeStorage, shell } from 'electron';
+import type { SecretBox } from './settings/secrets';
 import { AppContext } from './context';
 import { eventSink, registerIpc } from './api/handlers';
 import { ChromiumPageRenderer } from './render/pagePictures';
@@ -130,6 +131,13 @@ function remind(ctx: AppContext): void {
   }
 }
 
+/** The API key sealed with the system's keychain (Electron's safeStorage), never in plain text. */
+const keychain: SecretBox = {
+  available: () => safeStorage.isEncryptionAvailable(),
+  seal: (text) => safeStorage.encryptString(text).toString('base64'),
+  open: (sealed) => safeStorage.decryptString(Buffer.from(sealed, 'base64')),
+};
+
 void app.whenReady().then(() => {
   if (!first) return;
   const ctx = new AppContext(
@@ -137,6 +145,7 @@ void app.whenReady().then(() => {
     join(app.getPath('userData'), 'settings.json'),
     join(app.getPath('home'), 'Frontier'),
     new ChromiumPageRenderer(),
+    keychain,
   );
   context = ctx;
   ctx.log.info('app', `Frontier ${app.getVersion()} started on ${process.platform}`);

@@ -22,6 +22,7 @@ import { guessRole, updateGoalFromForm } from './services/goals';
 import { listGoals, listMaterials } from './store/goals';
 import type { Settings } from './settings/schema';
 import { SettingsStore, dataPaths } from './settings/store';
+import type { SecretBox } from './settings/secrets';
 import { dailyBackup, isBackupName, listBackups, manualBackup, restoreBackup as saveBeforeRestore } from './store/backup';
 import type { BackupInfo } from './store/backup';
 import { openDatabase } from './store/db';
@@ -60,8 +61,10 @@ export class AppContext {
     defaultDataFolder: string,
     /** Makes pictures of PDF pages that are mostly figures; the app passes the browser engine's. */
     private readonly renderer?: PageRenderer,
+    /** Seals the API key with the system's keychain; the app passes Electron's. */
+    secrets?: SecretBox,
   ) {
-    this.settings = new SettingsStore(settingsFile, defaultDataFolder);
+    this.settings = new SettingsStore(settingsFile, defaultDataFolder, secrets);
     this.log = new LogFile(join(dirname(settingsFile), 'frontier.log'));
     this.ensureFolders();
     this.sessionWork.subscribe((event) => this.emit('session.work', event));

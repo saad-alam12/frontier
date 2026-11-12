@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../api';
-import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, Preset, PythonInfo, Role, Settings, SettingsPatch, UsageView } from '../../backend/api/contract';
+import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, Preset, PythonInfo, Role, Settings, SettingsPatch, SettingsView, UsageView } from '../../backend/api/contract';
 import { Screen } from '../components/Shell';
 import { Button, Notice, RadioCards, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
@@ -105,7 +105,9 @@ const EFFORT_LABEL: Record<Effort, string> = { low: 'Low', medium: 'Medium', hig
 const CUSTOM = '__custom__';
 
 export function SettingsScreen() {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<SettingsView | null>(null);
+  /** A new API key as it is typed; the saved one never comes back to the window. */
+  const [keyDraft, setKeyDraft] = useState('');
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
@@ -158,16 +160,40 @@ export function SettingsScreen() {
             </select>
           </SettingRow>
           {settings.provider === 'anthropicApi' && (
-            <SettingRow label="API key" htmlFor="api-key">
-              <input
-                id="api-key"
-                className="input"
-                type="password"
-                value={settings.apiKey}
-                onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                onBlur={(e) => void update({ apiKey: e.target.value })}
-                placeholder="sk-ant-..."
-              />
+            <SettingRow
+              label="API key"
+              htmlFor="api-key"
+              hint={
+                settings.apiKeyLost
+                  ? 'The saved key could not be opened on this computer. Enter it again.'
+                  : settings.apiKeySaved
+                    ? `${settings.keychain ? 'Saved in the system keychain' : 'Saved'}. Type a new key to replace it.`
+                    : settings.keychain
+                      ? 'Kept in the system keychain, never in a plain file.'
+                      : 'This system has no keychain, so the key is kept in the settings file.'
+              }
+              hintError={settings.apiKeyLost}
+            >
+              <div className="flex items-center gap-[10px]">
+                <input
+                  id="api-key"
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  value={keyDraft}
+                  onChange={(e) => setKeyDraft(e.target.value)}
+                  onBlur={() => {
+                    if (!keyDraft.trim()) return;
+                    void update({ apiKey: keyDraft.trim() }).then(() => setKeyDraft(''));
+                  }}
+                  placeholder={settings.apiKeySaved ? '•••••••• saved' : 'sk-ant-...'}
+                />
+                {settings.apiKeySaved && (
+                  <button type="button" className="link-button shrink-0" onClick={() => void update({ apiKey: '' })}>
+                    Remove
+                  </button>
+                )}
+              </div>
             </SettingRow>
           )}
           <SettingRow label="Model calls at once" htmlFor="concurrency" hint="Background work never runs more calls than this at the same time. Keep it low on a subscription.">

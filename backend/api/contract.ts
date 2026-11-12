@@ -115,8 +115,9 @@ export interface ApiMethods {
   /** Put a backup in place of the data (the data as it is now is copied first). The window reloads afterwards. */
   'backups.restore': { input: { file: string }; output: null };
   'backups.showFolder': { input: undefined; output: null };
-  'settings.get': { input: undefined; output: Settings };
-  'settings.update': { input: SettingsPatch; output: Settings };
+  /** The settings as the window sees them: never the API key itself, only whether one is saved. */
+  'settings.get': { input: undefined; output: SettingsView };
+  'settings.update': { input: SettingsPatch; output: SettingsView };
   /** Known models, their efforts and the default per role, for the Settings dropdowns. */
   'settings.modelOptions': { input: undefined; output: ModelOptions };
   'settings.testConnection': { input: undefined; output: ConnectionTestResult };
@@ -367,3 +368,6 @@ export interface FrontierBridge {
   /** The file system path of a dropped file (Electron no longer exposes File.path). */
   pathForFile(file: File): string;
 }
+
+/** Settings for the window: `apiKey` is always empty; `apiKeySaved` says whether a key is kept (sealed in the keychain). */
+export type SettingsView = Settings & { apiKeySaved: boolean; apiKeyLost: boolean; /** The key is kept sealed by the system's keychain. */ keychain: boolean };

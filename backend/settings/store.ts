@@ -1,16 +1,29 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { SettingsSchema, salvageSettings, type Settings, type SettingsPatch } from './schema';
+import type { SecretBox } from './secrets';
 
-/** Settings live in a small JSON file because the data folder path must be known before the database opens. */
+/**
+ * Settings live in a small JSON file because the data folder path must be known before the database
+ * opens. The API key is written sealed by the system's keychain (`apiKeySealed`) when there is one;
+ * a key found in plain text from before is sealed the first time the file is read.
+ */
 export class SettingsStore {
   private current: Settings;
+  /** The key on disk could not be opened (the file came from another computer): it must be entered again. */
+  keyLost = false;
 
   constructor(
     private readonly filePath: string,
     private readonly defaultDataFolder: string,
+    private readonly secrets?: SecretBox,
   ) {
     this.current = this.read();
+  }
+
+  /** Whether the key is kept sealed by a keychain (false where the system offers none). */
+  sealsKeys(): boolean {
+    return this.secrets?.available() ?? false;
   }
 
   get(): Settings {
@@ -31,8 +44,28 @@ export class SettingsStore {
   private write(): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
     const temporary = `${this.filePath}.tmp`;
-    writeFileSync(temporary, JSON.stringify(this.current, null, 2));
+    writeFileSync(temporary, JSON.stringify(this.onDisk(), null, 2));
     renameSync(temporary, this.filePath);
+  }
+
+  /** The settings as written: the key sealed when the keychain can seal it, else as it is. */
+  private onDisk(): Record<string, unknown> {
+    if (!this.current.apiKey || !this.secrets?.available()) return { ...this.current };
+    return { ...this.current, apiKey: '', apiKeySealed: this.secrets.seal(this.current.apiKey) };
+  }
+
+  /** The key from the file: opened from its seal, or as written in plain text before keys were sealed. */
+  private withKey(settings: Settings, raw: unknown): { settings: Settings; plain: boolean } {
+    const sealed = raw && typeof raw === 'object' ? (raw as { apiKeySealed?: unknown }).apiKeySealed : undefined;
+    if (typeof sealed === 'string' && sealed && this.secrets?.available()) {
+      try {
+        return { settings: { ...settings, apiKey: this.secrets.open(sealed) }, plain: false };
+      } catch {
+        this.keyLost = true;
+        return { settings: { ...settings, apiKey: '' }, plain: false };
+      }
+    }
+    return { settings, plain: Boolean(settings.apiKey) };
   }
 
   /**
@@ -42,17 +75,29 @@ export class SettingsStore {
   private read(): Settings {
     if (!existsSync(this.filePath)) return SettingsSchema.parse({});
     let raw: unknown = null;
+    let parsed: Settings;
     try {
       raw = JSON.parse(readFileSync(this.filePath, 'utf8'));
-      return SettingsSchema.parse(raw);
+      parsed = SettingsSchema.parse(raw);
     } catch {
       try {
         copyFileSync(this.filePath, join(dirname(this.filePath), 'settings.unreadable.json'));
       } catch {
         // the copy is a courtesy; reading goes on without it
       }
-      return salvageSettings(raw);
+      parsed = salvageSettings(raw);
     }
+    const { settings, plain } = this.withKey(parsed, raw);
+    // a key from before keys were sealed is sealed now, and leaves the file in plain text
+    if (plain && this.secrets?.available()) {
+      this.current = settings;
+      try {
+        this.write();
+      } catch {
+        // the key stays as it was until the next change of settings
+      }
+    }
+    return settings;
   }
 }
 

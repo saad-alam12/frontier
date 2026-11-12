@@ -86,3 +86,54 @@ describe('a settings file with a bad field', () => {
     expect(new SettingsStore(path, '/default').get()).toEqual({ ...SettingsSchema.parse({}), dataFolder: '/default' });
   });
 });
+
+describe('the API key in the keychain', () => {
+  /** A stand-in keychain: reversible, and visibly not the key. */
+  const box = (available = true) => ({
+    available: () => available,
+    seal: (text: string) => Buffer.from(`sealed:${text}`).toString('base64'),
+    open: (sealed: string) => {
+      const text = Buffer.from(sealed, 'base64').toString();
+      if (!text.startsWith('sealed:')) throw new Error('cannot open');
+      return text.slice('sealed:'.length);
+    },
+  });
+  const file = async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    return join(mkdtempSync(join(tmpdir(), 'frontier-keychain-')), 'settings.json');
+  };
+
+  it('writes the key sealed, never in plain text, and reads it back', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { SettingsStore } = await import('./store');
+    const path = await file();
+    new SettingsStore(path, '/data', box()).update({ provider: 'anthropicApi', apiKey: 'sk-ant-secret' });
+    const onDisk = readFileSync(path, 'utf8');
+    expect(onDisk).not.toContain('sk-ant-secret');
+    expect(JSON.parse(onDisk)).toMatchObject({ apiKey: '', apiKeySealed: expect.any(String) });
+    expect(new SettingsStore(path, '/data', box()).get().apiKey).toBe('sk-ant-secret');
+  });
+
+  it('seals a key left in plain text by an older version the first time it reads the file', async () => {
+    const { readFileSync, writeFileSync } = await import('node:fs');
+    const { SettingsStore } = await import('./store');
+    const path = await file();
+    writeFileSync(path, JSON.stringify({ provider: 'anthropicApi', apiKey: 'sk-ant-old' }));
+    expect(new SettingsStore(path, '/data', box()).get().apiKey).toBe('sk-ant-old');
+    expect(readFileSync(path, 'utf8')).not.toContain('sk-ant-old');
+  });
+
+  it('keeps the key as before when there is no keychain, and says when a sealed key cannot be opened', async () => {
+    const { readFileSync, writeFileSync } = await import('node:fs');
+    const { SettingsStore } = await import('./store');
+    const path = await file();
+    new SettingsStore(path, '/data', box(false)).update({ apiKey: 'sk-ant-plain' });
+    expect(readFileSync(path, 'utf8')).toContain('sk-ant-plain');
+    writeFileSync(path, JSON.stringify({ apiKeySealed: Buffer.from('from another computer').toString('base64') }));
+    const store = new SettingsStore(path, '/data', box());
+    expect(store.get().apiKey).toBe('');
+    expect(store.keyLost).toBe(true);
+  });
+});

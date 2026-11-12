@@ -66,6 +66,28 @@ const WAITED_ON: ReadonlySet<Role> = new Set<Role>(['tutor', 'tutorEscalation', 
 const WAITED_ON_LIMIT = 2;
 
 /**
+ * How long one call may run before it is stopped (design §11.2, "Time limits"), counted from when it
+ * starts, not while it waits for a free place: a call the learner waits on gets five minutes (a fresh
+ * explanation after a worked example, eight), background work fifteen (a lecture part with many
+ * pictures, a goal mapped at high effort). A call that never answers would otherwise hold its place
+ * in the queue, and everything behind it, for good.
+ */
+export const TIME_LIMIT_MS = { waitedOn: 5 * 60_000, background: 15 * 60_000, tutorEscalation: 8 * 60_000 } as const;
+
+export function timeLimitFor(role: Role): number {
+  if (role === 'tutorEscalation') return TIME_LIMIT_MS.tutorEscalation;
+  return WAITED_ON.has(role) ? TIME_LIMIT_MS.waitedOn : TIME_LIMIT_MS.background;
+}
+
+/** A call stopped because it ran past its time limit; unlike a stop by the learner, it is a failure. */
+export class TimedOutError extends Error {
+  constructor(role: Role, ms: number) {
+    super(`The model did not answer within ${Math.round(ms / 60_000)} minutes, so the ${role} call was stopped. Try again; if it keeps happening, check the connection in Settings.`);
+    this.name = 'TimedOutError';
+  }
+}
+
+/**
  * Wrap a provider in two lanes. Background work (reading sources, mapping goals, grading, writing
  * cards) runs at most `limit` calls at once, because usage counts against the owner's plan; calls
  * the learner waits on run beside it, at most two at once. The provider and the limit can change
@@ -83,6 +105,8 @@ export class ThrottledProvider implements LlmProvider {
     private readonly onError?: (role: Role, error: unknown) => void,
     /** Told of every call that answered, with what it used. */
     private readonly onDone?: (role: Role, result: CompleteResult<unknown>) => void,
+    /** The time limit of a call by its role; tests shorten it. */
+    private readonly limitFor: (role: Role) => number = timeLimitFor,
   ) {
     this.semaphore = new Semaphore(limit);
   }
@@ -99,7 +123,7 @@ export class ThrottledProvider implements LlmProvider {
   complete<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
     const lane = WAITED_ON.has(req.role) ? this.waitedOn : this.semaphore;
     return lane
-      .run(() => this.inner.complete(req), req.signal)
+      .run(() => this.withTimeLimit(req), req.signal)
       .then((result) => {
         // keeping a count must never fail the call it counts
         try {
@@ -113,5 +137,27 @@ export class ThrottledProvider implements LlmProvider {
         if (!isCancelled(error)) this.onError?.(req.role, error);
         throw error;
       });
+  }
+
+  /** Run the call with its own stop signal: the learner's, or the time limit's. */
+  private async withTimeLimit<T>(req: CompleteRequest<T>): Promise<CompleteResult<T>> {
+    const limit = this.limitFor(req.role);
+    const stop = new AbortController();
+    const forward = () => stop.abort();
+    req.signal?.addEventListener('abort', forward, { once: true });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stop.abort();
+    }, limit);
+    try {
+      return await this.inner.complete({ ...req, signal: stop.signal });
+    } catch (error) {
+      if (timedOut && !req.signal?.aborted) throw new TimedOutError(req.role, limit);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      req.signal?.removeEventListener('abort', forward);
+    }
   }
 }

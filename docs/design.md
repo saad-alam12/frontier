@@ -486,6 +486,10 @@ Rules:
 
 **Keeping the data safe.** Everything the learner has built lives in `frontier.db`, so: a copy is made each day the app is used and before every schema upgrade (`VACUUM INTO`, consistent while the app runs); Settings lists the copies, makes one on request and restores one (the data as it is now is copied first, so a restore can be undone); when the file opens it is checked, and data that is damaged or was written by a newer version of the app is refused with a message that names the file and the backups, instead of starting on an empty database; only one copy of the app runs per data folder.
 
+**The API key.** With the API key provider, the key is kept sealed by the system's keychain (Electron's safeStorage: the macOS Keychain, or the platform's equivalent) in the settings file as `apiKeySealed`, never in plain text; a key an older version left in plain text is sealed the first time the file is read. The window never gets the key back: Settings shows that one is saved, takes a new one to replace it, and can remove it. Where the system has no keychain the key is kept as before. A sealed key copied to another computer cannot be opened there, and Settings asks for it again.
+
+**Time limits.** A model call that never answers is stopped: five minutes for a call the learner waits on (eight for a fresh explanation after a worked example), fifteen for background work, counted from when the call starts rather than while it waits for a place. A stopped call is a failure like any other (logged, and retried where the work retries), never mistaken for the learner stopping it, and its place in the queue is free again.
+
 **The log.** Errors do not vanish: a call from the window that fails, a model call that fails (with its role), background work that tells the learner something went wrong, and anything nothing caught are written to `frontier.log` beside the settings file, with the time and where it was thrown. It holds error messages only, never the learner's words, a prompt or a key. Past a megabyte it becomes `frontier.log.1` and a new file starts. Settings has "Show log".
 
 ---
