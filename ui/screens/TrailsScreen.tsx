@@ -1,11 +1,12 @@
 import { Asides } from '../components/AskTutor';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Trail, TrailItem, TrailSummary } from '../../backend/api/contract';
+import type { Trail, TrailItem, TrailNarration, TrailSummary } from '../../backend/api/contract';
 import { confidenceLabel } from '../../backend/core/types';
 import { joinNames } from '../../backend/core/freeSession';
-import { call } from '../api';
+import { call, isCancelled } from '../api';
+import { plainError } from '../lib/errors';
 import { Breadcrumb, Screen } from '../components/Shell';
-import { Button, ChoiceChips, Empty, MetaLine } from '../components/controls';
+import { Button, ChoiceChips, Empty, MetaLine, Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { ResponseExtras } from '../components/AnswerExtras';
 import { STAGE_LABEL, cardText } from '../lib/stages';
@@ -22,6 +23,18 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
   const [cursor, setCursor] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  /** The story being told, or told: of the session open, or of the sessions in the list. */
+  const [telling, setTelling] = useState<{ what: string; story: TrailNarration | null; error: string | null } | null>(null);
+  const tell = async (what: string, sessionIds: string[]) => {
+    setTelling({ what, story: null, error: null });
+    try {
+      const story = await call('trails.narrate', { sessionIds });
+      setTelling((t) => (t?.what === what ? { what, story, error: null } : t));
+    } catch (e) {
+      if (isCancelled(e)) return setTelling(null);
+      setTelling((t) => (t?.what === what ? { what, story: null, error: plainError(e instanceof Error ? e.message : String(e)) } : t));
+    }
+  };
 
   useEffect(() => {
     void call('trails.list', {}).then((list) => {
@@ -70,6 +83,11 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
     <>
       <h2 className="t-title">Sessions</h2>
       {goals.length > 1 && <ChoiceChips small label="Goal" value={goal} onChange={setGoal} options={[{ value: 'all', label: 'All' }, ...goals.map(([id, title]) => ({ value: id, label: title }))]} />}
+      {shown.length > 1 && (
+        <Button disabled={telling?.what === 'list' && telling.story === null && telling.error === null} onClick={() => void tell('list', shown.map((t) => t.id))}>
+          {telling?.what === 'list' && telling.story === null && telling.error === null ? 'Writing the story…' : `Tell the story of these ${shown.length} sessions`}
+        </Button>
+      )}
       <ul className="list-card">
         {shown.map((t) => (
           <li key={t.id} className={t.id === selected ? 'is-selected' : undefined}>
@@ -106,6 +124,9 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
               />
             </div>
             <div className="replay-bar">
+              <Button kind="secondary" disabled={telling?.what === trail.summary.id && telling.story === null && telling.error === null} onClick={() => void tell(trail.summary.id, [trail.summary.id])}>
+                {telling?.what === trail.summary.id && telling.story === null && telling.error === null ? 'Writing the story…' : 'Tell the story'}
+              </Button>
               {cursor === null ? (
                 <Button
                   onClick={() => {
@@ -141,6 +162,18 @@ export function TrailsScreen({ initialId }: { initialId: string | null }) {
               )}
             </div>
           </div>
+          {telling && (telling.story || telling.error) && (telling.what === 'list' || telling.what === trail.summary.id) && (
+            <section className="scope-note" aria-label="The story">
+              <div className="section-head">
+                <div className="t-caption text-muted">{telling.story ? `${telling.story.title} · ${telling.story.sessions === 1 ? 'one session' : `${telling.story.sessions} sessions`}` : 'The story'}</div>
+                <button type="button" className="link-button t-small" onClick={() => setTelling(null)}>
+                  Close
+                </button>
+              </div>
+              {telling.error && <Notice error>{telling.error}</Notice>}
+              {telling.story && <Markdown text={telling.story.story} className="t-lead" />}
+            </section>
+          )}
           <div className="flex flex-col gap-[40px]">
             {items.map((item, i) => (
               <TrailEntry key={item.id} item={item} fresh={cursor !== null && i === items.length - 1} />

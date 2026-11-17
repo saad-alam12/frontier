@@ -21,6 +21,7 @@ import { NAME_CHARS, STATEMENT_CHARS } from '../services/mapEdit';
 import { ASIDE_MAX_CHARS } from '../services/session';
 import { STATS_RANGES } from '../services/stats';
 import { MAX_TURNS, SELECTED_MAX_CHARS } from '../services/lookup';
+import { MAX_NARRATED_SESSIONS } from '../services/trailNarration';
 import type { ApiInput, ApiName } from './contract';
 
 const none = z.undefined();
@@ -190,6 +191,7 @@ export const INPUTS = {
   'lookup.open': nodeOnly,
   'trails.list': z.object({ nodeId: id.optional() }),
   'trails.get': sessionOnly,
+  'trails.narrate': z.object({ sessionIds: z.array(id).min(1).max(MAX_NARRATED_SESSIONS * 5) }),
   'activity.tick': z.object({ surface: z.enum(['session', 'practice', 'probe', 'cards', 'lookup', 'map', 'reading']), seconds: z.number().min(0).max(3_600), goalId: id.nullable().optional(), practiceSetId: id.nullable().optional() }),
   'stats.view': z.object({ goalId: id.nullable(), topicId: z.string().max(200).nullable(), range: z.enum(STATS_RANGES) }),
   'stats.misconceptions': none,

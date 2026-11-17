@@ -24,6 +24,7 @@ import type { TodayGoal, TodayView } from '../services/today';
 import type { MapNodeView, MapState, MapView, NodeCard } from '../services/map';
 import type { LookupAnswer, LookupHit, SelectedPassage } from '../services/lookup';
 import type { Trail, TrailItem, TrailSummary } from '../services/trails';
+import type { TrailNarration } from '../services/trailNarration';
 import type { GoalProgress, PlanPreview, ResourceTime } from '../services/budget';
 import type { RemapView } from '../services/remap';
 import type { AdditionView } from '../services/addition';
@@ -52,7 +53,7 @@ export type { CardInput, CardListFilter, CardListView, CardOrigin, CardPhase, Ca
 export type { AdditionView, GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
 
-export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailSummary };
+export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailNarration, TrailSummary };
 
 export type { FadingIdea, GoalSchedule, PracticeProblemView, PracticeView, TodayGoal, TodayView };
 
@@ -277,6 +278,8 @@ export interface ApiMethods {
   'lookup.open': { input: { nodeId: string }; output: NodeCard };
   'trails.list': { input: { nodeId?: string }; output: TrailSummary[] };
   'trails.get': { input: { sessionId: string }; output: Trail };
+  /** The story of one or more sessions, told by the model from what they stored. */
+  'trails.narrate': { input: { sessionIds: string[] }; output: TrailNarration };
   /** Active time from the renderer, attributed to what the learner is doing. */
   'activity.tick': { input: TickInput; output: undefined };
   'stats.view': { input: StatsFilter; output: StatsView };

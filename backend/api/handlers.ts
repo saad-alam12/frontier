@@ -34,6 +34,7 @@ import { mapView, nodeCard } from '../services/map';
 import { eraseFromMap, previewErase, removeSource } from '../services/erase';
 import { lookup, openCard } from '../services/lookup';
 import { listTrails, trail } from '../services/trails';
+import { narrateTrails } from '../services/trailNarration';
 import { approveRemap, dismissRemap, remapView } from '../services/remap';
 import { additionView, applyAddition, dismissAddition, requestAddition } from '../services/addition';
 import { draftsFor, keepDraft } from '../services/drafts';
@@ -348,6 +349,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'lookup.open': ({ nodeId }) => openCard(ctx.db(), nodeId),
     'trails.list': ({ nodeId }) => listTrails(ctx.db(), nodeId),
     'trails.get': ({ sessionId }) => trail(ctx.db(), sessionId),
+    'trails.narrate': ({ sessionIds }) => narrateTrails({ db: ctx.db(), provider: ctx.provider() }, sessionIds),
     'activity.tick': (input) => {
       tick(ctx.db(), input);
       return undefined;
