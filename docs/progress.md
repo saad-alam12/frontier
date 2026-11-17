@@ -144,6 +144,8 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 
 ## Next step
 
+**R8 (the owner's feedback round, 2026-11-17) is next: everything is in `docs/handover-r8.md`.** Read it in full; it lists nine items in order (E9 record the push rule, E5 the open mock exam missing on Today, E6 the hole on Stats, E8 the code button, E4 trivially simple sample content, E3 caption files and a quicker paste for video transcripts, E7 Show in Finder, E1 "I already know this material", E2 hover definitions), how to work, and what "done" means. Branch from `claude/r7-second-session` (it holds R7 plus trail narration and the clearer connection message; `main` is at the end of R7 proper).
+
 **R7, second session done (branch `claude/r7-second-session`, 2026-11-12).** Everything the owner approved for it is built, in the owner's order, one commit each (`R7 <ID>: <title>`); 595 tests, typecheck, lint, the licence check and `npm run smoke` pass:
 - [x] B4 pages that are pictures: scans, diagrams and large figures are read from pictures of their pages, and the tutor shows the figures in the session
 - [x] C1 (rest) faster sessions: the call that grades an answer writes the card that will be shown (no card written to be thrown away); explanations appear as they are written; with an API key the fixed part of each prompt is cached
@@ -248,6 +250,19 @@ Do these steps on your Mac:
 Write what you find under "Owner feedback". The overnight extras are on a separate branch, `claude/r6-overnight`, to review apart from R5.
 
 ## Owner feedback
+
+### 2026-11-17, after the R7 Mac checks (R8 request)
+Worked on the Mac, in a test folder from `scripts/sandbox.ts`: the connection test (the earlier failure was an expired Claude login, renewed with `/login`); streamed explanations and drawn diagrams; oral exam and teach-back; notes, cheat sheet, print and PDF; a photo and a quote on a practice answer; Map editing; the source viewer (Explain, flashcard, Learn it now); Lookup; Stats, Your week and Misconceptions; trail stories; a scanned PDF; the watched folder; running Python (numpy installed itself). The API key and keychain were not tested (they use the Claude login).
+- **Bug: the open mock exam is not shown on Today** while a session is open (no "continue" anywhere).
+- **Bug: a hole on the Stats page**: "Misconceptions" sits alone in a two-column row, with an empty half.
+- **"Answer with code" is too quiet**: make it easier to find, not obnoxious, since it is often not relevant.
+- **Make the sample content trivially simple**: "I dont want to study game theory with full concentration in order to just go through and check if the app works."
+- **Video transcripts**: caption files (a) and a quicker paste (b) are enough; no automatic fetching.
+- **"Show in Finder"** for files in the library, where it applies.
+- **New: "I already know this material"**: tick it on a source; the tutor then starts by checking how well it was understood (teach from scratch if there are big holes, move on or ask something harder if competent).
+- **New: hover definitions**: a very subtle underline on words that are ideas they have learned or have flashcards, with a popover for the definition, where it is used and more, so a forgotten term or notation does not stall them.
+- Standing rule: when they say push, push to main.
+All of it, with the details, is in `docs/handover-r8.md`.
 
 ### 2026-11-07, at the R4 checkpoint (R5 request)
 Full request with acceptance checks: `docs/feedback-round-5.md`. In short:
@@ -605,7 +620,7 @@ Record choices the design did not settle, newest first: date, decision, reason.
 
 - **Checks on your Mac after R7** (none could run in the cloud): (00) Search by meaning has a new, multilingual model that could not be loaded in the cloud: run `npm run live:embed` (it downloads about 120 MB once). It should end with "Fits". If it ends with "DOES NOT FIT" or fails to load, send me the output. Then open Lookup and type a German word for an idea you learned from an English source. (0) Reminders: in Settings set the daily reminder to a minute from now, click on another app, and wait: a notification "Time to study" should appear once (macOS asks once whether Frontier may send notifications), and the dock icon should show the number of flashcards to review. (1) `npm install`, then `npm run live:tools`: it should end with "Clean: the call sees only Frontier's own tools". (2) Read one source (`npm run live:ingest -- <file>` or in the app): the embedding model must still load now that `sharp` is a stand-in. (3) `npm run check:licenses` should say all shipped packages are permissive.
 
-- **Video transcripts by themselves (R7 B3, owner said yes on 2026-11-17).** Not built. A YouTube link still asks for the pasted transcript. The only way I know to get captions without the learner copying them is to call YouTube's captions interface as its own mobile app, and the permission check in the cloud session refused that call (unauthorized access), so I stopped there and did not try other routes. Safer routes that need no workaround, for you to pick from: (a) read caption files the learner saves themselves (`.srt` or `.vtt`, which tools like `yt-dlp` write when you run them on your own computer, and which many lecture sites offer for download): drop the file on Library and it is read by the minute like a pasted transcript; (b) keep pasting, with the sheet made quicker. Tell me which, or say if you want to run the fetch yourself on your Mac under your own responsibility, and I will build it with the live check running there rather than here.
+- **Video transcripts (R7 B3): decided 2026-11-17.** The owner chose caption files (`.srt` and `.vtt` dropped on the Library) and a quicker paste sheet; nothing is fetched from YouTube. Built in R8 as E3 (see `docs/handover-r8.md`). Not to be revisited: the automatic fetch was refused by the permission check as unauthorized access.
 
 - Code signing and notarization for macOS need an Apple Developer account (yours); until then the app opens with right-click → Open.
 
