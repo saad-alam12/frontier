@@ -4,7 +4,7 @@ import type { AppInfo, BackupInfo, ConnectionTestResult, Effort, ModelOptions, P
 import { Screen } from '../components/Shell';
 import { Button, Notice, RadioCards, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
-import { plainError } from '../lib/errors';
+import { connectionAdvice, plainError } from '../lib/errors';
 import { EraseMap } from '../components/EraseMap';
 import { FlashcardPreferences, Switch } from '../components/CardSettings';
 
@@ -205,7 +205,7 @@ export function SettingsScreen() {
               testResult
                 ? testResult.ok
                   ? `Connected via ${testResult.provider} (${testResult.model}) in ${testResult.attempts} attempt${testResult.attempts === 1 ? '' : 's'}.`
-                  : `Failed: ${testResult.error}`
+                  : `Failed: ${[testResult.error, connectionAdvice(settings.provider, testResult.error ?? '')].filter(Boolean).join(' ')}`
                 : 'Sends one short request to check that the model answers.'
             }
             hintError={testResult !== null && !testResult.ok}

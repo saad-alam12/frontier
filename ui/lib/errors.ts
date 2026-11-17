@@ -21,3 +21,18 @@ export function plainError(message: string): string {
   const said = message.replace(/^[a-zA-Z]+: /, '').trim().replace(/\.?$/, '.');
   return `${said.charAt(0).toUpperCase()}${said.slice(1)}`;
 }
+
+/**
+ * What to do about a failed connection test, in plain words, for the two providers; null when the error
+ * says nothing the learner can act on. The Claude login expires from time to time: it is renewed in
+ * Claude Code, not here.
+ */
+export function connectionAdvice(provider: 'agentSdk' | 'anthropicApi', error: string): string | null {
+  if (provider === 'agentSdk' && /oauth|session expired|not logged in|please run \/login|failed to authenticate|\b401\b/i.test(error)) {
+    return 'Your Claude login has expired. In Terminal run claude, type /login, sign in, then press Test connection again.';
+  }
+  if (provider === 'anthropicApi' && /\b401\b|authentication_error|invalid (x-api-key|bearer|api key)/i.test(error)) {
+    return 'The API key was refused. Check it, or remove it and enter it again.';
+  }
+  return null;
+}
