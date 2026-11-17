@@ -4,6 +4,25 @@
   flex-direction: column;
   gap: 10px;
 }
+.code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.code-chip svg {
+  color: var(--text-muted);
+}
+/* A question written to be answered in code says so above its field, which opens with the starter. */
+.code-asked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.code-asked svg {
+  color: var(--accent-text);
+}
 .code-field {
   position: relative;
   border-radius: 12px;

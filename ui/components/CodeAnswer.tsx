@@ -1,3 +1,4 @@
+import { CodeXml } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CodeAnswer as CodeAnswerValue, CodeRun, RunOutcome } from '../../backend/api/contract';
 import { call } from '../api';
@@ -62,12 +63,14 @@ export function CodeAnswer({
     };
   }, [running]);
 
+  // a calm chip in the family of the hint and question chips: easy to find, never louder than Submit (R8 E8)
   if (!open) {
     return (
-      <div>
-        <Button kind="quiet" onClick={() => onChange({ source: '', run: null, ranSource: null })} disabled={disabled}>
+      <div className="chip-group">
+        <button type="button" className="chip is-quiet code-chip" onClick={() => onChange({ source: '', run: null, ranSource: null })} disabled={disabled}>
+          <CodeXml size={15} strokeWidth={1.75} aria-hidden="true" />
           Answer with code
-        </Button>
+        </button>
       </div>
     );
   }
@@ -114,6 +117,12 @@ export function CodeAnswer({
   const lastRun = outcome?.run ?? shown;
   return (
     <div className="code-answer">
+      {starter !== undefined && (
+        <div className="code-asked">
+          <CodeXml size={15} strokeWidth={1.75} aria-hidden="true" />
+          This question asks for code. Write it here and press Run to try it.
+        </div>
+      )}
       <CodeField
         value={open.source}
         disabled={disabled}
