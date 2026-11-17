@@ -548,6 +548,11 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 24,
+    // Where the learner keeps a file they added (from disk or a watched folder), for "Show in Finder".
+    sql: `ALTER TABLE sources ADD COLUMN original_path TEXT;`,
+  },
 ];
 
 /** Bring the schema up to date, or (for upgrade tests) only up to `upTo`. */

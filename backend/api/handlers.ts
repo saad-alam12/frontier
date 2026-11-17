@@ -17,7 +17,7 @@ import type { Settings } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain, storedCopyPath, transcriptOnClipboard } from '../services/library';
+import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain, showSourceFile, storedCopyPath, transcriptOnClipboard } from '../services/library';
 import { approveGoalPlan, askForRemap, createGoalFromForm, goDeeper, goalDetail, listGoalDetails, removeGoal, setGoalStatus, startUngrounded, updateGoalFromForm, useFreedTime } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -93,7 +93,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
       return result.canceled ? null : (result.filePaths[0] ?? null);
     },
-    'library.list': () => listSourceSummaries(ctx.db(), ctx.ingestion()),
+    'library.list': () => listSourceSummaries(ctx.db(), ctx.ingestion(), ctx.paths().sources),
     'library.addText': async (input) => {
       const { source, existed } = await addPastedText(ctx.ingestion(), input);
       return { sourceId: source.id, existed };
@@ -109,7 +109,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       return addLibraryFiles({ db: ctx.db(), ingestion: ctx.ingestion() }, result.canceled ? [] : result.filePaths);
     },
     'library.addPaths': async ({ paths }) => {
-      const result = await addLibraryFiles({ db: ctx.db(), ingestion: ctx.ingestion() }, paths);
+      const result = await addLibraryFiles({ db: ctx.db(), ingestion: ctx.ingestion(), sourcesDir: ctx.paths().sources }, paths);
       // dropped anywhere on the window: the Library may not be the screen that is open
       if (result.skipped.length) ctx.emit('app.toast', { kind: 'error', message: result.skipped.join(' ') });
       return result;
@@ -117,6 +117,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'library.stop': ({ sourceId }) => {
       ctx.ingestion().stop(sourceId);
       return undefined;
+    },
+    'library.showInFolder': ({ sourceId }) => {
+      showSourceFile(ctx.db(), ctx.paths().sources, sourceId, (path) => shell.showItemInFolder(path));
+      return null;
     },
     'library.openOriginal': async ({ sourceId }) => {
       // shell.openPath answers with a message when it fails, and with nothing when the file opened

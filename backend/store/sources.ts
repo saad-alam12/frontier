@@ -18,6 +18,7 @@ interface SourceRow {
   chunks_done: number;
   error: string | null;
   extraction: number;
+  original_path: string | null;
 }
 
 export interface SourceChunk {
@@ -58,6 +59,7 @@ const toSource = (r: SourceRow): Source => ({
   chunkCount: r.chunk_count,
   chunksDone: r.chunks_done,
   error: r.error,
+  originalPath: r.original_path ?? null,
   extraction: r.extraction,
 });
 
@@ -92,6 +94,11 @@ export function getSource(db: Database, id: string): Source | undefined {
 
 export function listSources(db: Database): Source[] {
   return (db.prepare('SELECT * FROM sources ORDER BY added_at DESC').all() as unknown as SourceRow[]).map(toSource);
+}
+
+/** Where the learner keeps the file the source was added from (the latest place it was added from). */
+export function setOriginalPath(db: Database, id: string, path: string): void {
+  db.prepare('UPDATE sources SET original_path = ? WHERE id = ?').run(path, id);
 }
 
 export function createSource(db: Database, input: { kind: SourceKind; title: string; path: string | null; hash: string; origin?: string | null }, chunks: { text: string; locator: string }[]): Source {

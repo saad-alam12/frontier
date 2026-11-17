@@ -34,7 +34,7 @@ import { newId } from '../store/ids';
 import { nodesWithEvidence } from '../store/evidence';
 import { nodesInOpenSets } from '../store/practice';
 import { nodesInSessions } from '../store/sessions';
-import { addCoverage, coveredElsewhere, coveredNodeIds, createSource, findSourceByHash, getSource, listChunks, resetSourceParts, updateChunk, updateSourceStatus } from '../store/sources';
+import { addCoverage, coveredElsewhere, coveredNodeIds, createSource, findSourceByHash, getSource, listChunks, resetSourceParts, setOriginalPath, updateChunk, updateSourceStatus } from '../store/sources';
 import type { SourceChunk } from '../store/sources';
 import { getNodes, listChains, listNodes } from '../store/world';
 import { mergeIntoMap, retireIdeas } from './merger';
@@ -106,11 +106,16 @@ export class IngestionService {
     this.sources.setLimit(limit);
   }
 
-  /** Copy a file into the data folder, read and chunk it. Same content twice is a no-op. */
+  /**
+   * Copy a file into the data folder, read and chunk it. Same content twice is a no-op, except that
+   * the source now remembers this place as where the learner keeps the file ("Show in Finder").
+   */
   async addFile(path: string): Promise<{ source: Source; existed: boolean }> {
     const kind = kindForFile(path);
     if (!kind) throw new Error(`Unsupported file type: ${basename(path)}`);
-    return this.addDocument({ kind, name: basename(path), bytes: await readFile(path) });
+    const added = await this.addDocument({ kind, name: basename(path), bytes: await readFile(path) });
+    setOriginalPath(this.db, added.source.id, path);
+    return { ...added, source: { ...added.source, originalPath: path } };
   }
 
   /**

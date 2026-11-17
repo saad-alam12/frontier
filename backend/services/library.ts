@@ -20,7 +20,10 @@ import { afterSourceReread } from './goals';
 import { guessRole } from './goalCompile';
 import type { IngestionService } from './ingestion';
 import type { LlmProvider } from '../llm/provider';
+import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { revealTarget } from '../core/reveal';
+import type { RevealTarget } from '../core/reveal';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { targetDepthFor } from '../core/leverage';
 
@@ -41,6 +44,8 @@ export interface SourceSummary extends Source {
   stopped: boolean;
   /** Pages that are mostly figures, read from their pictures as well as their text. */
   pictures: number;
+  /** What can be shown outside the app: its file in Finder, or the page it was added from; null for pasted text and sessions. */
+  reveal: 'file' | 'page' | null;
 }
 
 /**
@@ -78,7 +83,7 @@ export async function addGoalMaterials(deps: { db: Database; ingestion: Ingestio
 }
 
 /** Files for the Library, from the dialog or dropped on the window: each is added and its reading starts. */
-export async function addLibraryFiles(deps: { db: Database; ingestion: IngestionService }, paths: string[]): Promise<{ added: SourceSummary[]; skipped: string[] }> {
+export async function addLibraryFiles(deps: { db: Database; ingestion: IngestionService; sourcesDir?: string }, paths: string[]): Promise<{ added: SourceSummary[]; skipped: string[] }> {
   const added: string[] = [];
   const skipped: string[] = [];
   for (const path of paths) {
@@ -91,7 +96,7 @@ export async function addLibraryFiles(deps: { db: Database; ingestion: Ingestion
       skipped.push(error instanceof Error ? error.message : String(error));
     }
   }
-  return { added: listSourceSummaries(deps.db, deps.ingestion).filter((s) => added.includes(s.id)), skipped };
+  return { added: listSourceSummaries(deps.db, deps.ingestion, deps.sourcesDir).filter((s) => added.includes(s.id)), skipped };
 }
 
 /** Where the stored copy of a source's file is, to open it; a pasted source or a session has none. */
@@ -110,7 +115,7 @@ export async function readSourceAgain(db: Database, ingestion: IngestionService,
   return { retired: retired.length };
 }
 
-export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionService, 'secondsLeft' | 'isRunning'>): SourceSummary[] {
+export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionService, 'secondsLeft' | 'isRunning'>, sourcesDir?: string): SourceSummary[] {
   return listSources(db).map((s) => {
     const chunks = listChunks(db, s.id);
     const roles = [...new Set(rolesOfSource(db, s.id).map((r) => r.role))];
@@ -125,8 +130,26 @@ export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionServ
       readOld: s.extraction < EXTRACTION && s.chunksDone > 0,
       nodeCount: coveredNodeIds(db, s.id).length,
       chunks: chunks.map((c) => ({ idx: c.idx, locator: c.locator, status: c.status, error: c.error, nodeCount: c.nodeIds.length })),
+      reveal: sourcesDir ? (revealFor(s, sourcesDir)?.kind ?? null) : null,
     };
   });
+}
+
+/** Where a source can be shown outside the app, with the files as they are on disk now. */
+export function revealFor(source: Source, sourcesDir: string): RevealTarget {
+  return revealTarget(source, source.path ? join(sourcesDir, source.path) : null, existsSync);
+}
+
+/**
+ * Show a source's file in Finder (R8 E7): where the learner keeps it, or the stored copy when that
+ * file is gone. A source added by a link has its page instead, which the window opens itself.
+ */
+export function showSourceFile(db: Database, sourcesDir: string, sourceId: string, showItemInFolder: (path: string) => void): void {
+  const source = getSource(db, sourceId);
+  if (!source) throw new Error('This source is no longer in your library.');
+  const target = revealFor(source, sourcesDir);
+  if (target?.kind !== 'file') throw new Error('The file of this source is no longer there.');
+  showItemInFolder(target.path);
 }
 
 export interface IdeaRef {

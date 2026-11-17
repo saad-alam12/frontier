@@ -98,6 +98,7 @@ export const INPUTS = {
   'library.addPaths': z.object({ paths: z.array(z.string().min(1).max(4_096)).max(200) }),
   'library.stop': sourceOnly,
   'library.openOriginal': sourceOnly,
+  'library.showInFolder': sourceOnly,
   'library.addText': PastedTextSchema,
   'library.addLink': z.object({ url: z.string().trim().min(1).max(2_000) }),
   'library.clipboardTranscript': none,

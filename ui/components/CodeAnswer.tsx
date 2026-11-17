@@ -4,6 +4,7 @@ import type { CodeAnswer as CodeAnswerValue, CodeRun, RunOutcome } from '../../b
 import { call } from '../api';
 import { plainError } from '../lib/errors';
 import { highlightPython } from '../lib/highlight';
+import { ON_A_MAC } from '../lib/platform';
 import { StoredImage } from './AnswerExtras';
 import { Button } from './controls';
 import './CodeAnswer.css';
@@ -23,8 +24,6 @@ export function codeOf(draft: CodeDraft | null | undefined): CodeAnswerValue | u
 
 const INDENT = '    ';
 const errorMessage = (error: unknown) => plainError(error instanceof Error ? error.message : String(error));
-/** Apple's installer can be opened from the app on a Mac only. */
-const ON_A_MAC = /Mac/.test(navigator.userAgent);
 
 /**
  * Code as part of an answer (design §4.4, "Code"): a Python field with colours, Run to run it with

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { listChains, listNodes } from './world';
 import { openDatabase } from './db';
 import { runMigrations, SCHEMA_VERSION } from './migrations';
-import { createSource, searchPassages } from './sources';
+import { createSource, getSource, searchPassages } from './sources';
 import { seedExampleGraph } from './seed/exampleGraph';
 import { recordEvidence } from '../services/evidence';
 import { listEvidenceForNode } from './evidence';
@@ -25,7 +25,7 @@ describe('upgrading an older database', () => {
     expect((old.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(OLD_VERSION);
     const ids = seedExampleGraph(old as unknown as Parameters<typeof seedExampleGraph>[0]);
     const nash = ids.get('nash') as string;
-    createSource(old as unknown as Parameters<typeof createSource>[0], { kind: 'pdf', title: 'Lecture 5', path: null, hash: 'l5' }, [{ text: 'Threats that are not credible are ruled out by subgame perfection.', locator: 'p7' }]);
+    const lecture = createSource(old as unknown as Parameters<typeof createSource>[0], { kind: 'pdf', title: 'Lecture 5', path: null, hash: 'l5' }, [{ text: 'Threats that are not credible are ruled out by subgame perfection.', locator: 'p7' }]);
     recordEvidence(old as unknown as Parameters<typeof recordEvidence>[0], { nodeId: nash, kind: 'explain', score: 0.9, reasoning: 'learned before the upgrade' });
     const nodes = listNodes(old as unknown as Parameters<typeof listNodes>[0]).length;
     const chains = listChains(old as unknown as Parameters<typeof listChains>[0]).length;
@@ -36,6 +36,8 @@ describe('upgrading an older database', () => {
     expect(listNodes(db)).toHaveLength(nodes);
     expect(listChains(db)).toHaveLength(chains);
     expect(listEvidenceForNode(db, nash).map((e) => e.reasoning)).toContain('learned before the upgrade');
+    // columns of later versions start empty: no place on disk kept for a source added before (R8 E7)
+    expect(getSource(db, lecture.id)?.originalPath).toBeNull();
     // passages written before the index existed are found
     expect(searchPassages(db, ['credible'])[0]?.locator).toBe('p7');
     // tables of later versions are there and empty

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -16,7 +16,7 @@ import type { Embedder } from '../ingest/embedder';
 import { removeSource } from './erase';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
-import { addLink, addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain, transcriptOnClipboard } from './library';
+import { addLink, addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain, showSourceFile, transcriptOnClipboard } from './library';
 import type { Fetcher } from '../ingest/link';
 import { recordEvidence } from './evidence';
 import { createGoal, addCapabilities, getGoal, listCapabilities, markCompiled, setMaterials } from '../store/goals';
@@ -356,6 +356,42 @@ describe('pasted text', () => {
     expect(long.length).toBeLessThanOrEqual(61);
     expect(long.endsWith('…')).toBe(true);
     expect(long).not.toMatch(/\s…$/);
+  });
+});
+
+describe('showing a source in Finder (R8 E7)', () => {
+  it('keeps where the learner has the file, shows it there, and the stored copy once it is gone', async () => {
+    const { db, service, dir } = setup();
+    const first = join(dir, 'Course', 'Lecture 1.md');
+    mkdirSync(join(dir, 'Course'), { recursive: true });
+    writeFileSync(first, LECTURE_A);
+    const { source } = await service.addFile(first);
+    expect(getSource(db, source.id)?.originalPath).toBe(first);
+    const shown: string[] = [];
+    showSourceFile(db, join(dir, 'sources'), source.id, (path) => shown.push(path));
+    expect(shown).toEqual([first]);
+    expect(listSourceSummaries(db, undefined, join(dir, 'sources')).find((s) => s.id === source.id)?.reveal).toBe('file');
+
+    // the same file added again from another place: that is where the learner has it now
+    const moved = join(dir, 'Lecture 1 (copy).md');
+    writeFileSync(moved, LECTURE_A);
+    expect((await service.addFile(moved)).existed).toBe(true);
+    rmSync(first);
+    showSourceFile(db, join(dir, 'sources'), source.id, (path) => shown.push(path));
+    expect(shown.at(-1)).toBe(moved);
+    // gone from there too: the copy Frontier keeps
+    rmSync(moved);
+    showSourceFile(db, join(dir, 'sources'), source.id, (path) => shown.push(path));
+    expect(shown.at(-1)).toBe(join(dir, 'sources', getSource(db, source.id)?.path ?? ''));
+  });
+
+  it('has no file for pasted text, and a page for a pasted video transcript', async () => {
+    const { db, service, dir } = setup();
+    const { source } = await addPastedText(service, { text: LECTURE_A });
+    expect(() => showSourceFile(db, join(dir, 'sources'), source.id, () => undefined)).toThrow('The file of this source is no longer there.');
+    expect(listSourceSummaries(db, undefined, join(dir, 'sources')).find((s) => s.id === source.id)?.reveal).toBeNull();
+    const video = await addPastedText(service, { text: ['0:00', 'One strategy for each player makes a profile.', '0:40', 'and then some more about it', '1:10', 'A profile where nobody gains by moving alone.', '2:30', 'That is the whole idea.'].join('\n'), origin: 'https://www.youtube.com/watch?v=abc123def45' });
+    expect(listSourceSummaries(db, undefined, join(dir, 'sources')).find((s) => s.id === video.source.id)?.reveal).toBe('page');
   });
 });
 

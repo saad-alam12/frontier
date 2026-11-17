@@ -7,6 +7,7 @@ import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../component
 import { Markdown } from '../components/Markdown';
 import { Dialog } from '../components/Dialog';
 import { plainError } from '../lib/errors';
+import { SHOW_IN_FOLDER } from '../lib/platform';
 import { openSource } from '../lib/sourceViewer';
 import { locatorLabel } from '../../backend/core/locators';
 import { ROLE_LABEL } from './goals/labels';
@@ -237,6 +238,16 @@ export function LibraryScreen() {
               {current.path && (
                 <Button kind="quiet" onClick={() => void call('library.openOriginal', { sourceId: current.id }).catch(failed)}>
                   Open original
+                </Button>
+              )}
+              {current.reveal === 'file' && (
+                <Button kind="quiet" onClick={() => void call('library.showInFolder', { sourceId: current.id }).catch(failed)}>
+                  {SHOW_IN_FOLDER}
+                </Button>
+              )}
+              {current.reveal === 'page' && current.origin && (
+                <Button kind="quiet" onClick={() => window.open(current.origin ?? '', '_blank')}>
+                  Open the page
                 </Button>
               )}
               <Button kind="quiet" onClick={() => void remove(current.id)}>

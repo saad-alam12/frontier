@@ -329,6 +329,8 @@ export interface Source {
   hash: string;
   /** The web address it came from, when it was added by a link. */
   origin: string | null;
+  /** Where the learner keeps the file it was added from (from disk or a watched folder); null for links, pasted text and sessions. */
+  originalPath: string | null;
   addedAt: string;
   status: 'pending' | 'running' | 'done' | 'failed';
   chunkCount: number;

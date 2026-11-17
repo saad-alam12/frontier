@@ -5,6 +5,7 @@ import { call, isCancelled } from '../api';
 import type { LookupAnswer, SourceDocument } from '../../backend/api/contract';
 import { citedPage, locatorLabel } from '../../backend/core/locators';
 import { plainError } from '../lib/errors';
+import { SHOW_IN_FOLDER } from '../lib/platform';
 import { openSource, type SourceTarget } from '../lib/sourceViewer';
 import { CardSheet, type CardSheetStart } from './CardSheet';
 import { Markdown } from './Markdown';
@@ -175,6 +176,16 @@ export function SourceViewer({ target, onClose, onLearn }: { target: SourceTarge
               <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </nav>
+        )}
+        {doc?.reveal?.kind === 'file' && (
+          <button type="button" className="link-button shrink-0" onClick={() => void call('library.showInFolder', { sourceId: target.sourceId }).catch((e: unknown) => setError(plainError(e instanceof Error ? e.message : String(e))))}>
+            {SHOW_IN_FOLDER}
+          </button>
+        )}
+        {doc?.reveal?.kind === 'page' && (
+          <button type="button" className="link-button shrink-0" onClick={() => window.open(doc.reveal?.kind === 'page' ? doc.reveal.url : '', '_blank')}>
+            Open the page
+          </button>
         )}
         <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
           <X size={16} strokeWidth={1.75} aria-hidden="true" />
