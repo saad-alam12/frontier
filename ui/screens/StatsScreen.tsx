@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useState } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { CardStats, StatsFilter, StatsRange, StatsView } from '../../backend/api/contract';
 import { formatHours } from '../../backend/core/budget';
 import { call } from '../api';
@@ -10,6 +11,7 @@ import { Calendar, Calibration, FREE_STUDY, HourBars, Lines, WeeklyBars, seriesC
 import { WeekReview } from '../components/WeekReview';
 import type { WeekActions } from '../components/WeekReview';
 import { MisconceptionsList } from '../components/MisconceptionsList';
+import { spanningCards } from '../lib/gridRows';
 import type { MisconceptionActions } from '../components/MisconceptionsList';
 
 type Tab = 'numbers' | 'week' | 'misconceptions';
@@ -159,7 +161,7 @@ export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: Week
             <Tile label="Average score" value={h.avgScore === null ? '—' : pct(h.avgScore)} sub={`${h.answers} answers`} />
           </div>
 
-          <div className="stats-grid">
+          <StatGrid>
             <Card title="Time per week" wide note={`Stacked by goal. Time on an idea two goals share is split between them.${anyFree ? ' Free study is time in sessions you chose that count toward no goal.' : ''}`}>
               {studiedWeeks.length >= 2 ? (
                 <WeeklyBars weeks={view.weeks} series={series} format={formatHours} />
@@ -313,7 +315,7 @@ export function StatsScreen({ actions, initialTab = 'numbers' }: { actions: Week
                 </ul>
               </Card>
             )}
-          </div>
+          </StatGrid>
         </>
       )}
     </Screen>
@@ -330,7 +332,25 @@ function Tile({ label, value, sub }: { label: string; value: string; sub: string
   );
 }
 
-function Card({ title, note, wide, children }: { title: string; note?: string; wide?: boolean; children: React.ReactNode }) {
+interface CardProps {
+  title: string;
+  note?: string;
+  wide?: boolean;
+  children: ReactNode;
+}
+
+/**
+ * The two-column grid of cards. Cards come and go with the data, so a card that would sit alone in
+ * its row (the last one, or one just before a wide card) spans both columns: no row is half empty
+ * (R8 E6). In one column (a narrow window) spanning changes nothing.
+ */
+function StatGrid({ children }: { children: ReactNode }) {
+  const cards = Children.toArray(children).filter((c): c is ReactElement<CardProps> => isValidElement(c));
+  const spans = spanningCards(cards.map((c) => c.props.wide === true));
+  return <div className="stats-grid">{cards.map((card, i) => (spans[i] && !card.props.wide ? cloneElement(card, { wide: true }) : card))}</div>;
+}
+
+function Card({ title, note, wide, children }: CardProps) {
   return (
     <section className={wide ? 'stat-card is-wide' : 'stat-card'}>
       <div className="flex flex-col gap-[4px]">
