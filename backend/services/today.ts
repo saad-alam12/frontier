@@ -131,7 +131,8 @@ export function todayView(db: Database, now = new Date()): TodayView {
     remaps: goals.flatMap((g) => (g.remap?.state === 'ready' ? [{ goalId: g.id, title: g.title ?? g.text, reason: g.remap.proposal.reason }] : [])),
     anyGoals: all.length > 0,
     session,
-    practice: currentPractice(db),
+    // an open practice set or mock exam is shown whether or not a session is open (R8 E5)
+    practice: currentPractice(db, now),
     goals: todayGoals,
     fading: [...fading.values()].sort((a, b) => a.recall - b.recall),
     forecast,

@@ -325,6 +325,8 @@ if (flags.includes('--exam')) {
   const mock = await startPractice(examDeps, exam.id, { kind: 'mock', maxProblems: 3 });
   if (mock?.problems[0]) submitPracticeAnswer(examDeps, mock.problems[0].id, 'Low, low: neither firm gains by raising its price alone.', 0.66);
   await settleGrading();
+  // the sandbox's exam gets two hours, so it is still under way when the checks reach it (a real one has about twelve minutes a problem)
+  if (mock) db.prepare('UPDATE practice_sets SET minutes = 120 WHERE id = ?').run(mock.id);
 }
 
 // an oral exam on the exam goal, two questions in (`--talk`)

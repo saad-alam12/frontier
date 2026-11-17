@@ -255,9 +255,9 @@ function closeWhenGraded(db: Database, setId: string, now = new Date()): boolean
   return true;
 }
 
-export function currentPractice(db: Database): PracticeView | null {
-  const set = openPracticeSet(db);
-  return set ? practiceView(db, set.id) : null;
+export function currentPractice(db: Database, now = new Date()): PracticeView | null {
+  const set = openPracticeSet(db, now);
+  return set ? practiceView(db, set.id, now) : null;
 }
 
 /** Excerpts of the goal's exercise sheets, so problems look like the course's own. */

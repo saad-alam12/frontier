@@ -61,6 +61,9 @@ Fill these in during M0:
   cloud session, whatever its prompt, reads docs/progress.md and continues
   with the next unfinished milestone, following the rules above. Push the
   branch after every milestone so no work is lost.
+- Pushing: when the owner says "push" (or "merge"), push to `main` as a
+  fast-forward of the branch they mean. Otherwise push only your own
+  branch, and open no pull request unless the owner asks for one.
 - Owner checkpoints come after M2, M4 and M6. At a checkpoint the cloud
   session pushes its branch, writes "CHECKPOINT M<n> READY" plus exact
   steps for the owner to try under "Next step" in docs/progress.md,

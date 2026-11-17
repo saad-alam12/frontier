@@ -15,6 +15,7 @@ import type { PracticeDeps } from './practice';
 import { todayView } from './today';
 import { reviewsByCard } from '../store/cards';
 import { saveCard } from './cards';
+import { createSession } from '../store/sessions';
 
 const DAY = 86_400_000;
 
@@ -324,6 +325,15 @@ describe('exam mode (R7 B7)', () => {
     // every answer it got is graded, so the exam is done; nothing more can be answered
     expect(view.status).toBe('done');
     expect(() => submitPracticeAnswer(deps, view.problems[1]?.id ?? '', 'late', null)).toThrow('This exam is over');
+  });
+
+  it('Today carries an open mock exam beside an open session (R8 E5)', async () => {
+    const { db, goal, deps } = setup(6);
+    const exam = await startPractice(deps, goal.id, { kind: 'mock' });
+    createSession(db, goal.id, { goalId: goal.id, phase: 'teach', stepIndex: 0, plan: { title: 'Equilibria', orientation: '', steps: [] } });
+    const view = todayView(db);
+    expect(view.session?.planTitle).toBe('Equilibria');
+    expect(view.practice).toMatchObject({ id: exam?.id, kind: 'mock', exam: { over: false } });
   });
 
   it('an exam whose time ran out is no longer in progress on Today', async () => {

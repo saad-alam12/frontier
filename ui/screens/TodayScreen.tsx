@@ -215,7 +215,7 @@ export function TodayScreen({
         >
           <ul className="goal-cards">
             {today.goals.map((g) => (
-              <GoalRow key={g.goalId} goal={g} busy={busy} onOpen={() => onOpenGoals({ name: 'goal', goalId: g.goalId })} onMock={() => void startPractice(g.goalId, 'mock')} />
+              <GoalRow key={g.goalId} goal={g} busy={busy} examOpen={today.practice?.kind === 'mock' && today.practice.goalId === g.goalId} onOpen={() => onOpenGoals({ name: 'goal', goalId: g.goalId })} onMock={() => void startPractice(g.goalId, 'mock')} />
             ))}
           </ul>
           {today.goals.some((g) => g.progress) && (
@@ -258,8 +258,9 @@ function NextUp({
   onOpenPractice: (setId: string) => void;
   onChoose: () => void;
 }) {
+  const practice = today.practice ? <OpenPractice practice={today.practice} second={today.session !== null} onOpen={onOpenPractice} /> : null;
   if (today.session) {
-    return (
+    const session = (
       <div className="next-card">
         <div className="mode">
           <span className="mode-dot" aria-hidden="true" />
@@ -276,26 +277,15 @@ function NextUp({
         </div>
       </div>
     );
-  }
-  if (today.practice) {
-    const left = today.practice.problems.filter((p) => p.answer === null).length;
+    // an open practice set or mock exam is never hidden behind the session: it sits right under it (R8 E5)
     return (
-      <div className="next-card">
-        <div className="mode">
-          <span className="mode-dot" aria-hidden="true" />
-          {today.practice.kind === 'mock' ? 'Mock exam' : 'Practice'} in progress
-        </div>
-        <span className="t-heading">
-          {left} of {today.practice.problems.length} problems left
-        </span>
-        <div className="button-row">
-          <Button kind="primary" onClick={() => onOpenPractice(today.practice?.id ?? '')}>
-            Continue practice
-          </Button>
-        </div>
-      </div>
+      <>
+        {session}
+        {practice}
+      </>
     );
   }
+  if (practice) return practice;
   if (!lead) return null;
   const s = lead.schedule;
   const practiseFirst = s.mode === 'consolidate';
@@ -326,6 +316,43 @@ function NextUp({
         )}
         <Button kind="quiet" onClick={onChoose}>
           Choose what to learn
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** An open practice set or mock exam: the lead card, or a second card under an open session. A mock exam says how long is left. */
+function OpenPractice({ practice, second, onOpen }: { practice: NonNullable<TodayView['practice']>; second: boolean; onOpen: (setId: string) => void }) {
+  const exam = practice.exam;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!exam) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 20_000);
+    return () => window.clearInterval(timer);
+  }, [exam]);
+  const left = practice.problems.filter((p) => p.answer === null).length;
+  const minutesLeft = exam ? Math.ceil((new Date(exam.endsAt).getTime() - now) / 60_000) : null;
+  const timeUp = minutesLeft !== null && minutesLeft <= 0;
+  return (
+    <div className={second ? 'next-card is-quiet' : 'next-card'}>
+      <div className="mode">
+        <span className="mode-dot" aria-hidden="true" />
+        {exam ? 'Mock exam' : 'Practice'} in progress
+      </div>
+      <div className="flex flex-col gap-[6px]">
+        <span className="t-heading">{practice.goalTitle || (exam ? 'Mock exam' : 'Practice')}</span>
+        <MetaLine
+          small
+          items={[
+            `${left} of ${practice.problems.length} ${practice.problems.length === 1 ? 'problem' : 'problems'} left`,
+            minutesLeft === null ? null : timeUp ? 'Time is up' : `about ${formatHours(minutesLeft)} to go`,
+          ]}
+        />
+      </div>
+      <div className="button-row">
+        <Button kind={second ? 'secondary' : 'primary'} onClick={() => onOpen(practice.id)}>
+          {exam ? (timeUp ? 'See how you did' : 'Continue the mock exam') : 'Continue practice'}
         </Button>
       </div>
     </div>
@@ -396,7 +423,7 @@ function TimeToday({
   );
 }
 
-function GoalRow({ goal, busy, onOpen, onMock }: { goal: TodayGoal; busy: string | null; onOpen: () => void; onMock: () => void }) {
+function GoalRow({ goal, busy, examOpen, onOpen, onMock }: { goal: TodayGoal; busy: string | null; examOpen: boolean; onOpen: () => void; onMock: () => void }) {
   const s = goal.schedule;
   const p = goal.progress;
   const when = s.daysToExam !== null ? (s.daysToExam <= 0 ? 'today' : s.daysToExam === 1 ? 'tomorrow' : `in ${s.daysToExam} days`) : null;
@@ -424,7 +451,7 @@ function GoalRow({ goal, busy, onOpen, onMock }: { goal: TodayGoal; busy: string
           ]}
         />
       </button>
-      {s.mockOpen && (
+      {s.mockOpen && !examOpen && (
         <div className="button-row">
           <Button onClick={onMock} disabled={busy !== null}>
             {busy === `mock:${goal.goalId}` ? 'Writing the exam…' : 'Take a mock exam'}
