@@ -160,3 +160,26 @@
 .settings-row:has(+ .settings-path) {
   border-bottom: 0;
 }
+
+/* The transcript sheet of a video link: three short steps, and the offer of what was just copied. */
+.transcript-steps {
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-soft);
+}
+.transcript-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 14px;
+  background: var(--accent-tint);
+  color: var(--text);
+  font-size: 14px;
+}

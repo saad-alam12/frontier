@@ -128,6 +128,8 @@ export interface ApiMethods {
   'library.openOriginal': { input: { sourceId: string }; output: null };
   /** Add pasted text (notes, an article, a transcript) as a source and start reading it. */
   'library.addText': { input: PastedText; output: { sourceId: string; existed: boolean } };
+  /** The clipboard's text when it reads as a video transcript, for the paste sheet; null otherwise (nothing else reaches the window). */
+  'library.clipboardTranscript': { input: undefined; output: { text: string; minutes: number } | null };
   /** Add what a web address points at; a video comes back as "paste its transcript". */
   'library.addLink': { input: { url: string }; output: LinkResult };
   'library.run': { input: { sourceId: string }; output: undefined };

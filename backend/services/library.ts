@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { classifyDelta } from '../core/delta';
 import { parseLink, transcriptBlocks, transcriptCues } from '../core/links';
+import type { Cue } from '../core/links';
 import type { DeltaClass } from '../core/delta';
 import { EXTRACTED_ROLES, EXTRACTION } from '../core/types';
 import type { Depth, MaterialRole, Source } from '../core/types';
@@ -13,6 +14,7 @@ import { listFigures } from '../store/figures';
 import { LinkError, fetchDocument, fetchVideoTitle } from '../ingest/link';
 import type { Fetcher } from '../ingest/link';
 import { readBytes } from '../ingest/readers';
+import { parseCaptions } from '../ingest/readers/captions';
 import type { SourceChunk } from '../store/sources';
 import { afterSourceReread } from './goals';
 import { guessRole } from './goalCompile';
@@ -219,12 +221,30 @@ export function pastedTitle(text: string): string {
 export async function addPastedText(ingestion: IngestionService, input: PastedText): Promise<{ source: Source; existed: boolean }> {
   const { title, text, origin } = PastedTextSchema.parse(input);
   const from = origin ? (parseLink(origin)?.url ?? null) : null;
-  const cues = transcriptCues(text);
+  const cues = pastedCues(text);
   const added = cues
     ? await ingestion.addText({ kind: 'text', title: title || 'Video transcript', text, blocks: transcriptBlocks(cues), origin: from })
     : await ingestion.addText({ kind: 'markdown', title: title || pastedTitle(text), text, origin: from });
   if (added.source.status !== 'done') ingestion.start(added.source.id);
   return added;
+}
+
+/** The cues of pasted text: a transcript copied from a video's page, or the text of a caption file (.srt, .vtt). Null for anything else. */
+function pastedCues(text: string): Cue[] | null {
+  return transcriptCues(text) ?? parseCaptions(text);
+}
+
+/**
+ * What the clipboard holds, for the sheet that asks for a video's transcript (R8 E3): its text only
+ * when it reads as a transcript, with about how many minutes it covers; anything else stays where it
+ * is and the window gets nothing. Read only when the sheet asks; never logged or kept.
+ */
+export async function transcriptOnClipboard(readClipboard: () => Promise<string>): Promise<{ text: string; minutes: number } | null> {
+  const text = await readClipboard();
+  if (text.trim().length < 80 || text.length > 400_000) return null;
+  const cues = pastedCues(text);
+  if (!cues) return null;
+  return { text, minutes: Math.max(1, Math.ceil(((cues[cues.length - 1]?.seconds ?? 0) + 1) / 60)) };
 }
 
 /** What adding a link gave: a source in the library, or a video whose transcript the learner pastes. */

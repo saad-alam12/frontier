@@ -16,7 +16,7 @@ import type { Embedder } from '../ingest/embedder';
 import { removeSource } from './erase';
 import { IngestionService } from './ingestion';
 import type { IngestProgress } from './ingestion';
-import { addLink, addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain } from './library';
+import { addLink, addPastedText, deltaForSource, listSourceSummaries, pastedTitle, readSourceAgain, transcriptOnClipboard } from './library';
 import type { Fetcher } from '../ingest/link';
 import { recordEvidence } from './evidence';
 import { createGoal, addCapabilities, getGoal, listCapabilities, markCompiled, setMaterials } from '../store/goals';
@@ -356,6 +356,36 @@ describe('pasted text', () => {
     expect(long.length).toBeLessThanOrEqual(61);
     expect(long.endsWith('…')).toBe(true);
     expect(long).not.toMatch(/\s…$/);
+  });
+});
+
+describe('video transcripts without fetching (R8 E3)', () => {
+  const SRT = ['1', '00:00:02,000 --> 00:00:05,000', 'NODE[term] Strategy profile: One strategy for each player.', '', '2', '00:01:10,000 --> 00:01:14,000', 'NODE[term] Nash equilibrium: A strategy profile in which no player can gain by changing only their own strategy.', '', '3', '00:02:30,000 --> 00:02:33,000', 'CHAIN Strategy profile => Nash equilibrium', ''].join('\n');
+
+  it('reads a caption file added from disk by the minute, titled by its name', async () => {
+    const { db, service, dir } = setup();
+    const path = join(dir, 'Lecture 3.srt');
+    writeFileSync(path, SRT);
+    const { source } = await service.addFile(path);
+    expect(source).toMatchObject({ kind: 'captions', title: 'Lecture 3' });
+    expect(listChunks(db, source.id).map((c) => c.locator)).toEqual(['0:02–2:30']);
+    const broken = join(dir, 'broken.vtt');
+    writeFileSync(broken, 'WEBVTT\n\nnot a cue at all\n');
+    await expect(service.addFile(broken)).rejects.toThrow('broken.vtt has no captions to read: it holds no time-stamped lines.');
+  });
+
+  it('keeps pasted caption text by the minute, like a pasted transcript', async () => {
+    const { service } = setup();
+    const { source } = await addPastedText(service, { title: 'Captions', text: SRT });
+    expect(source.kind).toBe('text');
+  });
+
+  it('hands the window the clipboard only when it reads as a transcript', async () => {
+    const transcript = ['0:00', 'Hello and welcome to the course on counting.', '0:40', 'We start with whole numbers and how to count them.', '1:10', 'Then we add by counting on.', '2:30', 'And we finish with even and odd numbers.'].join('\n');
+    expect(await transcriptOnClipboard(async () => transcript)).toEqual({ text: transcript, minutes: 3 });
+    expect(await transcriptOnClipboard(async () => SRT)).toEqual({ text: SRT, minutes: 3 });
+    // a password, a link or prose never reaches the window
+    for (const other of ['', 'hunter2', 'https://example.com/private', 'Some notes I copied from somewhere else. '.repeat(5)]) expect(await transcriptOnClipboard(async () => other)).toBeNull();
   });
 });
 

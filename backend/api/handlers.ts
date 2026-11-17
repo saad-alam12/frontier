@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { app, dialog, ipcMain, net, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, net, shell } from 'electron';
 import { join } from 'node:path';
 import { cheatSheetView, exportGoalNotes, goalNotesView, noteFor, saveNote } from '../services/notes';
 import { notesPdfName } from '../core/notes';
@@ -17,7 +17,7 @@ import type { Settings } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain, storedCopyPath } from '../services/library';
+import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain, storedCopyPath, transcriptOnClipboard } from '../services/library';
 import { approveGoalPlan, askForRemap, createGoalFromForm, goDeeper, goalDetail, listGoalDetails, removeGoal, setGoalStatus, startUngrounded, updateGoalFromForm, useFreedTime } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -98,6 +98,7 @@ export function buildHandlers(ctx: AppContext): Handlers {
       const { source, existed } = await addPastedText(ctx.ingestion(), input);
       return { sourceId: source.id, existed };
     },
+    'library.clipboardTranscript': () => transcriptOnClipboard(() => clipboard.readText()),
     // the system's own network stack, so a proxy set on the computer applies
     'library.addLink': ({ url }) => addLink({ ingestion: ctx.ingestion(), fetcher: (address, init) => net.fetch(address, init), userAgent: `Frontier/${ctx.version}` }, url),
     'library.addFiles': async () => {

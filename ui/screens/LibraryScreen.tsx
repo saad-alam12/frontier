@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { call, onEvent } from '../api';
 import type { DeltaClass, DeltaItem, DeltaSummary, IdeaRef, SourceSummary } from '../../backend/api/contract';
 import { WatchedFolders } from '../components/WatchedFolders';
@@ -364,13 +364,11 @@ function hostOf(address: string): string {
 
 /**
  * Add a source by its web address. A page or a PDF is fetched and read like a file. A video is not
- * fetched: the sheet asks for its transcript, copied from the video's page, and keeps the link with it.
+ * fetched: the transcript sheet asks for its transcript, copied from the video's page, and keeps the link with it.
  */
 function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void>; onPasteInstead: () => void }) {
   const [url, setUrl] = useState('');
-  const [video, setVideo] = useState<{ url: string } | null>(null);
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
+  const [video, setVideo] = useState<{ url: string; title: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const run = async (fn: () => Promise<void>) => {
@@ -388,48 +386,9 @@ function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; 
     run(async () => {
       const result = await call('library.addLink', { url });
       if (result.state === 'added') await onAdded(result.sourceId, result.existed);
-      else {
-        setVideo({ url: result.url });
-        setTitle(result.title);
-      }
+      else setVideo({ url: result.url, title: result.title });
     });
-  const addTranscript = () =>
-    run(async () => {
-      if (!video) return;
-      const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text, origin: video.url });
-      await onAdded(sourceId, existed);
-    });
-  if (video) {
-    return (
-      <Dialog
-        open
-        onClose={onClose}
-        title="Paste the video's transcript"
-        width={620}
-        actions={
-          <>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button kind="primary" onClick={() => void addTranscript()} disabled={busy || text.trim().length === 0}>
-              {busy ? 'Adding…' : 'Add to library'}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-[12px]">
-          <p className="m-0">
-            Frontier cannot fetch a video's transcript by itself. On{' '}
-            <a href={video.url} target="_blank" rel="noreferrer">
-              the video's page
-            </a>
-            , open the description, choose "Show transcript", select the whole transcript and copy it. Paste it here with its time stamps: ideas then say where in the video they come from.
-          </p>
-          <input className="input" aria-label="Title" placeholder="Title of the video" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="input" aria-label="Transcript" rows={12} placeholder="Paste the transcript here" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
-          {error && <Notice error>{error}</Notice>}
-        </div>
-      </Dialog>
-    );
-  }
+  if (video) return <TranscriptSheet video={video} onClose={onClose} onAdded={onAdded} />;
   return (
     <Dialog
       open
@@ -463,6 +422,102 @@ function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; 
           </>
         )}
       </form>
+    </Dialog>
+  );
+}
+
+/**
+ * The transcript of a video link (R8 E3): Frontier fetches nothing from the video's site. The learner
+ * opens the video in the browser, copies its transcript and comes back; the clipboard is read only
+ * while this sheet is open (with "Paste the copied transcript", or when the window comes back into
+ * focus), and only a transcript ever reaches it.
+ */
+function TranscriptSheet({ video, onClose, onAdded }: { video: { url: string; title: string }; onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void> }) {
+  const [title, setTitle] = useState(video.title);
+  const [text, setText] = useState('');
+  const [offer, setOffer] = useState<{ text: string; minutes: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
+
+  // back from the browser with a transcript copied: offer it in one click
+  useEffect(() => {
+    const onFocus = () =>
+      void call('library.clipboardTranscript')
+        .then((copied) => setOffer(copied && copied.text !== textRef.current ? copied : null))
+        .catch(() => setOffer(null));
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  const use = (copied: { text: string }) => {
+    setText(copied.text);
+    setOffer(null);
+    setNote(null);
+  };
+  const pasteCopied = async () => {
+    setError(null);
+    try {
+      const copied = await call('library.clipboardTranscript');
+      if (copied) use(copied);
+      else setNote('What you copied is not a transcript yet. On the video\'s page, select the whole transcript with its time stamps and copy it.');
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    }
+  };
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text, origin: video.url });
+      await onAdded(sourceId, existed);
+    } catch (e) {
+      setError(plainError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add the video's transcript"
+      width={620}
+      actions={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="primary" onClick={() => void add()} disabled={busy || text.trim().length === 0}>
+            {busy ? 'Adding…' : 'Add to library'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-[12px]">
+        <ol className="transcript-steps">
+          <li>Open the video. Under its description, choose "Show transcript".</li>
+          <li>Select the whole transcript, with its time stamps, and copy it.</li>
+          <li>Come back here: Frontier offers what you copied.</li>
+        </ol>
+        <div className="button-row">
+          <Button onClick={() => window.open(video.url, '_blank')}>Open the video</Button>
+          <Button onClick={() => void pasteCopied()}>Paste the copied transcript</Button>
+        </div>
+        {offer && (
+          <div className="transcript-offer" role="status">
+            <span>You copied a transcript of about {offer.minutes} {offer.minutes === 1 ? 'minute' : 'minutes'}.</span>
+            <Button kind="primary" onClick={() => use(offer)}>
+              Use the transcript you just copied
+            </Button>
+          </div>
+        )}
+        {note && <p className="t-small m-0 text-secondary">{note}</p>}
+        <input className="input" aria-label="Title" placeholder="Title of the video" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <textarea className="input" aria-label="Transcript" rows={10} placeholder="The transcript, with its time stamps" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
+        <p className="t-small m-0 text-muted">Ideas then say where in the video they come from. A caption file (.srt or .vtt) can also go straight into the Library with Add files.</p>
+        {error && <Notice error>{error}</Notice>}
+      </div>
     </Dialog>
   );
 }

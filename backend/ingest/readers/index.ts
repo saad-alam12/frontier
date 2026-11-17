@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import type { SourceKind } from '../../core/types';
 import type { ReadResult } from '../types';
+import { readCaptions } from './captions';
 import { readHtml } from './html';
 import { readMarkdown } from './markdown';
 import { readPdf } from './pdf';
@@ -27,12 +28,15 @@ export function kindForFile(path: string): SourceKind | null {
       return 'epub';
     case '.ipynb':
       return 'notebook';
+    case '.srt':
+    case '.vtt':
+      return 'captions';
     default:
       return null;
   }
 }
 
-export const SUPPORTED_EXTENSIONS = ['pdf', 'md', 'markdown', 'txt', 'html', 'htm', 'docx', 'pptx', 'epub', 'ipynb'];
+export const SUPPORTED_EXTENSIONS = ['pdf', 'md', 'markdown', 'txt', 'html', 'htm', 'docx', 'pptx', 'epub', 'ipynb', 'srt', 'vtt'];
 
 /** What a reader is asked for: `pictures: false` when no pictures of pages can be made, so a PDF's picture pages are left out. */
 export interface ReadOptions {
@@ -62,6 +66,8 @@ export async function readBytes(kind: SourceKind, bytes: Buffer, fallbackTitle: 
       return readEpub(new Uint8Array(bytes), fallbackTitle);
     case 'notebook':
       return readNotebook(decodeText(bytes), fallbackTitle);
+    case 'captions':
+      return readCaptions(decodeText(bytes), fallbackTitle);
     case 'markdown':
     case 'text':
     case 'session':

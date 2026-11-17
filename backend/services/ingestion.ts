@@ -469,6 +469,8 @@ export function nothingToRead(kind: SourceKind, name: string, size: number, pict
     case 'pptx':
     case 'epub':
       return `${name} has no text: what it shows may be pictures. Save or export it as a PDF and add that: pages that are pictures are read from a PDF.`;
+    case 'captions':
+      return `${name} has no captions to read: it holds no time-stamped lines.`;
     default:
       return `${name} has no text to read.`;
   }

@@ -100,6 +100,7 @@ export const INPUTS = {
   'library.openOriginal': sourceOnly,
   'library.addText': PastedTextSchema,
   'library.addLink': z.object({ url: z.string().trim().min(1).max(2_000) }),
+  'library.clipboardTranscript': none,
   'library.run': sourceOnly,
   'library.remove': sourceOnly,
   'library.reread': sourceOnly,
