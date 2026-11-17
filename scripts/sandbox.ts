@@ -4,7 +4,8 @@
  * (`scripts/lib/sampleContent.ts`), trivially simple on purpose: checking the app should never need
  * real study. Two goals (an arithmetic quiz with a date, and even and odd numbers with no time limit),
  * a draft to approve, an addition to review, a four-page lecture PDF with a figure and a page of notes,
- * past sessions with two misconceptions, a free session, flashcards and a note.
+ * past sessions with two misconceptions, a free session, flashcards and a note; and two caption files in
+ * `<sandbox>/Samples` to drop on the window.
  *
  * Flags: `--open-session` (a session open at its first explanation), `--recall` (a session open at its
  * recall, which opens with the question the last one left), `--exam` (a mock exam under way), `--talk`
@@ -349,6 +350,18 @@ if (flags.includes('--talk')) {
   const beginner = new FakeProvider({ examiner: [{ say: 'I am new to this. What does it mean for a number to be even?', done: false, verdict: null }] });
   await startDialogue({ db, provider: beginner }, parity.id, 'teach');
 }
+
+// two caption files to drop on the window (they are not added by themselves): one written by hand, one as automatic captions write it
+const samples = join(folder, 'Samples');
+mkdirSync(samples, { recursive: true });
+writeFileSync(
+  join(samples, 'Counting on.srt'),
+  ['1', '00:00:01,000 --> 00:00:04,000', 'To add two numbers, start at the first one', 'and count on.', '', '2', '00:00:30,000 --> 00:00:33,000', 'Two and three: start at two, then three, four, five.', '', '3', '00:01:05,000 --> 00:01:08,000', 'Adding zero changes nothing: seven and zero is seven.', ''].join('\n'),
+);
+writeFileSync(
+  join(samples, 'Even and odd (automatic captions).vtt'),
+  ['WEBVTT', 'Kind: captions', 'Language: en', '', '00:00:00.500 --> 00:00:03.000 align:start position:0%', ' ', 'pair<00:00:01.000><c> up</c><00:00:01.400><c> the</c><00:00:01.800><c> socks</c>', '', '00:00:03.000 --> 00:00:03.010 align:start position:0%', 'pair up the socks', ' ', '', '00:00:03.010 --> 00:00:06.000 align:start position:0%', 'pair up the socks', 'six<00:00:04.000><c> socks</c><00:00:04.500><c> make</c><00:00:05.000><c> three</c><00:00:05.400><c> pairs</c>', '', '00:01:02.000 --> 00:01:05.000 align:start position:0%', 'seven socks leave one over, so seven is odd', ''].join('\n'),
+);
 
 // a watched course folder with a Word document and a notebook, looked through when the app starts (`--watch`)
 if (flags.includes('--watch')) {
