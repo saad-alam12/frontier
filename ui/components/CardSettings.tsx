@@ -91,3 +91,30 @@ export function FlashcardPreferences() {
     </Section>
   );
 }
+
+/** Settings: whether names of ideas you know are underlined, with their definition on hover (R8 E2). */
+export function DefinitionPreferences() {
+  const [show, setShow] = useState<boolean | null>(null);
+  const id = useId();
+  useEffect(() => {
+    void call('terms.preference').then((p) => setShow(p.show));
+  }, []);
+  if (show === null) return null;
+  return (
+    <Section title="Reading" gap={14}>
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="flex min-w-0 flex-col gap-[2px]">
+            <label className="settings-label" htmlFor={id}>
+              Show definitions on hover
+            </label>
+            <span className="t-small text-muted">Words for ideas you have learned or keep a flashcard on get a faint underline. Hover one to see what it means, where it comes from and its cards.</span>
+          </div>
+          <div className="settings-control">
+            <Switch id={id} on={show} onChange={(on) => void call('terms.savePreference', { show: on }).then((p) => setShow(p.show))} />
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}

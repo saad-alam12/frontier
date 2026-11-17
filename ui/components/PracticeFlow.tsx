@@ -7,6 +7,7 @@ import { CodeAnswer, SentCode, codeOf } from './CodeAnswer';
 import type { CodeDraft } from './CodeAnswer';
 import { Button } from './controls';
 import { Markdown } from './Markdown';
+import { TermsScope } from '../lib/terms';
 import { useDrafts } from '../hooks/useDrafts';
 
 type Draft = { answer: string; confidence: number | null; code?: CodeDraft | null };
@@ -87,7 +88,9 @@ function OpenProblem({ problem, index, total, busy, onSubmit, exam }: { problem:
     onSubmit(problem.id, answer, draft.confidence, noIdea ? {} : { code: codeOf(draft.code), attachments: attached.attachments, quote: attached.quote });
     clearAnswerExtras();
   };
+  // a problem never says which ideas it needs, so no word in it is defined on hover until it is answered (R8 E2)
   return (
+    <TermsScope off>
     <section className="flex flex-col gap-[32px]">
       <div className="flex flex-col gap-[14px]">
         <ProblemHead problem={problem} index={index} total={total} />
@@ -109,12 +112,14 @@ function OpenProblem({ problem, index, total, busy, onSubmit, exam }: { problem:
         <p className="t-small m-0 text-muted">{exam ? 'One attempt. Solutions and grades show when you hand in the exam.' : 'One attempt. The solution appears as soon as you submit.'}</p>
       </div>
     </section>
+    </TermsScope>
   );
 }
 
 function AnsweredProblem({ problem, index, total, examOpen }: { problem: PracticeProblemView; index: number; total: number; examOpen?: boolean }) {
   const answer = problem.answer;
   return (
+    <TermsScope off={examOpen}>
     <article className="flex flex-col gap-[16px]" id={`problem-${problem.id}`}>
       <ProblemHead problem={problem} index={index} total={total} />
       <Markdown text={problem.statement} className="text-[15px]" />
@@ -157,6 +162,7 @@ function AnsweredProblem({ problem, index, total, examOpen }: { problem: Practic
         </div>
       )}
     </article>
+    </TermsScope>
   );
 }
 

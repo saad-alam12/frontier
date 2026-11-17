@@ -1,8 +1,9 @@
 import { Toasts } from './components/Toasts';
 import { SourceViewer } from './components/SourceViewer';
 import { onOpenSource, type SourceTarget } from './lib/sourceViewer';
+import { TermsProvider, TermsScope, type TermActions } from './lib/terms';
 import { useWindowFileDrop } from './lib/fileDrop';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { call, onEvent } from './api';
 import { NavRail, type ScreenName } from './components/Shell';
 import { startActivityTicker, useSurface } from './lib/activity';
@@ -148,6 +149,9 @@ export function App() {
     setTrailId(sessionId);
     setScreen('trails');
   };
+  // the popovers' links reach the current navigation through this ref
+  const navigateTo = useRef({ showOnMap, openTrail, openCards });
+  navigateTo.current = { showOnMap, openTrail, openCards };
   /** Go deeper on simplified ideas: their time joins the goal, and a session on them opens. */
   const goDeeper = async (goalId: string, nodeIds?: string[]) => {
     const deeper = await call('goals.goDeeper', { goalId, nodeIds });
@@ -182,7 +186,17 @@ export function App() {
     else if (id === 'new-goal') openGoals({ name: 'new' });
     else if (id === 'review') openCards({ tab: 'review' });
   };
+  // where a hover definition's links lead (R8 E2); the same functions for the whole life of the window
+  const termActions = useMemo<TermActions>(
+    () => ({
+      showOnMap: (nodeId) => navigateTo.current.showOnMap(nodeId),
+      openTrail: (sessionId) => navigateTo.current.openTrail(sessionId),
+      openCards: () => navigateTo.current.openCards({ tab: 'all' }),
+    }),
+    [],
+  );
   return (
+    <TermsProvider refreshKey={screen} actions={termActions}>
     <div className="app">
       <div className="window-drag" aria-hidden="true" />
       <NavRail current={screen} onSelect={navigate} sessionActive={sessionActive} counts={{ cards: cardsDue }} onSearch={() => setPalette(true)} />
@@ -192,7 +206,12 @@ export function App() {
         {screen === 'today' && !practiceSet && <TodayScreen onNavigate={navigate} onOpenGoals={openGoals} onOpenPractice={setPracticeSet} onChoose={openChoose} onOpenCards={() => openCards({ tab: 'review' })} />}
         {screen === 'session' && <SessionScreen onNavigate={navigate} onChoose={openChoose} />}
         {screen === 'map' && <MapScreen key={mapIdea?.key ?? 'map'} initialId={mapIdea?.id ?? null} onOpenTrail={openTrail} onGoDeeper={goDeeper} onChoose={openChoose} />}
-        {screen === 'cards' && <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />}
+        {screen === 'cards' && (
+          // no definitions on the Cards screen: a flashcard's answer is what the learner is to recall
+          <TermsScope off>
+            <CardsScreen key={cardsView?.key ?? 'cards'} initial={cardsView?.view} onShowOnMap={showOnMap} />
+          </TermsScope>
+        )}
         {screen === 'goals' && <GoalsScreen key={goalsView?.key ?? 'goals'} initial={goalsView?.view} onNavigate={navigate} onGoDeeper={goDeeper} onChoose={openChoose} onReviewCards={(goalId) => openCards({ tab: 'review', goalId })} onOpenPractice={openPractice} />}
         {screen === 'stats' && (
           <StatsScreen
@@ -243,5 +262,6 @@ export function App() {
       )}
       <Toasts />
     </div>
+    </TermsProvider>
   );
 }

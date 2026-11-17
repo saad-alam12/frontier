@@ -3,6 +3,7 @@ import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IdeaRef, MapState, NodeCard } from '../../backend/api/contract';
 import { Markdown } from './Markdown';
+import { TermsScope } from '../lib/terms';
 import { IdeaNote } from './IdeaNote';
 import { EditIdea } from './EditIdea';
 import { VerticalPath } from './paths';
@@ -51,7 +52,9 @@ export function NodeCardView({
   /** Separators follow the last word of the link before them, so a wrapped name keeps its comma beside it. */
   const joined = (refs: IdeaRef[], sep: string) => refs.map((r, i) => link(r, i < refs.length - 1 ? sep : undefined));
   const showPath = card.derivation.length > 1 && card.state !== 'owned';
+  // an idea's own card does not define its own name on hover
   return (
+    <TermsScope exclude={[card.id]}>
     <article className="node-card">
       <div className="flex flex-col gap-[10px]">
         <div className="t-caption text-muted">
@@ -174,6 +177,7 @@ export function NodeCardView({
 
       {onEdited && <EditIdea key={card.id} card={card} onChanged={onEdited} onTestMe={onTestMe} />}
     </article>
+    </TermsScope>
   );
 }
 

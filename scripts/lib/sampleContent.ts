@@ -160,7 +160,7 @@ const OWN_CARDS: Record<string, IdeaCards> = {
   },
   'Taking away': {
     predict: 'You have 5 sweets and eat 2. How many are left?',
-    explain: '## Taking away\n\nThe sign $-$ means take an amount away. For $5 - 2$, start at **5** and count back two steps: 4, **3**. So $5 - 2 = 3$.',
+    explain: '## Taking away\n\nThe sign $-$ means take an amount away. It is counting backwards: for $5 - 2$, start at **5** and count back two steps: 4, **3**. So $5 - 2 = 3$, and taking away less than you have always leaves a whole number.',
     check: { question: 'What is 7 − 3? Check your answer by adding.', answerKey: '4, since 4 + 3 = 7' },
     right: 'Right: 4, and 4 + 3 = 7 checks it.',
     close: 'Close, but count back from 7: 6, 5, 4. Then check: 4 + 3 = 7.',

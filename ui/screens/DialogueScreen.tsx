@@ -6,6 +6,7 @@ import { AnswerSurface, Thinking } from '../components/AnswerSurface';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { TermsScope } from '../lib/terms';
 import { VerticalPath } from '../components/paths';
 
 const TITLE = { oral: 'Oral exam', teach: 'Teach it back' } as const;
@@ -99,6 +100,8 @@ export function DialogueScreen({ dialogueId, goalTitle, onBack, onBackToGoals }:
   );
 
   return (
+    // the ideas the examiner asks about are never defined on hover (R8 E2)
+    <TermsScope exclude={view.ideas.map((i) => i.nodeId)}>
     <Screen aside={aside} asideLabel="What it is about">
       <div className="flex flex-col gap-[26px]">
         <Breadcrumb items={[{ label: 'Goals', onClick: onBackToGoals }, { label: goalTitle || view.goalTitle || 'Goal', onClick: onBack }, { label: title }]} />
@@ -170,5 +173,6 @@ export function DialogueScreen({ dialogueId, goalTitle, onBack, onBackToGoals }:
         </div>
       )}
     </Screen>
+    </TermsScope>
   );
 }

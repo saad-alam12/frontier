@@ -9,6 +9,7 @@ import type { Effort, ModelOptions, Settings, SettingsPatch } from '../settings/
 import type { ConnectionTestResult } from '../agents/connectionTest';
 import type { DeltaItem, DeltaSummary, IdeaRef, LinkResult, MaterialCandidate, PastedText, SourceSummary } from '../services/library';
 import type { SourceDocument } from '../services/sourceView';
+import type { TermPeek, TermsIndexView } from '../services/terms';
 import type { IngestProgress } from '../services/ingestion';
 import type { GoalDetail, GoalForm, GoalWorkState, MaterialView } from '../services/goals';
 import type { ProbeAnswerInput, ProbeOutcome, ProbeView } from '../services/probe';
@@ -52,6 +53,7 @@ export type { CardInput, CardListFilter, CardListView, CardOrigin, CardPhase, Ca
 
 export type { AdditionView, GoalProgress, PlanPreview, RemapView, ResourceTime, TickInput, StatsFilter, StatsRange, StatsView };
 export type { GoalPlan, Pace, PaceKind } from '../core/budget';
+export type { TermPeek, TermsIndexView };
 
 export type { MapNodeView, MapState, MapView, NodeCard, LookupAnswer, LookupHit, Trail, TrailItem, TrailNarration, TrailSummary };
 
@@ -337,6 +339,13 @@ export interface ApiMethods {
   /** A goal's automatic cards: on or off, the maximum, and how many it has. */
   'cards.goalSettings': { input: { goalId: string }; output: GoalCardSettings & { auto: number } };
   'cards.saveGoalSettings': { input: { goalId: string; settings: GoalCardSettings }; output: GoalCardSettings & { auto: number } };
+  /** Hover definitions: the names to underline, or null while the window's copy (`since`) still holds. */
+  'terms.index': { input: { since?: string }; output: TermsIndexView | null };
+  /** What the popover shows for one underlined name. */
+  'terms.peek': { input: { nodeId: string }; output: TermPeek };
+  /** Whether names are underlined at all (Settings; on by default). */
+  'terms.preference': { input: undefined; output: { show: boolean } };
+  'terms.savePreference': { input: { show: boolean }; output: { show: boolean } };
   /** Whether sessions without a goal make cards (Settings). */
   'cards.preferences': { input: undefined; output: CardPreferences };
   'cards.savePreferences': { input: CardPreferences; output: CardPreferences };

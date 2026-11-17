@@ -1,0 +1,94 @@
+/* Hover definitions (R8 E2): the underline on a known name and its popover. */
+
+.term {
+  text-decoration: underline dotted 1px;
+  text-decoration-color: var(--node-muted);
+  text-underline-offset: 3px;
+  outline: none;
+}
+.term:hover,
+.term:focus-visible {
+  text-decoration-color: var(--text-muted);
+}
+
+.term-popover {
+  position: fixed;
+  z-index: 60;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  animation: term-fade 120ms ease-out;
+}
+@keyframes term-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .term-popover {
+    animation: none;
+  }
+}
+.term-popover p {
+  margin: 0;
+}
+.term-name {
+  font-weight: 500;
+  color: var(--text);
+}
+.term-definition {
+  margin-top: 4px;
+}
+.term-definition > :last-child {
+  margin-bottom: 0;
+}
+.term-caption,
+.term-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.term-standing {
+  margin-top: 8px;
+  color: var(--text-secondary);
+}
+.term-line {
+  margin-top: 4px;
+}
+.term-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.term-block .term-line {
+  margin-top: 2px;
+}
+.term-card {
+  margin-top: 6px;
+}
+.term-card-back {
+  color: var(--text-muted);
+}
+.term-card .link-button,
+.term-popover .link-button {
+  line-height: 1.5;
+}
+.term-quiet {
+  color: var(--text-muted);
+}
+
+/* Printed notes and cheat sheets carry no underline. */
+@media print {
+  .term {
+    text-decoration: none;
+  }
+}

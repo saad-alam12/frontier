@@ -28,6 +28,7 @@ import { abandonSession, currentSession, pauseSession, respond, startSession, as
 import { previewFree, startFreeSession } from '../services/freeSession';
 import { openPythonInstaller } from '../services/codeRunner';
 import { sourceDocument } from '../services/sourceView';
+import { saveTermsPreference, termPeek, termsIndex, termsPreference } from '../services/terms';
 import { currentPractice, endPracticeSet, handInExam, practiceView, resumeGrading, startPractice, submitPracticeAnswer } from '../services/practice';
 import { todayView } from '../services/today';
 import { mapView, nodeCard } from '../services/map';
@@ -411,6 +412,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'cards.summary': ({ goalId }) => cardSummary(ctx.db(), goalId),
     'cards.goalSettings': ({ goalId }) => goalCardSettings(ctx.db(), goalId),
     'cards.saveGoalSettings': ({ goalId, settings }) => saveGoalCards(ctx.db(), goalId, settings),
+    'terms.index': ({ since }) => termsIndex(ctx.db(), since),
+    'terms.peek': ({ nodeId }) => termPeek(ctx.db(), nodeId),
+    'terms.preference': () => termsPreference(ctx.db()),
+    'terms.savePreference': ({ show }) => saveTermsPreference(ctx.db(), show),
     'cards.preferences': () => cardPreferences(ctx.db()),
     'cards.savePreferences': (prefs) => saveCardPreferences(ctx.db(), prefs),
     'cards.stats': (filter) => cardStats(ctx.db(), filter),

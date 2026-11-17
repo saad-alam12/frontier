@@ -8,6 +8,7 @@ import { Breadcrumb, Screen, type ScreenName } from '../components/Shell';
 import { Button, Empty, Notice, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
 import { Markdown } from '../components/Markdown';
+import { TermsScope } from '../lib/terms';
 import { AnswerActions, AnswerSurface, Thinking } from '../components/AnswerSurface';
 import { CodeAnswer, SentCode, codeOf } from '../components/CodeAnswer';
 import type { CodeDraft } from '../components/CodeAnswer';
@@ -238,6 +239,8 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
   const panel = current && snap.frontier ? <FrontierPanel map={snap.frontier} why={current.why} onSelect={(id) => scrollTo(`node-${id}`, id)} /> : <PlanPanel snap={snap} />;
 
   return (
+    // the idea the open card asks about is never defined on hover: that would be the answer (R8 E2)
+    <TermsScope exclude={[current?.nodeId]}>
     <Screen aside={panel} asideLabel={current ? 'Your frontier' : "Today's plan"} asideGap={current ? 22 : 28} mainRef={mainRef}>
       <div className="session-head">
         <div className="section-head">
@@ -305,6 +308,7 @@ export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: Screen
       </ConfirmDialog>
       {cardSheet && <CardSheet start={cardSheet} ideas={sessionIdeas(snap)} goalId={snap.goalId} sessionId={snap.id} onClose={() => setCardSheet(null)} onSaved={() => setCardSaved(true)} />}
     </Screen>
+    </TermsScope>
   );
 }
 

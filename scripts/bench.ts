@@ -22,6 +22,8 @@ import { mapView, nodeCard } from '../backend/services/map';
 import { statsView } from '../backend/services/stats';
 import { weekReview } from '../backend/services/weekReview';
 import { misconceptionsView } from '../backend/services/misconceptions';
+import { termPeek, termsIndex } from '../backend/services/terms';
+import { buildTermIndex, findTerms } from '../backend/core/terms';
 import type { Chain, KnowledgeNode } from '../backend/core/types';
 import type { CardRating } from '../backend/core/cards';
 import { Session } from 'node:inspector/promises';
@@ -95,6 +97,8 @@ console.log(`Built ${IDEAS} ideas, ${chains.length} chains, ${evidence} answers,
 
 const goals = listGoalDetails(db, () => ({ state: 'idle' }));
 const goalId = goals[0]?.goal.id as string;
+/** A long explanation that names learned ideas, for the matcher. */
+const PAGE = Array.from({ length: 60 }, (_, i) => `Here ${nodes[(i * 31) % nodes.length]?.name ?? 'an idea'} builds on what came before, and so does ${nodes[(i * 17) % nodes.length]?.name ?? 'another'}.`).join(' ');
 const reads: [string, () => unknown][] = [
   ['Today', () => todayView(db)],
   ['Goals list', () => listGoalDetails(db, () => ({ state: 'idle' }))],
@@ -108,6 +112,9 @@ const reads: [string, () => unknown][] = [
   ['Stats', () => statsView(db, { goalId: null, topicId: null, range: '30d' })],
   ['Your week', () => weekReview(db, null)],
   ['Misconceptions', () => misconceptionsView(db)],
+  ['Definitions: index', () => termsIndex(db)],
+  ['Definitions: match a page', () => findTerms(PAGE, buildTermIndex(termsIndex(db)?.terms ?? []))],
+  ['Definitions: popover', () => termPeek(db, pick(learned).id)],
   ['Knowledge view', () => loadKnowledge(db)],
   ['After an answer (goal fields)', () => refreshGoalFields(db)],
 ];

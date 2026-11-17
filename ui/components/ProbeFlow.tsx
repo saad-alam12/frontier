@@ -3,6 +3,7 @@ import type { ProbeOutcome, ProbeView } from '../../backend/api/contract';
 import { AnswerSurface, Thinking } from './AnswerSurface';
 import { Button } from './controls';
 import { Markdown } from './Markdown';
+import { TermsScope } from '../lib/terms';
 import { useDrafts } from '../hooks/useDrafts';
 import { useEscape } from '../hooks/useEscape';
 
@@ -40,7 +41,9 @@ export function ProbeFlow({
   };
   const next = () => (last ? submitAll() : setIndex(index + 1));
 
+  // the probe's ideas are what it asks about: none of them is defined on hover (R8 E2)
   return (
+    <TermsScope exclude={probe.questions.map((q) => q.nodeId)}>
     <section className="flex flex-col gap-[32px]" aria-label="Probe">
       <div className="flex flex-col gap-[18px]">
         <div className="t-caption text-muted">
@@ -69,6 +72,7 @@ export function ProbeFlow({
         </div>
       )}
     </section>
+    </TermsScope>
   );
 }
 

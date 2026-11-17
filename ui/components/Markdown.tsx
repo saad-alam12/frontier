@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
-import type { Components } from 'react-markdown';
+import type { Components, Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { Figure } from './Figure';
 import { Diagram, DrawingPending } from './Diagram';
 import { Plot } from './Plot';
+import { Term } from './Term';
+import { useTerms } from '../lib/terms';
+import { rehypeTerms } from '../lib/termsPlugin';
 
 const FIGURE = /^figure:([a-z0-9_]+)$/;
 
@@ -52,6 +56,16 @@ const drawings = (drafting: boolean): Components => ({
 const BLOCKS: Components = { ...LINKS, ...drawings(false) };
 const DRAFTING: Components = { ...LINKS, ...drawings(true) };
 
+/** A name the hover definitions found (`rehypeTerms`) becomes an underlined word with its popover; other spans stay spans. */
+const withTerms = (components: Components): Components => ({
+  ...components,
+  span: ({ node: _node, children, ...props }) => {
+    const id = (props as Record<string, unknown>)['data-term'];
+    return typeof id === 'string' ? <Term nodeId={id}>{children}</Term> : <span {...props}>{children}</span>;
+  },
+});
+const TERMS = { blocks: withTerms(BLOCKS), drafting: withTerms(DRAFTING) };
+
 /**
  * Markdown with GitHub tables/lists, LaTeX math (KaTeX), diagrams and plots. Every statement, question
  * and explanation in the app goes through this, so no raw `$` ever shows. `inline` renders a single
@@ -59,9 +73,15 @@ const DRAFTING: Components = { ...LINKS, ...drawings(true) };
  */
 export function Markdown({ text, className = '', inline, drafting }: { text: string; className?: string; inline?: boolean; /** The text is still being written: drawings wait until it is done. */ drafting?: boolean }) {
   const Tag = inline ? 'span' : 'div';
+  // names of ideas the learner knows get a quiet underline and a definition on hover (R8 E2), in running
+  // text only: an inline run is a name used as a label (a breadcrumb, a list, the map), not a sentence
+  const { index, exclude, on } = useTerms();
+  const terms = on && !inline && index !== null && index.size > 0;
+  const rehypePlugins = useMemo<Options['rehypePlugins']>(() => (terms && index ? [rehypeKatex, [rehypeTerms, { index, exclude }]] : [rehypeKatex]), [terms, index, exclude]);
+  const components = terms ? (drafting ? TERMS.drafting : TERMS.blocks) : inline ? INLINE : drafting ? DRAFTING : BLOCKS;
   return (
     <Tag className={`markdown${inline ? ' is-inline' : ''} ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={inline ? INLINE : drafting ? DRAFTING : BLOCKS} urlTransform={urlTransform}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>
         {text}
       </ReactMarkdown>
     </Tag>

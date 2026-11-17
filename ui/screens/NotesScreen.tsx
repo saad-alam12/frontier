@@ -5,6 +5,7 @@ import { plainError } from '../lib/errors';
 import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, Notice } from '../components/controls';
 import { Markdown } from '../components/Markdown';
+import { TermsScope } from '../lib/terms';
 import { IdeaNote } from '../components/IdeaNote';
 
 type Tab = 'notes' | 'sheet';
@@ -120,7 +121,9 @@ function NotesView({ notes, onNote }: { notes: GoalNotesView; onNote: (nodeId: s
 }
 
 function NoteIdea({ idea, onNote }: { idea: NoteIdeaView; onNote: (note: string | null) => void }) {
+  // an idea's own notes do not define its own name on hover
   return (
+    <TermsScope exclude={[idea.nodeId]}>
     <section className="notes-idea">
       <div className="flex flex-wrap items-baseline gap-x-[12px] gap-y-[2px]">
         <h3 className="notes-idea-name">
@@ -166,6 +169,7 @@ function NoteIdea({ idea, onNote }: { idea: NoteIdeaView; onNote: (note: string 
         </div>
       )}
     </section>
+    </TermsScope>
   );
 }
 

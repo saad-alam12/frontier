@@ -6,7 +6,7 @@ import { Button, Notice, RadioCards, Section } from '../components/controls';
 import { ConfirmDialog } from '../components/Dialog';
 import { connectionAdvice, plainError } from '../lib/errors';
 import { EraseMap } from '../components/EraseMap';
-import { FlashcardPreferences, Switch } from '../components/CardSettings';
+import { DefinitionPreferences, FlashcardPreferences, Switch } from '../components/CardSettings';
 
 const ROLE_LABELS: { role: Role; label: string; does: string }[] = [
   { role: 'goalCompiler', label: 'Goal compiler', does: 'Turns a goal into skills and the ideas each needs' },
@@ -220,6 +220,8 @@ export function SettingsScreen() {
       <Models settings={settings} options={options} onChange={(patch) => void update(patch)} />
 
       <FlashcardPreferences />
+
+      <DefinitionPreferences />
 
       <Section title="Reminders" gap={14}>
         <div className="settings-group">
