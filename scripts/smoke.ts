@@ -68,7 +68,7 @@ try {
 
   // a goal's page and its notes
   await open('Goals');
-  await w.evaluate("[...document.querySelectorAll('button, a, [role=button]')].find((x) => /game theory exam/i.test(x.textContent))?.click()");
+  await w.evaluate("[...document.querySelectorAll('button, a, [role=button]')].find((x) => /arithmetic quiz/i.test(x.textContent))?.click()");
   await until('a goal page', () => w.evaluate<boolean>("[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Notes')"), 10_000);
   await w.evaluate("[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Notes').click()");
   await until('the notes', () => w.evaluate<boolean>("Boolean(document.querySelector('.notes-article'))"), 10_000);
@@ -76,9 +76,9 @@ try {
 
   // an idea on the map, found by name
   await open('Map');
-  await w.evaluate("(() => { const i = document.querySelector('input[placeholder=\"Find an idea\"]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Nash equilibrium'); i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await w.evaluate("(() => { const i = document.querySelector('input[placeholder=\"Find an idea\"]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Adding two numbers'); i.dispatchEvent(new Event('input', { bubbles: true })); })()");
   await sleep(500);
-  await w.evaluate("[...document.querySelectorAll('[role=option], li button')].find((x) => x.textContent.trim() === 'Nash equilibrium')?.click()");
+  await w.evaluate("[...document.querySelectorAll('[role=option], li button')].find((x) => x.textContent.trim() === 'Adding two numbers')?.click()");
   await until("an idea's card", () => w.evaluate<boolean>("Boolean(document.querySelector('.node-card'))"), 10_000);
   console.log("  An idea's card on the map: shown");
 } catch (error) {
