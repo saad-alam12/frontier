@@ -34,11 +34,11 @@ const EMPTY_CARD_DRAFT: CardDraft = { answer: '', confidence: null, handle: '', 
 /** The answer just sent, shown in the conversation while the tutor works. */
 type Pending = { card: PublicCard | null; stage: Stage | null; response: LearnerResponse } | null;
 
-/** "Idea 2 of 3 · 6 of 13 minutes": where the learner is in today's plan and in this idea's time. */
+/** "Idea 2 of 3 · 6 of 13 minutes": where the learner is in today's plan and in this idea's time, and why it opens with a check when it does. */
 function whereInSession(current: NonNullable<SessionSnapshot['current']>): string {
   const idea = current.planned > 1 && current.position > 0 ? `Idea ${current.position} of ${current.planned}` : null;
   const time = current.minutesUsed >= 1 ? `${current.minutesUsed} of ${current.minutesAllowed} minutes` : `up to ${current.minutesAllowed} minutes`;
-  return [idea, time].filter(Boolean).join(' · ');
+  return [idea, time, current.checking].filter(Boolean).join(' · ');
 }
 
 export function SessionScreen({ onNavigate, onChoose }: { onNavigate: (s: ScreenName) => void; onChoose: (init?: ChooseInit) => void }) {

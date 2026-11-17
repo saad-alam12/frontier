@@ -118,6 +118,15 @@ export function firstPasses(db: Database, passScore: number): Map<string, string
 }
 
 /** Every idea with any evidence at all: these are never retired. */
+/**
+ * Ideas already checked: an answer to a check an idea opened with because the learner said they know
+ * its material, or a probe question. Such an idea does not open with a check again (R8 E1).
+ */
+export function checkedNodes(db: Database): Set<string> {
+  const rows = db.prepare("SELECT DISTINCT node_id AS id FROM evidence WHERE json_extract(context, '$.checkedFirst') = 1 OR json_extract(context, '$.step') LIKE 'probe:%'").all() as { id: string }[];
+  return new Set(rows.map((r) => r.id));
+}
+
 export function nodesWithEvidence(db: Database): Set<string> {
   return new Set((db.prepare('SELECT DISTINCT node_id FROM evidence').all() as { node_id: string }[]).map((r) => r.node_id));
 }

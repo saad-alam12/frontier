@@ -9,7 +9,7 @@ import type { Depth, MaterialRole, Source } from '../core/types';
 import { rolesOfSource } from '../store/goals';
 import type { Database } from '../store/db';
 import { activeSession } from '../store/sessions';
-import { coveredNodeIds, findSourceByOrigin, getSource, listChunks, listSources } from '../store/sources';
+import { coveredNodeIds, findSourceByOrigin, getSource, listChunks, listSources, setSourceKnown } from '../store/sources';
 import { listFigures } from '../store/figures';
 import { LinkError, fetchDocument, fetchVideoTitle } from '../ingest/link';
 import type { Fetcher } from '../ingest/link';
@@ -133,6 +133,17 @@ export function listSourceSummaries(db: Database, ingestion?: Pick<IngestionServ
       reveal: sourcesDir ? (revealFor(s, sourcesDir)?.kind ?? null) : null,
     };
   });
+}
+
+/**
+ * "I already know this material" on a source (R8 E1), ticked or unticked at any time. It creates no
+ * evidence: the ideas the source covers open with a check instead of teaching, and the plan prices
+ * them at a check until an answer says otherwise, so the plan is worked out again.
+ */
+export function markSourceKnown(db: Database, sourceId: string, known: boolean): void {
+  if (!getSource(db, sourceId)) throw new Error('This source is no longer in your library.');
+  setSourceKnown(db, sourceId, known);
+  refreshGoalFields(db);
 }
 
 /** Where a source can be shown outside the app, with the files as they are on disk now. */

@@ -17,7 +17,7 @@ import type { Settings } from '../settings/schema';
 import { runConnectionTest } from '../agents/connectionTest';
 import { isCancelled } from '../llm/provider';
 import { SUPPORTED_EXTENSIONS } from '../ingest/readers';
-import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, readSourceAgain, showSourceFile, storedCopyPath, transcriptOnClipboard } from '../services/library';
+import { addGoalMaterials, addLibraryFiles, addLink, addPastedText, deltaForSource, listSourceSummaries, markSourceKnown, readSourceAgain, showSourceFile, storedCopyPath, transcriptOnClipboard } from '../services/library';
 import { approveGoalPlan, askForRemap, createGoalFromForm, goDeeper, goalDetail, listGoalDetails, removeGoal, setGoalStatus, startUngrounded, updateGoalFromForm, useFreedTime } from '../services/goals';
 import { previewPlan } from '../services/budget';
 import { tick } from '../services/activity';
@@ -117,6 +117,10 @@ export function buildHandlers(ctx: AppContext): Handlers {
     'library.stop': ({ sourceId }) => {
       ctx.ingestion().stop(sourceId);
       return undefined;
+    },
+    'library.setKnown': ({ sourceId, known }) => {
+      markSourceKnown(ctx.db(), sourceId, known);
+      return null;
     },
     'library.showInFolder': ({ sourceId }) => {
       showSourceFile(ctx.db(), ctx.paths().sources, sourceId, (path) => shell.showItemInFolder(path));

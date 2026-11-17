@@ -70,7 +70,7 @@ export function GoalAside({ detail, onEdit }: { detail: GoalDetail; onEdit: () =
               label: ROLE_PLURAL[o.value],
               value: detail.materials
                 .filter((m) => m.role === o.value)
-                .map((m) => m.title)
+                .map((m) => (m.known ? `${m.title} (known)` : m.title))
                 .join(', '),
             }))}
           />

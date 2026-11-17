@@ -8,7 +8,7 @@ import { dependents } from '../core/graph';
 import { targetDepthFor } from '../core/leverage';
 import { computeFringe, doneSet } from '../core/ownership';
 import { orderByDependencies, planCandidates, withPrerequisites } from '../core/plan';
-import { SESSION_MINUTES, ideaMinutes } from '../core/budget';
+import { CHECK_MINUTES, SESSION_MINUTES, ideaMinutes } from '../core/budget';
 import { IDEA_MAX_MINUTES } from '../core/session';
 import { OWNED_DEPTH } from '../core/types';
 import type { Depth, NodeKind } from '../core/types';
@@ -17,6 +17,7 @@ import type { Database } from '../store/db';
 import { getGoal, listCapabilities, listMaterials, listTargets } from '../store/goals';
 import { learnerSpeedNow } from './budget';
 import { loadKnowledge } from './knowledge';
+import { checkFirstSources } from './knownMaterial';
 import type { KnowledgeView } from './knowledge';
 
 export const MAX_PLAN_NODES = 6;
@@ -35,6 +36,12 @@ export interface LessonStep {
   /** Why the idea was simplified for this goal, once it was. */
   simplified: string | null;
   dependsOn: string[];
+  /**
+   * The learner says they know this idea's material, from these sources (their titles): the step opens
+   * with a check, and the session fits it in at the minutes of a check (R8 E1). Set when planned and
+   * again when the step begins, since the flag can change in between.
+   */
+  checkFirst?: string[] | null;
 }
 
 /** The aim of an idea in a session: what the plan asks of it; a premise no goal targets is learned to be owned. */
@@ -109,6 +116,7 @@ export function planFocusSession(db: Database, goalId: string, focus: string[]):
       minutes: stepMinutes(node?.kind ?? 'claim', fromDepth, aim, speed),
       simplified: null,
       dependsOn: c.dependsOn,
+      checkFirst: checkFirstSources(db, c.nodeId, aim),
     };
   });
   const names = focus.map(nameOf);
@@ -127,9 +135,10 @@ function fitSession(steps: LessonStep[], reservedMinutes: number, sessionMinutes
   const fitted: LessonStep[] = [];
   let minutes = reservedMinutes;
   for (const step of steps) {
-    if (fitted.length > 0 && minutes + step.minutes > sessionMinutes) break;
+    const takes = step.checkFirst?.length ? Math.min(step.minutes, CHECK_MINUTES) : step.minutes;
+    if (fitted.length > 0 && minutes + takes > sessionMinutes) break;
     fitted.push(step);
-    minutes += step.minutes;
+    minutes += takes;
   }
   const kept = new Set(fitted.map((st) => st.nodeId));
   return { steps: fitted.map((st) => ({ ...st, dependsOn: st.dependsOn.filter((d) => kept.has(d)) })) };
@@ -168,7 +177,8 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
       unlocksTargets: unlocks,
       targetDepth: aimFor(c.nodeId, view),
       currentDepth: state?.depth ?? 0,
-      minutes: stepMinutes(node?.kind ?? 'claim', state?.depth ?? 0, aimFor(c.nodeId, view), speed),
+      // an idea whose material the learner says they know costs a check until an answer says otherwise
+      minutes: checkFirstSources(db, c.nodeId, aimFor(c.nodeId, view)) ? CHECK_MINUTES : stepMinutes(node?.kind ?? 'claim', state?.depth ?? 0, aimFor(c.nodeId, view), speed),
     };
   });
   const result = await runPlanner(provider, {
@@ -206,6 +216,7 @@ export async function planSession(db: Database, provider: LlmProvider, goalId: s
       minutes: stepMinutes(node?.kind ?? 'claim', fromDepth, aim, speed),
       simplified: simplified.get(id) ?? null,
       dependsOn: (byId.get(id)?.dependsOn ?? []).filter((d) => ordered.includes(d)),
+      checkFirst: checkFirstSources(db, id, aim),
     };
   });
   return {

@@ -80,7 +80,15 @@ export interface EdgeState {
   wrapping?: boolean;
   /** Questions of this idea already asked again after a miss; each is asked again once. */
   retried?: Stage[];
+  /**
+   * The learner says they know this idea's material, so it opened with a check (R8 E1): `open` while
+   * the first check is answered, `gap` while the check comes again after the gap was taught, `climb`
+   * while one harder question at the aim is answered. Cleared once the idea is taught as usual.
+   */
+  checkFirst?: CheckFirst | null;
 }
+
+export type CheckFirst = 'open' | 'gap' | 'climb';
 
 export const FAIL_SCORE = 0.5;
 /** A strong answer: this score or more, given as at least fairly sure (or with no confidence). */
@@ -224,6 +232,55 @@ export function timebox(input: TimeboxInput): 'none' | 'simplify' | 'wrapUp' {
   return 'none';
 }
 
+/** How an answer to the check an idea opened with reads (R8 E1). */
+export type CheckReading = 'strong' | 'gap' | 'weak';
+
+/**
+ * Strong: it passes (0.7) with no misconception, given as at least fairly sure (or with no confidence).
+ * Weak: "I have no idea", a score below 0.5, or a misconception with a score below the pass mark.
+ * In between: everything else (from 0.5 to below the pass, or a pass given as a guess or with a misconception).
+ */
+export function readCheck(input: { score: number; confidence?: number; misconception: boolean; noIdea: boolean }): CheckReading {
+  if (input.noIdea || input.score < FAIL_SCORE || (input.misconception && input.score < PASS_SCORE)) return 'weak';
+  if (input.score >= PASS_SCORE && !input.misconception && (input.confidence === undefined || input.confidence >= STRONG_CONFIDENCE)) return 'strong';
+  return 'gap';
+}
+
+/** The question an idea opens with when the learner says they know its material: the explaining check when its loop has one, else the aim's own question. */
+export function checkFirstStage(aim: number, stages: Stage[]): Stage {
+  return aim >= 2 && stages.includes('check') ? 'check' : certifyingStage(aim);
+}
+
+/** The depth a stage's passing answer shows. */
+const STAGE_DEPTH: Partial<Record<Stage, number>> = { index: 1, check: 2, compress: 2, derive: 3, use: 4 };
+
+/**
+ * After the check an idea opened with (R8 E1), code decides from the tutor's grade. Strong: the idea
+ * counts through its evidence and is done, or, when its aim is deeper than the check and its half hour
+ * has room, one harder question at the aim follows instead of the loop. In between: a worked example
+ * on the gap the grade names, then the check once more. Weak (or in between a second time): taught
+ * from scratch, the usual loop from the explanation. The harder question goes by the usual rules, as
+ * after a test-out from the check: passed strongly it ends the idea, missed it resumes the loop.
+ */
+function followCheck(edge: EdgeState, step: FollowStep, stage: Stage, input: { score: number; confidence?: number; minutes: number; misconception: boolean; noIdea: boolean }): { edge: EdgeState; then: FollowUp } {
+  const reading = readCheck(input);
+  if (reading === 'strong') {
+    const room = (STAGE_DEPTH[stage] ?? 0) < Math.min(step.aim, SESSION_MAX_DEPTH) && input.minutes < ideaAllowance(step.minutes) && step.stages.includes(certifyingStage(step.aim));
+    if (room) return { edge: { ...edge, checkFirst: 'climb', jumpedFrom: stage }, then: { stage: certifyingStage(step.aim), retry: false } };
+    return { edge: { ...edge, checkFirst: null }, then: { stage: null, retry: false } };
+  }
+  if (reading === 'gap' && edge.checkFirst === 'open') return { edge: { ...edge, checkFirst: 'gap' }, then: 'support' };
+  // from scratch: the loop as for any idea, from the explanation
+  return { edge: { ...emptyEdge(), checkFirst: null }, then: { stage: 'explain', retry: false } };
+}
+
+/** The stage after a card that was only read: after the worked example on the gap of a check, the check again; otherwise the loop goes on. */
+export function afterReading(stages: Stage[], stage: Stage, supportAfter: Stage | null, edge: EdgeState): { stage: Stage | null; retry: boolean } {
+  if (edge.checkFirst === 'gap' && stage === 'support') return { stage: supportAfter ?? 'check', retry: true };
+  const resumeFrom = stage === 'support' || stage === 'reteach' ? (supportAfter ?? stage) : stage;
+  return { stage: nextStage(stages, resumeFrom, 'none'), retry: false };
+}
+
 /** What follows a graded answer: a worked example, the escalated re-teach, a simplified idea, or a stage (null: the idea is finished). */
 export type FollowUp = 'support' | 'reteach' | 'simplify' | { stage: Stage | null; retry: boolean };
 
@@ -242,7 +299,10 @@ export interface FollowStep {
  * the half hour per idea, a question asked again, wrapping up. The session uses it after a grade, and
  * before the call to tell the tutor which card each score leads to.
  */
-export function followUp(edge: EdgeState, step: FollowStep, stage: Stage, input: { score: number; confidence?: number; missingBackground: boolean; minutes: number }): { edge: EdgeState; then: FollowUp } {
+export function followUp(edge: EdgeState, step: FollowStep, stage: Stage, input: { score: number; confidence?: number; missingBackground: boolean; minutes: number; misconception?: boolean; noIdea?: boolean }): { edge: EdgeState; then: FollowUp } {
+  if (edge.checkFirst === 'open' || edge.checkFirst === 'gap') return followCheck(edge, step, stage, { ...input, misconception: input.misconception ?? false, noIdea: input.noIdea ?? false });
+  // the harder question after a strong check: the usual rules, as after a test-out from the check
+  if (edge.checkFirst === 'climb') edge = { ...edge, checkFirst: null };
   const graded = applyGrade(edge, { score: input.score, confidence: input.confidence, stage, aim: step.aim });
   if (graded.action === 'support') return { edge: graded.edge, then: 'support' };
   if (graded.action === 'escalate') return { edge: graded.edge, then: 'reteach' };

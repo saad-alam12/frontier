@@ -19,6 +19,7 @@ interface SourceRow {
   error: string | null;
   extraction: number;
   original_path: string | null;
+  known?: number;
 }
 
 export interface SourceChunk {
@@ -60,6 +61,7 @@ const toSource = (r: SourceRow): Source => ({
   chunksDone: r.chunks_done,
   error: r.error,
   originalPath: r.original_path ?? null,
+  known: r.known === 1,
   extraction: r.extraction,
 });
 
@@ -94,6 +96,19 @@ export function getSource(db: Database, id: string): Source | undefined {
 
 export function listSources(db: Database): Source[] {
   return (db.prepare('SELECT * FROM sources ORDER BY added_at DESC').all() as unknown as SourceRow[]).map(toSource);
+}
+
+/** "I already know this material" (R8 E1): ticked or unticked by the learner at any time. */
+export function setSourceKnown(db: Database, id: string, known: boolean): void {
+  db.prepare('UPDATE sources SET known = ? WHERE id = ?').run(known ? 1 : 0, id);
+}
+
+/** For each idea a source the learner marked as known covers: the titles of those sources. */
+export function knownMaterialByNode(db: Database): Map<string, string[]> {
+  const rows = db.prepare('SELECT c.node_id AS nodeId, s.title AS title FROM source_coverage c JOIN sources s ON s.id = c.source_id WHERE s.known = 1 ORDER BY s.added_at').all() as { nodeId: string; title: string }[];
+  const out = new Map<string, string[]>();
+  for (const r of rows) out.set(r.nodeId, [...(out.get(r.nodeId) ?? []), r.title]);
+  return out;
 }
 
 /** Where the learner keeps the file the source was added from (the latest place it was added from). */

@@ -6,6 +6,7 @@ import { Breadcrumb, Screen } from '../components/Shell';
 import { Button, ChoiceChips, Empty, Meter, Notice, Section } from '../components/controls';
 import { Markdown } from '../components/Markdown';
 import { Dialog } from '../components/Dialog';
+import { KnownToggle } from '../components/KnownToggle';
 import { plainError } from '../lib/errors';
 import { SHOW_IN_FOLDER } from '../lib/platform';
 import { openSource } from '../lib/sourceViewer';
@@ -177,7 +178,10 @@ export function LibraryScreen() {
             <button type="button" className="row" onClick={() => setSelected(s.id)} aria-current={s.id === selected ? 'true' : undefined}>
               <span className="flex min-w-0 flex-col">
                 <span className={'truncate ' + (s.id === selected ? 'font-medium text-text' : 'text-soft')}>{s.title}</span>
-                <span className="t-small text-muted">{s.readsIdeas ? `${s.nodeCount} ideas · ${s.stopped ? 'Stopped' : STATUS_LABEL[s.status]}` : `Kept as ${s.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}</span>
+                <span className="t-small text-muted">
+                  {s.readsIdeas ? `${s.nodeCount} ideas · ${s.stopped ? 'Stopped' : STATUS_LABEL[s.status]}` : `Kept as ${s.roles.map((r) => ROLE_LABEL[r].toLowerCase()).join(', ')}`}
+                  {s.known ? ' · Marked as known' : ''}
+                </span>
               </span>
               {s.readsIdeas && s.chunkCount > 0 && <Meter value={s.chunksDone / s.chunkCount} accent={s.status === 'running'} />}
             </button>
@@ -254,6 +258,13 @@ export function LibraryScreen() {
                 Remove from library
               </Button>
             </div>
+            {current.kind !== 'session' && (
+              <KnownToggle
+                checked={current.known}
+                hint={current.known ? 'Its ideas start with a check of how well you know them. Nothing counts as learned until you answer.' : 'Studied it already, or watched it? Its ideas then start with a check instead of teaching from scratch.'}
+                onChange={(known) => void call('library.setKnown', { sourceId: current.id, known }).then(refresh, failed)}
+              />
+            )}
           </div>
           {delta && delta.items.length > 0 && (
             <Section title="Ideas" meta={<ChoiceChips label="Order" options={[{ value: 'source', label: 'In order' }, { value: 'alpha', label: 'A to Z' }]} value={order} onChange={setOrder} small />}>
@@ -379,6 +390,7 @@ function hostOf(address: string): string {
  */
 function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void>; onPasteInstead: () => void }) {
   const [url, setUrl] = useState('');
+  const [known, setKnown] = useState(false);
   const [video, setVideo] = useState<{ url: string; title: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -396,10 +408,12 @@ function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; 
   const fetchLink = () =>
     run(async () => {
       const result = await call('library.addLink', { url });
-      if (result.state === 'added') await onAdded(result.sourceId, result.existed);
-      else setVideo({ url: result.url, title: result.title });
+      if (result.state === 'added') {
+        if (known) await call('library.setKnown', { sourceId: result.sourceId, known });
+        await onAdded(result.sourceId, result.existed);
+      } else setVideo({ url: result.url, title: result.title });
     });
-  if (video) return <TranscriptSheet video={video} onClose={onClose} onAdded={onAdded} />;
+  if (video) return <TranscriptSheet video={video} known={known} onClose={onClose} onAdded={onAdded} />;
   return (
     <Dialog
       open
@@ -424,6 +438,7 @@ function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; 
       >
         <p className="m-0">An article, a page of notes or a PDF by its web address, or a video on YouTube. A page is fetched once and read like a file. For a video you paste its transcript.</p>
         <input className="input" aria-label="Web address" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} data-autofocus />
+        <KnownToggle checked={known} onChange={setKnown} hint="Read it or watched it already? Its ideas then start with a check instead of teaching." />
         {error && (
           <>
             <Notice error>{error}</Notice>
@@ -443,8 +458,9 @@ function LinkSheet({ onClose, onAdded, onPasteInstead }: { onClose: () => void; 
  * while this sheet is open (with "Paste the copied transcript", or when the window comes back into
  * focus), and only a transcript ever reaches it.
  */
-function TranscriptSheet({ video, onClose, onAdded }: { video: { url: string; title: string }; onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void> }) {
+function TranscriptSheet({ video, known: knownAtFirst, onClose, onAdded }: { video: { url: string; title: string }; known: boolean; onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void> }) {
   const [title, setTitle] = useState(video.title);
+  const [known, setKnown] = useState(knownAtFirst);
   const [text, setText] = useState('');
   const [offer, setOffer] = useState<{ text: string; minutes: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -483,6 +499,7 @@ function TranscriptSheet({ video, onClose, onAdded }: { video: { url: string; ti
     setError(null);
     try {
       const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text, origin: video.url });
+      if (known) await call('library.setKnown', { sourceId, known });
       await onAdded(sourceId, existed);
     } catch (e) {
       setError(plainError(e instanceof Error ? e.message : String(e)));
@@ -526,6 +543,7 @@ function TranscriptSheet({ video, onClose, onAdded }: { video: { url: string; ti
         {note && <p className="t-small m-0 text-secondary">{note}</p>}
         <input className="input" aria-label="Title" placeholder="Title of the video" value={title} onChange={(e) => setTitle(e.target.value)} />
         <textarea className="input" aria-label="Transcript" rows={10} placeholder="The transcript, with its time stamps" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
+        <KnownToggle checked={known} onChange={setKnown} label="I already watched this video" hint="Its ideas then start with a check instead of teaching." />
         <p className="t-small m-0 text-muted">Ideas then say where in the video they come from. A caption file (.srt or .vtt) can also go straight into the Library with Add files.</p>
         {error && <Notice error>{error}</Notice>}
       </div>
@@ -537,6 +555,7 @@ function TranscriptSheet({ video, onClose, onAdded }: { video: { url: string; ti
 function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (sourceId: string, existed: boolean) => Promise<void> }) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+  const [known, setKnown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const add = async () => {
@@ -544,6 +563,7 @@ function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (sourc
     setError(null);
     try {
       const { sourceId, existed } = await call('library.addText', { title: title.trim() || undefined, text });
+      if (known) await call('library.setKnown', { sourceId, known });
       await onAdded(sourceId, existed);
     } catch (e) {
       setError(plainError(e instanceof Error ? e.message : String(e)));
@@ -570,6 +590,7 @@ function PasteSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (sourc
         <p className="m-0">Notes, an article copied from a page, a transcript. It is read into ideas like a file.</p>
         <input className="input" aria-label="Title" placeholder="Title (optional: the first line is used)" value={title} onChange={(e) => setTitle(e.target.value)} />
         <textarea className="input" aria-label="Text" rows={12} placeholder="Paste here" value={text} onChange={(e) => setText(e.target.value)} data-autofocus />
+        <KnownToggle checked={known} onChange={setKnown} hint="Its ideas then start with a check instead of teaching." />
         {error && <Notice error>{error}</Notice>}
       </div>
     </Dialog>

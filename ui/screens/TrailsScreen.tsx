@@ -231,6 +231,15 @@ function TrailEntry({ item, fresh }: { item: TrailItem; fresh: boolean }) {
           )}
         </article>
       );
+    case 'check-first':
+      return (
+        <div className={`${cls} trail-milestone`}>
+          <span className="dot" aria-hidden="true" />
+          <span>
+            You said you know <Markdown text={item.idea} inline /> from {item.sources.join(', ')}, so it opened with a check.
+          </span>
+        </div>
+      );
     case 'idea-done':
       return (
         <div className={`${cls} trail-milestone`}>

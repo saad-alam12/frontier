@@ -38,6 +38,8 @@ describe('upgrading an older database', () => {
     expect(listEvidenceForNode(db, nash).map((e) => e.reasoning)).toContain('learned before the upgrade');
     // columns of later versions start empty: no place on disk kept for a source added before (R8 E7)
     expect(getSource(db, lecture.id)?.originalPath).toBeNull();
+    // nor marked as known material (R8 E1)
+    expect(getSource(db, lecture.id)?.known).toBe(false);
     // passages written before the index existed are found
     expect(searchPassages(db, ['credible'])[0]?.locator).toBe('p7');
     // tables of later versions are there and empty

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyGrade, cardBranches, certifyingStage, countedScore, emptyEdge, evidenceKindFor, followUp, ideaAllowance, nextStage, stagesFor, timebox } from './session';
+import { afterReading, applyGrade, cardBranches, certifyingStage, checkFirstStage, countedScore, emptyEdge, evidenceKindFor, followUp, ideaAllowance, nextStage, readCheck, stagesFor, timebox } from './session';
 import type { EdgeState } from './session';
 
 const grade = (edge: EdgeState, score: number, stage: Parameters<typeof applyGrade>[1]['stage'] = 'check', aim = 2, confidence?: number) => applyGrade(edge, { score, stage, aim, confidence });
@@ -186,5 +186,62 @@ describe('the card a grade leads to (R7 C1)', () => {
       const { then } = followUp(fresh, step(3), 'check', { score, confidence: 0.9, missingBackground: false, minutes: 8 });
       expect(typeof then === 'object' ? then : null).toEqual(band?.card ? band.card : { stage: null, retry: false });
     }
+  });
+});
+
+describe('the check an idea opens with when its material is known (R8 E1)', () => {
+  const step = (aim: number, minutes = 25) => ({ aim, stages: stagesFor(aim), minutes, simplified: false });
+  const opening: EdgeState = { ...emptyEdge(), checkFirst: 'open' };
+  const after = (edge: EdgeState, aim: number, score: number, extra: { confidence?: number; misconception?: boolean; noIdea?: boolean; minutes?: number } = {}) =>
+    followUp(edge, step(aim), 'check', { score, confidence: extra.confidence ?? 0.9, missingBackground: false, minutes: extra.minutes ?? 2, misconception: extra.misconception, noIdea: extra.noIdea });
+
+  it('reads an answer as strong, in between or weak, from the existing marks', () => {
+    expect(readCheck({ score: 0.7, confidence: 0.66, misconception: false, noIdea: false })).toBe('strong');
+    expect(readCheck({ score: 0.95, misconception: false, noIdea: false })).toBe('strong');
+    expect(readCheck({ score: 0.9, confidence: 0.33, misconception: false, noIdea: false })).toBe('gap');
+    expect(readCheck({ score: 0.69, confidence: 0.9, misconception: false, noIdea: false })).toBe('gap');
+    expect(readCheck({ score: 0.8, confidence: 0.9, misconception: true, noIdea: false })).toBe('gap');
+    expect(readCheck({ score: 0.6, confidence: 0.9, misconception: true, noIdea: false })).toBe('weak');
+    expect(readCheck({ score: 0.49, confidence: 0.9, misconception: false, noIdea: false })).toBe('weak');
+    expect(readCheck({ score: 0.9, confidence: 0.9, misconception: false, noIdea: true })).toBe('weak');
+  });
+
+  it('opens with the explaining check, or the aim’s question when the loop has none', () => {
+    expect(checkFirstStage(2, stagesFor(2))).toBe('check');
+    expect(checkFirstStage(4, stagesFor(4))).toBe('check');
+    expect(checkFirstStage(3, stagesFor(3, 2))).toBe('derive');
+  });
+
+  it('strong ends the idea, or climbs to one harder question when the aim is deeper and time allows', () => {
+    expect(after(opening, 2, 0.9).then).toEqual({ stage: null, retry: false });
+    const climb = after(opening, 3, 0.9);
+    expect(climb.then).toEqual({ stage: 'derive', retry: false });
+    expect(climb.edge.checkFirst).toBe('climb');
+    // no time left in the idea's half hour: done at what the check showed
+    expect(after(opening, 3, 0.9, { minutes: 30 }).then).toEqual({ stage: null, retry: false });
+    // the harder question goes by the usual rules: passed strongly it ends the idea, missed it resumes the loop
+    expect(followUp(climb.edge, step(3), 'derive', { score: 0.9, confidence: 0.9, missingBackground: false, minutes: 4 }).then).toEqual({ stage: null, retry: false });
+    expect(followUp(climb.edge, step(3), 'derive', { score: 0.3, confidence: 0.9, missingBackground: false, minutes: 4 }).then).toEqual({ stage: 'derive', retry: false });
+  });
+
+  it('in between teaches the gap and checks again; weak, or in between twice, teaches from scratch', () => {
+    const gap = after(opening, 2, 0.6);
+    expect(gap.then).toBe('support');
+    expect(gap.edge.checkFirst).toBe('gap');
+    expect(afterReading(stagesFor(2), 'support', 'check', gap.edge)).toEqual({ stage: 'check', retry: true });
+    expect(after(gap.edge, 2, 0.6).then).toEqual({ stage: 'explain', retry: false });
+    expect(after(gap.edge, 2, 0.9).then).toEqual({ stage: null, retry: false });
+    const weak = after(opening, 2, 0.2);
+    expect(weak.then).toEqual({ stage: 'explain', retry: false });
+    expect(weak.edge.checkFirst).toBeNull();
+    expect(after(opening, 2, 0.9, { noIdea: true }).then).toEqual({ stage: 'explain', retry: false });
+    // once taught, the loop reads as for any idea
+    expect(afterReading(stagesFor(2), 'explain', null, weak.edge)).toEqual({ stage: 'check', retry: false });
+  });
+
+  it('the grading call knows which card each score of the check leads to', () => {
+    const bands = cardBranches(opening, step(3), 'check', { confidence: 0.9, hints: 0, minutes: 2 });
+    expect(bands.map((b) => b.card?.stage ?? null)).toEqual(['explain', 'support', 'derive']);
+    expect(bands.map((b) => b.from)).toEqual([0, 0.5, 0.7]);
   });
 });

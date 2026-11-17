@@ -4,7 +4,7 @@
  */
 import type { Grade, LearnerResponse, TutorCard } from '../agents/tutor';
 import { neighbourhood } from '../core/graph';
-import { HINT_STAGES, MAX_HINTS, ideaAllowance } from '../core/session';
+import { HINT_STAGES, MAX_HINTS, checkFirstStage, ideaAllowance } from '../core/session';
 import type { Stage } from '../core/session';
 import type { Depth } from '../core/types';
 import type { CodeStarter } from '../core/code';
@@ -52,6 +52,8 @@ export interface SessionSnapshot {
     note: string | null;
     /** "I know this, test me" is offered: a prediction or explanation, with a deeper question to jump to. */
     canTestOut: boolean;
+    /** A line for the header while the idea opens with a check because the learner said they know its material (R8 E1). */
+    checking: string | null;
     stage: Stage;
     stages: Stage[];
     stageIndex: number;
@@ -156,7 +158,9 @@ export function publicCard(card: TutorCard | null): PublicCard | null {
 export function snapshot(db: Database, session: SessionRecord<SessionState>, work: SessionWork | undefined): SessionSnapshot {
   const s = session.state;
   const step = s.phase === 'teach' ? s.plan.steps[s.stepIndex] : undefined;
-  const stages = step ? stepStages(step) : [];
+  const loop = step ? stepStages(step) : [];
+  // an idea that opened with a check shows its path from the check: nothing before it was taught
+  const stages = step && s.edge.checkFirst ? loop.slice(Math.max(0, loop.indexOf(checkFirstStage(step.aim, loop)))) : loop;
   const goal = s.goalId ? getGoal(db, s.goalId) : undefined;
   return {
     id: session.id,
@@ -179,6 +183,7 @@ export function snapshot(db: Database, session: SessionRecord<SessionState>, wor
             simplified: step.simplified,
             note: s.edge.wrapping ? 'This idea has had its half hour: one last step, then on to the next.' : pulledInNote(s, step.nodeId),
             canTestOut: canTestOut(step, s.stage, s.edge),
+            checking: s.edge.checkFirst === 'climb' ? 'You knew the material, so one harder question.' : s.edge.checkFirst ? 'You said you know this. Checking first.' : null,
             stage: s.stage,
             stages,
             stageIndex: Math.max(0, stages.indexOf(s.supportAfter ?? s.stage)),

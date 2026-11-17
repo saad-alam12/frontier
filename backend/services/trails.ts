@@ -39,6 +39,8 @@ export type TrailItem =
   | { id: string; at: string; type: 'recall'; text: string; recalled: { name: string; score: number }[] }
   | { id: string; at: string; type: 'step'; idea: string; stage: Stage; card: PublicCard; asides: Aside[]; response: LearnerResponse | null; grade: Grade | null; carried: boolean }
   | { id: string; at: string; type: 'idea-done'; idea: string; score: number | null }
+  /** The idea opened with a check, because the learner said they know its material from these sources (R8 E1). */
+  | { id: string; at: string; type: 'check-first'; idea: string; sources: string[] }
   | { id: string; at: string; type: 'practice'; statement: string; answer: string; solution: string; score: number | null; feedback: string | null }
   | { id: string; at: string; type: 'pause' }
   | { id: string; at: string; type: 'close'; text: string; canDo: string; preview: string }
@@ -102,6 +104,7 @@ export function trail(db: Database, sessionId: string): Trail {
       closing?: { canDo: string; previewQuestion: string };
       problemId?: string;
       resumes?: { nodeId: string } | null;
+      sources?: string[];
     };
     const base = { id: e.id, at: e.at };
     switch (e.kind) {
@@ -134,6 +137,9 @@ export function trail(db: Database, sessionId: string): Trail {
         }
         break;
       }
+      case 'check-first':
+        items.push({ ...base, type: 'check-first', idea: name(p.nodeId), sources: p.sources ?? [] });
+        break;
       case 'node-done': {
         const graded = items.filter((i): i is Extract<TrailItem, { type: 'step' }> => i.type === 'step' && i.idea === name(p.nodeId) && i.grade !== null);
         const score = graded.length ? graded.reduce((s, i) => s + (i.grade?.score ?? 0), 0) / graded.length : null;

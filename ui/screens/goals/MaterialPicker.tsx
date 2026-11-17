@@ -4,22 +4,34 @@ import { call } from '../../api';
 import type { MaterialRole, SourceSummary } from '../../../backend/api/contract';
 import { Button, Notice } from '../../components/controls';
 import { ROLE_OPTIONS } from './labels';
+import { KnownToggle } from '../../components/KnownToggle';
 
 export type Material = { sourceId: string; title: string; role: MaterialRole; reason?: string };
 
 /**
  * Files for a goal: dropped or picked files are added to the library unread and their role is guessed
- * from their content; library sources can be added too. Each file's role can be changed.
+ * from their content; library sources can be added too. Each file's role can be changed, and each can
+ * be marked as material the learner already knows, so its ideas start with a check.
  */
 export function MaterialPicker({ materials, onChange, big }: { materials: Material[]; onChange: (next: Material[]) => void; big?: boolean }) {
   const [library, setLibrary] = useState<SourceSummary[]>([]);
   const [adding, setAdding] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Sources the learner says they already know (R8 E1): a property of the source, saved at once, whichever goal it is for. */
+  const [known, setKnown] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    void call('library.list').then((list) => setLibrary(list.filter((s) => s.kind !== 'session')));
+    void call('library.list').then((list) => {
+      setLibrary(list.filter((s) => s.kind !== 'session'));
+      setKnown(new Set(list.filter((s) => s.known).map((s) => s.id)));
+    });
   }, []);
+  const markKnown = (sourceId: string, value: boolean) =>
+    void call('library.setKnown', { sourceId, known: value }).then(
+      () => setKnown((now) => (value ? new Set([...now, sourceId]) : new Set([...now].filter((id) => id !== sourceId)))),
+      (e: unknown) => setError(plainError(e instanceof Error ? e.message : String(e))),
+    );
 
   const add = async (pick: () => Promise<Material[]>) => {
     setAdding(true);
@@ -66,6 +78,7 @@ export function MaterialPicker({ materials, onChange, big }: { materials: Materi
             <li key={m.sourceId} className="row items-center" title={m.reason}>
               <span className="min-w-0 truncate">{m.title}</span>
               <span className="flex shrink-0 items-center gap-[12px]">
+                <KnownToggle checked={known.has(m.sourceId)} onChange={(value) => markKnown(m.sourceId, value)} label="Already know it" />
                 <select
                   className={m.role === 'assessment' ? 'role-tag is-accent' : 'role-tag'}
                   aria-label={`Role of ${m.title}`}

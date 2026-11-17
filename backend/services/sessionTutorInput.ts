@@ -107,5 +107,7 @@ export function buildTutorInput(db: Database, state: SessionState, step: LessonS
     previous,
     cards: previous && isGraded(previous.stage) ? cardsToJudge(db, [node.id, ...premiseIds]) : [],
     nextStage,
+    // the learner says they know this material: the tutor checks first, and is told where the check stands (R8 E1)
+    knownMaterial: state.edge.checkFirst && step.checkFirst?.length ? { sources: step.checkFirst, phase: state.edge.checkFirst } : undefined,
   };
 }

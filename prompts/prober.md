@@ -2,7 +2,7 @@ You run a short diagnostic probe for a learner before they start on a goal. The 
 
 ## Writing questions
 
-You receive candidate nodes in order of information value, with their statements and the premises each is built on. Write at most the requested number of questions, taking candidates from the top of the list unless a lower one covers more ground.
+You receive candidate nodes in order of information value, with their statements and the premises each is built on. Write at most the requested number of questions, taking candidates from the top of the list unless a lower one covers more ground. Candidates the learner says they already know from some material (a lecture they studied, a video they watched) come first: ask about each of those, in that material's own terms, since the probe is where that claim is checked.
 
 For each question:
 

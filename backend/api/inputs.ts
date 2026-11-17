@@ -99,6 +99,7 @@ export const INPUTS = {
   'library.stop': sourceOnly,
   'library.openOriginal': sourceOnly,
   'library.showInFolder': sourceOnly,
+  'library.setKnown': z.object({ sourceId: id, known: z.boolean() }),
   'library.addText': PastedTextSchema,
   'library.addLink': z.object({ url: z.string().trim().min(1).max(2_000) }),
   'library.clipboardTranscript': none,

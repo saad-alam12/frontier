@@ -57,6 +57,8 @@ export interface EvidenceContext {
   problemId?: string;
   /** The oral exam or teach-back the evidence came from. */
   dialogueId?: string;
+  /** An answer to the check an idea opened with because the learner said they know its material (R8 E1). */
+  checkedFirst?: boolean;
 }
 
 export interface Evidence {
@@ -331,6 +333,8 @@ export interface Source {
   origin: string | null;
   /** Where the learner keeps the file it was added from (from disk or a watched folder); null for links, pasted text and sessions. */
   originalPath: string | null;
+  /** The learner says they already know this material: its ideas open with a check, not teaching (R8 E1). Creates no evidence. */
+  known: boolean;
   addedAt: string;
   status: 'pending' | 'running' | 'done' | 'failed';
   chunkCount: number;

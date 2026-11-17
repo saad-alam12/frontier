@@ -4,7 +4,7 @@
  * depth, and reports where a goal stands: time spent against its budget, ideas ready against its plan,
  * and its pace.
  */
-import { SESSION_MINUTES, allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from '../core/budget';
+import { CHECK_MINUTES, SESSION_MINUTES, allocate, budgetMinutes, budgetSpanDays, ideaMinutes, learnerSpeed, paceOf, weeklyMinutes } from '../core/budget';
 import type { Allocation, GoalPlan, Pace, PlanGoal, PlanNode, PlanTarget } from '../core/budget';
 import { addDays, localDate } from '../core/dates';
 import { roadmap } from '../core/plan';
@@ -20,6 +20,7 @@ import { coveredNodeIds, getSource } from '../store/sources';
 import { listChains, listNodes } from '../store/world';
 import { cachedRead } from '../store/readCache';
 import { worldGraph } from './worldGraph';
+import { uncheckedKnownIdeas } from './knownMaterial';
 
 const DAY_MS = 86_400_000;
 /** Surfaces whose time counts as studying (browsing the map or library does not); flashcard reviews count for the card's goal. */
@@ -167,6 +168,8 @@ interface PlanBase {
   coverCount: Map<string, Map<string, number>>;
   spent: Map<string, number>;
   speed: number;
+  /** Ideas the learner says they know the material of, not checked yet: they cost a check (R8 E1). */
+  checkOnly: Set<string>;
 }
 
 function planBase(db: Database): PlanBase {
@@ -190,6 +193,7 @@ function planBase(db: Database): PlanBase {
       coverCount,
       spent: spentByGoal(attributeTime(db)),
       speed: learnerSpeedNow(db),
+      checkOnly: uncheckedKnownIdeas(db),
     };
   });
 }
@@ -246,7 +250,7 @@ function buildPlanInputs(db: Database, base: PlanBase, include: string, uncapped
     const options = (graph.index.into.get(id) ?? []).map((c) => c.premises.filter((p) => !targeted.has(p) && depthOf(p) < OWNED_DEPTH && !charged.has(p)));
     const fresh = options.sort((a, b) => a.length - b.length)[0] ?? [];
     for (const p of fresh) charged.add(p);
-    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centralityOf.get(id) ?? 0, premiseMinutes: fresh.length * ideaMinutes('claim', 0, OWNED_DEPTH) });
+    planNodes.set(id, { id, kind: node.kind, depth: depthOf(id), centrality: centralityOf.get(id) ?? 0, premiseMinutes: fresh.length * ideaMinutes('claim', 0, OWNED_DEPTH), checkOnly: base.checkOnly.has(id) });
   }
   return { goals, nodes, states, targets, planNodes, spent: base.spent, speed: base.speed };
 }
@@ -378,7 +382,9 @@ export function previewPlan(db: Database, goalId: string, budget: GoalBudget | n
   for (const idea of toLearn) {
     const node = inputs.planNodes.get(idea.nodeId);
     const surcharge = idea.currentDepth === 0 ? (node?.premiseMinutes ?? 0) : 0;
-    idea.minutes = Math.max(1, Math.round((ideaMinutes(idea.kind, idea.currentDepth, idea.plannedDepth) + surcharge) * inputs.speed));
+    // an idea whose material the learner says they know costs its check until an answer says otherwise
+    const own = node?.checkOnly ? CHECK_MINUTES : ideaMinutes(idea.kind, idea.currentDepth, idea.plannedDepth);
+    idea.minutes = Math.max(1, Math.round((own + surcharge) * inputs.speed));
     idea.premiseMinutes = Math.round(surcharge * inputs.speed);
   }
   const sessions = roadmap(

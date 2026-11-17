@@ -4,7 +4,7 @@
  */
 import { FIGURE_STAGES, cardText, runTutorStep } from '../agents/tutor';
 import type { Grade, LearnerResponse, TutorCard, TutorGoal, TutorStepInput } from '../agents/tutor';
-import { SESSION_MAX_DEPTH, SIMPLE_AIM, cardBranches, certifyingStage, countedScore, emptyEdge, evidenceKindFor, followUp, isGraded, nextStage, normalizeEdge, stagesFor, testOutEdge } from '../core/session';
+import { SESSION_MAX_DEPTH, SIMPLE_AIM, afterReading, cardBranches, certifyingStage, checkFirstStage, countedScore, emptyEdge, evidenceKindFor, followUp, isGraded, normalizeEdge, stagesFor, testOutEdge } from '../core/session';
 import type { EdgeState, FollowStep, Stage } from '../core/session';
 import type { IdeaFinished } from '../core/cards';
 import { PASS_SCORE } from '../core/types';
@@ -25,6 +25,8 @@ import type { NodeHistoryEntry, SessionState, SessionDeps } from './sessionState
 import { hintsTaken, openAsides } from './sessionAsides';
 import { figureImagesOf, imagesOf, buildTutorInput } from './sessionTutorInput';
 import { premiseFor, pullIn } from './sessionPullIn';
+import { checkFirstSources } from './knownMaterial';
+import { notePriorKnowledge } from './probe';
 
 const SESSION_PRACTICE_PROBLEMS = 2;
 
@@ -90,6 +92,14 @@ export async function beginStep(deps: SessionDeps, sessionId: string, state: Ses
   if (state.testMe && canTestOut(step, first, state.edge)) {
     state.edge = testOutEdge(state.edge, first);
     await produceCard(deps, sessionId, state, step, certifyingStage(step.aim), null, goal, afterOutcome);
+    return;
+  }
+  // the learner says they know this idea's material: a check comes first, and code routes its answer (R8 E1)
+  step.checkFirst = checkFirstSources(deps.db, step.nodeId, step.aim);
+  if (step.checkFirst) {
+    state.edge = { ...state.edge, checkFirst: 'open' };
+    appendSessionEvent(deps.db, sessionId, 'check-first', { nodeId: step.nodeId, sources: step.checkFirst });
+    await produceCard(deps, sessionId, state, step, checkFirstStage(step.aim, stepStages(step)), null, goal, afterOutcome);
     return;
   }
   await produceCard(deps, sessionId, state, step, first, null, goal, afterOutcome);
@@ -180,10 +190,14 @@ export async function handleTeachResponse(deps: SessionDeps, sessionId: string, 
     if (response.effort !== undefined) state.pendingEffort = response.effort;
     finishHistory(state, step.nodeId, stage, response, null);
     appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response });
-    const resumeFrom = stage === 'support' || stage === 'reteach' ? (state.supportAfter ?? stage) : stage;
+    const next = afterReading(stages, stage, state.supportAfter, state.edge);
     state.supportAfter = null;
-    const next = nextStage(stages, resumeFrom, 'none');
-    await advance(deps, sessionId, state, step, next, null, goal, true);
+    // after the worked example on a check's gap, the check comes again in a fresh version
+    if (next.retry && next.stage) {
+      await produceCard(deps, sessionId, state, step, next.stage, null, goal, true, true);
+      return;
+    }
+    await advance(deps, sessionId, state, step, next.stage, null, goal, true);
     return;
   }
 
@@ -199,9 +213,14 @@ export async function handleTeachResponse(deps: SessionDeps, sessionId: string, 
   const grade = result.grade;
   if (!grade) throw new Error('the tutor returned no grade');
   const counted = countedScore(grade.score, hints);
+  // an answer to the check the idea opened with (or its harder question): it is checked now, and never opens with a check again
+  const checking = Boolean(state.edge.checkFirst);
+  const before = new Map([[step.nodeId, getState(db, step.nodeId)?.depth ?? 0]]);
   finishHistory(state, step.nodeId, stage, response, grade);
   appendSessionEvent(db, sessionId, 'response', { nodeId: step.nodeId, stage, response, grade, ...(hints ? { hints } : {}) });
-  writeOutcome(db, sessionId, state, step, stage, response, grade, counted, hints);
+  writeOutcome(db, sessionId, state, step, stage, response, grade, counted, hints, checking);
+  // what a check shows before any teaching was known already, as with a probe: it is not learning speed
+  if (state.edge.checkFirst === 'open' || state.edge.checkFirst === 'climb') notePriorKnowledge(db, before, new Set([step.nodeId]));
   // The answer is judged and written. From here on a quit or a crash must never bring the answered
   // card back: until the next card is shown, the session is saved as owing one.
   state.card = null;
@@ -219,7 +238,8 @@ export async function handleTeachResponse(deps: SessionDeps, sessionId: string, 
   }
   // a chosen session's gaps are about what the learner asked, not about the goal's map
   if (missing && grade.missingBackground && state.goalId && !state.free) noteBackgroundGaps(db, state.goalId, [grade.missingBackground], 'session');
-  const follow = followUp(state.edge, followStep(step), stage, { score: counted, confidence: response.confidence, missingBackground: missing, minutes: minutesOn(db, state, sessionId, step.nodeId) });
+  const noIdea = !response.answer.trim() && !response.attachments?.length && !response.code?.source.trim();
+  const follow = followUp(state.edge, followStep(step), stage, { score: counted, confidence: response.confidence, missingBackground: missing, minutes: minutesOn(db, state, sessionId, step.nodeId), misconception: Boolean(grade.misconception), noIdea });
   state.edge = follow.edge;
   const written = result.card;
   if (follow.then === 'support' || follow.then === 'reteach') {
@@ -318,9 +338,10 @@ function ideaFinished(sessionId: string, state: SessionState, step: LessonStep):
 
 const DEPTH_WORD = ['a first look', 'recognizing it', 'explaining it', 'deriving it', 'applying it', 'transferring it'];
 
-function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade, counted = grade.score, hints = 0): void {
+function writeOutcome(db: Database, sessionId: string, state: SessionState, step: LessonStep, stage: Stage, response: LearnerResponse, grade: Grade, counted = grade.score, hints = 0, checkedFirst = false): void {
   const kind = evidenceKindFor(stage);
   if (kind) {
+    const context = { step: stage, ...(hints ? { hints } : {}), ...(checkedFirst ? { checkedFirst: true } : {}) };
     recordEvidence(db, {
       nodeId: step.nodeId,
       kind,
@@ -329,7 +350,7 @@ function writeOutcome(db: Database, sessionId: string, state: SessionState, step
       confidence: response.confidence ?? null,
       effort: state.pendingEffort ?? response.effort ?? null,
       sessionId,
-      context: hints ? { step: stage, hints } : { step: stage },
+      context,
     });
     state.pendingEffort = null;
   }

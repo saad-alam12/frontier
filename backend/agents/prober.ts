@@ -12,6 +12,8 @@ export interface ProbeCandidate {
   premises: { id: string; name: string }[];
   currentDepth: number;
   targetDepth: number;
+  /** The learner says they know this idea's material, from these sources: it is asked first (R8 E1). */
+  knownFrom?: string[];
 }
 
 export const ProbeQuestionSchema = z.object({
@@ -47,7 +49,7 @@ export async function generateProbeQuestions(
   const list = candidates
     .map(
       (c) =>
-        `- [${c.nodeId}] ${c.name} (${c.kind}) — information ${c.information.toFixed(2)}, current depth ${c.currentDepth}, target depth ${c.targetDepth}\n  ${c.statement}\n  premises: ${c.premises.length ? c.premises.map((p) => `[${p.id}] ${p.name}`).join('; ') : 'none'}`,
+        `- [${c.nodeId}] ${c.name} (${c.kind}) — information ${c.information.toFixed(2)}, current depth ${c.currentDepth}, target depth ${c.targetDepth}${c.knownFrom?.length ? `; the learner says they already know it from ${c.knownFrom.map((t) => `"${t}"`).join(', ')}: ask it, in that material's terms` : ''}\n  ${c.statement}\n  premises: ${c.premises.length ? c.premises.map((p) => `[${p.id}] ${p.name}`).join('; ') : 'none'}`,
     )
     .join('\n');
   const result = await provider.complete({
@@ -56,7 +58,7 @@ export async function generateProbeQuestions(
     messages: [
       {
         role: 'user',
-        content: `Goal: ${goalText}${context ? `\n\n## The learner's context\n${context}` : ''}${examStyle ? `\n\nExam style (from past exams): ${examStyle}` : ''}\n\nWrite at most ${maxQuestions} questions.\n\n## Candidates (highest information first)\n${list}`,
+        content: `Goal: ${goalText}${context ? `\n\n## The learner's context\n${context}` : ''}${examStyle ? `\n\nExam style (from past exams): ${examStyle}` : ''}\n\nWrite at most ${maxQuestions} questions.\n\n## Candidates (ideas the learner says they already know first, then highest information first)\n${list}`,
       },
     ],
     submit: { name: 'submit_probe_questions', description: 'Submit the probe questions with answer keys and rubrics.', schema: buildProbeSchema(new Set(candidates.map((c) => c.nodeId)), maxQuestions) },

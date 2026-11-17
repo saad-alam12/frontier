@@ -34,6 +34,8 @@ export interface MaterialView {
   status: Source['status'];
   chunkCount: number;
   chunksDone: number;
+  /** The learner says they already know it: its ideas open with a check (R8 E1). */
+  known: boolean;
   /** Ideas read from it, and how many of those the learner owns. */
   ideas: number;
   owned: number;
@@ -122,6 +124,7 @@ export function goalDetail(db: Database, goalId: string, work: GoalWorkState = {
       chunksDone: source?.chunksDone ?? 0,
       ideas: covered.length,
       owned: covered.filter((id) => view.owned.has(id)).length,
+      known: source?.known ?? false,
     };
   });
   const { candidates } = candidatesForGoal(db, goalId, view);

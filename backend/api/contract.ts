@@ -124,6 +124,8 @@ export interface ApiMethods {
   'library.addPaths': { input: { paths: string[] }; output: { added: SourceSummary[]; skipped: string[] } };
   /** Stop reading a source; what was read stays and the rest waits for "Run again". */
   'library.stop': { input: { sourceId: string }; output: undefined };
+  /** "I already know this material": its ideas open with a check instead of teaching (no evidence is written). */
+  'library.setKnown': { input: { sourceId: string; known: boolean }; output: null };
   /** Show a source's file in Finder: where the learner keeps it, else the stored copy. */
   'library.showInFolder': { input: { sourceId: string }; output: null };
   /** Open the stored copy of a source in its usual app. */

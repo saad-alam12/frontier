@@ -6,7 +6,8 @@ import type { GraphIndex } from './graph';
 import { PASS_SCORE } from './types';
 
 /** Rank target nodes by how many other targets depend on them (transitively, decayed), ties by id. */
-export function rankByInformation(targetIds: Iterable<string>, index: GraphIndex): { nodeId: string; information: number }[] {
+/** Ideas in `first` (those the learner says they know the material of, R8 E1) come before the rest, so the probe checks them first. */
+export function rankByInformation(targetIds: Iterable<string>, index: GraphIndex, first: ReadonlySet<string> = new Set()): { nodeId: string; information: number }[] {
   const targets = new Set(targetIds);
   const ranked: { nodeId: string; information: number }[] = [];
   for (const id of targets) {
@@ -14,7 +15,7 @@ export function rankByInformation(targetIds: Iterable<string>, index: GraphIndex
     for (const [dep, weight] of dependents(id, index, 0.5)) if (targets.has(dep)) info += weight;
     ranked.push({ nodeId: id, information: info });
   }
-  return ranked.sort((a, b) => b.information - a.information || a.nodeId.localeCompare(b.nodeId));
+  return ranked.sort((a, b) => Number(first.has(b.nodeId)) - Number(first.has(a.nodeId)) || b.information - a.information || a.nodeId.localeCompare(b.nodeId));
 }
 
 export const IMPLIED_PREMISE_FACTOR = 0.9;

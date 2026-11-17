@@ -45,6 +45,8 @@ function sessionDigest(t: Trail, number: number): string {
   const recall = items.find((i): i is Extract<TrailItem, { type: 'recall' }> => i.type === 'recall');
   if (recall && recall.recalled.length) lines.push(`It began by recalling: ${recall.recalled.map((r) => `${clip(r.name, 60)} (${percent(r.score)})`).join(', ')}`);
 
+  const checked = items.filter((i): i is Extract<TrailItem, { type: 'check-first' }> => i.type === 'check-first');
+  if (checked.length) lines.push(`Opened with a check, because they said they knew the material: ${checked.map((c) => clip(c.idea, 60)).join(', ')}`);
   const done = items.filter((i): i is Extract<TrailItem, { type: 'idea-done' }> => i.type === 'idea-done');
   if (done.length) lines.push(`Ideas finished: ${done.map((d) => `${clip(d.idea, 60)} (${percent(d.score)})`).join(', ')}`);
 

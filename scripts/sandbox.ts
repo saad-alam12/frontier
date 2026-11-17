@@ -9,7 +9,8 @@
  * Flags: `--open-session` (a session open at its first explanation), `--recall` (a session open at its
  * recall, which opens with the question the last one left), `--exam` (a mock exam under way), `--talk`
  * (an oral exam two questions in, and a teach-back), `--drawings` (a diagram and a plot in the
- * explanation), `--watch` (a watched course folder with a Word document and a notebook).
+ * explanation), `--watch` (a watched course folder with a Word document and a notebook), `--known` (the
+ * notes marked "I already know this material", and a session on making ten that opens with a check).
  *
  * The folder gets a settings.json whose data folder is `<sandbox>/data`; start the app on it with
  * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`. Model calls
@@ -44,6 +45,7 @@ import { SessionWork } from '../backend/services/sessionWork';
 import { settleGrading, startPractice, submitPracticeAnswer } from '../backend/services/practice';
 import { answerDialogue, startDialogue } from '../backend/services/dialogue';
 import { saveNote } from '../backend/services/notes';
+import { markSourceKnown } from '../backend/services/library';
 import { afterAnswer } from '../backend/services/bugs';
 import { appendSessionEvent, listEndedSessions, saveSessionState } from '../backend/store/sessions';
 import { makePdf } from './lib/tinyPdf';
@@ -51,7 +53,7 @@ import { EXAM_PROBLEMS, EXAM_SOLUTION, LECTURE_PAGES, SAMPLE_CARDS, cardsFor, se
 
 const [folderArg, ...flags] = process.argv.slice(2);
 if (!folderArg) {
-  console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session] [--recall] [--exam] [--talk] [--drawings] [--watch]');
+  console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session] [--recall] [--exam] [--talk] [--drawings] [--watch] [--known]');
   process.exit(2);
 }
 const folder = resolve(folderArg);
@@ -103,13 +105,16 @@ function tutor(scores: number[]) {
     // shows the idea's figure when it has one, as the real tutor may
     const figure = /## Figures you can show[\s\S]*?^- \[(fig_[a-z0-9]+)\]/m.exec(text)?.[1];
     const grade = grading ? { score, feedback: score >= 0.7 ? say.right : say.close, misconception: null, confidentlyWrong: false, missingBackground: null } : null;
+    // the learner said they know this material: the check says so first, as the real tutor is asked to
+    const known = /## The learner says they already know this material\nFrom: "([^"]+)"/.exec(text)?.[1];
+    const checkFirst = known && /Do not teach first\./.test(text) ? `You said you know this from ${known}, so let us check first.\n\n` : '';
     const cards: Record<string, unknown> = {
       predict: { stage: 'predict', prompt: say.predict },
       explain: {
         stage: 'explain',
         markdown: `${say.explain}${figure ? `\n\n![Two rows of dots in pairs: 4 and 5](figure:${figure})\n\nCount the dots on to add them, cross some out to take away, and pair them up to see whether a number is even or odd.` : ''}${flags.includes('--drawings') ? DRAWINGS : ''}`,
       },
-      check: { stage: 'check', question: say.check.question, answerKey: say.check.answerKey, rubric: ['gives the right answer', 'says how'] },
+      check: { stage: 'check', question: `${checkFirst}${say.check.question}`, answerKey: say.check.answerKey, rubric: ['gives the right answer', 'says how'] },
       derive: { stage: 'derive', prompt: 'Why does this hold? Show it by counting.', answerKey: say.check.answerKey, rubric: ['counts it out', 'says why'] },
       connect: { stage: 'connect', prompt: 'Say one link between this idea and counting.' },
       compress: { stage: 'compress', prompt: 'In your own words, at most two sentences.' },
@@ -355,6 +360,13 @@ if (flags.includes('--watch')) {
   writeFileSync(join(course, 'Lesson 2.docx'), docx);
   writeFileSync(join(course, 'Even and odd.ipynb'), JSON.stringify({ cells: [{ cell_type: 'markdown', source: '# Even or odd in Python' }, { cell_type: 'code', source: 'for n in range(6):\n    print(n, n % 2 == 0)' }] }));
   addWatchedFolder(db, course, null);
+}
+
+// the notes marked "I already know this material", and a session on making ten that opens with a check (`--known`)
+if (flags.includes('--known')) {
+  markSourceKnown(db, sample.notesId, true);
+  const chosen = await startFreeSession(deps, maker, { goalId: quiz.id, counted: true, pick: [id('tens')] });
+  await respond(deps, chosen.id, { answer: '' });
 }
 
 // an open session at its recall, which opens with the question the last session left (`--recall`)

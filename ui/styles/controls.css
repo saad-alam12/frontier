@@ -519,3 +519,21 @@ select.input {
 input[type='date'].input::-webkit-calendar-picker-indicator {
   filter: invert(0.7);
 }
+
+/* "I already know this material": a quiet checkbox with its label (R8 E1). */
+.known-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.known-toggle input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+.known-toggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}

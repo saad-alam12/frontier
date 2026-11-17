@@ -5,7 +5,7 @@ import { unknownFigureRefs } from '../core/figureRefs';
 import { plotIssues } from '../core/plot';
 import { partialStringField } from '../core/partialJson';
 import { isGraded } from '../core/session';
-import type { CardBranch, Stage } from '../core/session';
+import type { CardBranch, CheckFirst, Stage } from '../core/session';
 import type { LlmImage, LlmProvider } from '../llm/provider';
 import { confidenceLabel } from '../core/types';
 import type { Assessment, GoalFocus, GoalLevel } from '../core/types';
@@ -120,7 +120,7 @@ export interface TutorGoal {
 }
 
 /** Everything about the idea, the learner and the goal that a tutor call starts from. */
-export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry' | 'branches' | 'onWriting' | 'testedCold'>;
+export type TutorContext = Omit<TutorStepInput, 'previous' | 'images' | 'figureImages' | 'cards' | 'nextStage' | 'retry' | 'branches' | 'onWriting' | 'testedCold' | 'knownMaterial'>;
 
 /** A picture of a page that shows the idea, from the learner's material, which the tutor can show. */
 export interface TutorFigure {
@@ -168,6 +168,12 @@ export interface TutorStepInput {
   onWriting?: (text: string) => void;
   /** The learner opened this idea with "I know this: test me": nothing about it has been shown in this session. */
   testedCold?: boolean;
+  /**
+   * The learner says they already know this idea's material, from these sources (R8 E1): `open` for the
+   * check the idea opens with, `gap` for the worked example on what that check missed and the check
+   * after it, `climb` for one harder question after a strong check.
+   */
+  knownMaterial?: { sources: string[]; phase: CheckFirst };
 }
 
 export interface TutorStepResult {
@@ -236,6 +242,7 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
         : '## Task\nGrade the response. No card is needed; this node is finished.',
     );
   }
+  if (input.knownMaterial) sections.push(knownMaterialTask(input.knownMaterial, Boolean(branches), input.nextStage));
   if (input.testedCold && input.nextStage) {
     sections.push('The learner says they already know this idea and asked to be tested. Nothing about it has been shown in this session: ask the question cold, without explaining or hinting first, and do not refer to an explanation they have not seen.');
   }
@@ -269,6 +276,26 @@ export async function runTutorStep(provider: LlmProvider, input: TutorStepInput)
     },
   });
   return result.data as TutorStepResult;
+}
+
+/** What the tutor is told when the learner says they know an idea's material (R8 E1), for the check, its gap and the harder question. */
+function knownMaterialTask(known: { sources: string[]; phase: CheckFirst }, graded: boolean, nextStage: Stage | null): string {
+  const from = known.sources.map((t) => `"${t}"`).join(', ');
+  const lines = [`## The learner says they already know this material
+From: ${from}. They may have studied it closely or only skimmed it; the check finds out which. Code decides from your grade what comes next: move on, teach only the gap, or teach the idea from scratch.`];
+  if (known.phase === 'open' && !graded) {
+    lines.push(
+      `Do not teach first. The ${nextStage ?? 'check'} card is a question that shows how well they understood this idea from that material: ask it in the material's own terms (its names, notation, figures and examples, with a page reference when the excerpts give one), cold, without explaining or hinting first. Begin the card with one short line saying you are checking first because they said they know it (for example "You said you know this from ${known.sources[0] ?? 'your material'}, so let us check first.").`,
+    );
+  }
+  if (graded && (known.phase === 'open' || known.phase === 'gap')) {
+    lines.push(
+      'The response answers that check. Grade it on the rubric as always, and name a misconception when the answer shows one: it decides whether the idea is taught from scratch. When your band leads to a **support** card, it teaches only the gap your feedback names, as a short worked example, not the whole idea again; the check comes again after it. When it leads to an **explain** card, the check showed real holes: teach the idea from scratch, as for anyone new to it.',
+    );
+  }
+  if (known.phase === 'gap' && !graded && nextStage === 'support') lines.push('The check was partly right. Teach only the gap your last feedback named, as a short worked example; do not teach the whole idea again. The check comes again after it.');
+  if (known.phase === 'climb' && !graded) lines.push(`Their check showed they understood the material. The ${nextStage ?? 'next'} card is one harder question at the depth this idea goes today, cold; say in one line that the check went well and this one goes further.`);
+  return lines.join('\n\n');
 }
 
 const score2 = (n: number) => n.toFixed(2);

@@ -89,6 +89,11 @@ export const CORE_WEIGHT = 2;
 export const REQUESTED_WEIGHT = 1.5;
 /** Goal minutes one idea learned in depth counts for; sizes the map the compiler is asked for. */
 export const IDEA_MINUTES = 30;
+/**
+ * What an idea costs while the learner says they know its material and no answer has said otherwise
+ * (R8 E1): a check, and perhaps one harder question. Once checked, its usual cost applies again.
+ */
+export const CHECK_MINUTES = 5;
 
 /** Roughly how many ideas a budget holds: one per half hour, plus a fifth so the plan can choose (4–80). */
 export function ideaCountFor(minutes: number): number {
@@ -150,6 +155,14 @@ export interface PlanNode {
   centrality: number;
   /** Minutes for premises the goal does not target but that have to be learned first. */
   premiseMinutes?: number;
+  /** The learner says they know its material and it was not checked yet: it costs a check, whatever the depth (R8 E1). */
+  checkOnly?: boolean;
+}
+
+/** Minutes to take a plan's idea from its depth to `to`: a check while it is only claimed known, else the cost model's levels. */
+function planIdeaMinutes(node: PlanNode, to: number, speed: number): number {
+  if (to <= node.depth) return 0;
+  return node.checkOnly ? CHECK_MINUTES * speed : ideaMinutes(node.kind, node.depth, to, speed);
 }
 
 export interface GoalPlan {
@@ -231,7 +244,9 @@ export function allocate(goals: PlanGoal[], targets: PlanTarget[], nodes: Map<st
     for (let level = node.depth + 1; level <= top; level += 1) {
       const wanting = [...byGoal.entries()].filter(([, w]) => w.depth >= level).map(([g]) => g);
       const value = wanting.reduce((s, g) => s + (goalById.get(g)?.priority ?? 1) * (byGoal.get(g)?.weight ?? 1), 0) * reach * (LEVEL_VALUE[level] ?? 0);
-      const cost = levelMinutes(node.kind, level, speed) + (level === 1 ? (node.premiseMinutes ?? 0) * speed : 0);
+      // an idea only claimed known costs its check once, on its first level to buy
+      const own = node.checkOnly ? (level === node.depth + 1 ? CHECK_MINUTES * speed : 0) : levelMinutes(node.kind, level, speed);
+      const cost = own + (level === 1 ? (node.premiseMinutes ?? 0) * speed : 0);
       levels.push({ nodeId, level, cost, ratio: value / Math.max(cost, 0.5), wanting });
     }
   }
@@ -305,7 +320,7 @@ export function allocate(goals: PlanGoal[], targets: PlanTarget[], nodes: Map<st
       if (depth < want) trimmed += 1;
       if ((goalsOf.get(nodeId) ?? 1) > 1) shared += 1;
       const premises = node.depth < 1 && want >= 1 ? (node.premiseMinutes ?? 0) * speed : 0;
-      fullMinutes += (ideaMinutes(node.kind, node.depth, want, speed) + premises) / (goalsOf.get(nodeId) ?? 1);
+      fullMinutes += (planIdeaMinutes(node, want, speed) + premises) / (goalsOf.get(nodeId) ?? 1);
     }
     const plannedMinutes = paid.get(g.id) ?? 0;
     plans.set(g.id, {

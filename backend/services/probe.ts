@@ -17,7 +17,9 @@ import { getState } from '../store/evidence';
 import type { Depth } from '../core/types';
 import { closeProbeSet, createProbeSet, getProbeSet, openProbeId, recordProbeAnswer } from '../store/probes';
 import { getNodes } from '../store/world';
+import { knownMaterialByNode } from '../store/sources';
 import { recordEvidence } from './evidence';
+import { uncheckedKnownIdeas } from './knownMaterial';
 import { loadKnowledge, refreshGoalFields } from './knowledge';
 import { noteBackgroundGaps } from './remap';
 import { targetDepthFor } from '../core/leverage';
@@ -48,7 +50,10 @@ export async function createProbe(db: Database, provider: LlmProvider, goalId: s
   // Ideas already owned at the depth the plan holds (often learned for another goal) are not asked again.
   const targetIds = all.filter((id) => !(view.owned.has(id) && (view.states.get(id)?.depth ?? 0) >= targetDepthFor(id, view.goals)));
   if (targetIds.length === 0) throw new Error('Nothing to check: you already know every idea this plan holds.');
-  const ranked = rankByInformation(targetIds, view.index).slice(0, Math.max(maxQuestions * 2, 8));
+  // ideas the learner says they know the material of are checked first (R8 E1)
+  const known = uncheckedKnownIdeas(db);
+  const knownTitles = knownMaterialByNode(db);
+  const ranked = rankByInformation(targetIds, view.index, known).slice(0, Math.max(maxQuestions * 2, 8));
   const candidates: ProbeCandidate[] = ranked.map((r) => {
     const node = view.nodes.get(r.nodeId);
     const premises = new Map<string, string>();
@@ -62,6 +67,7 @@ export async function createProbe(db: Database, provider: LlmProvider, goalId: s
       premises: [...premises.entries()].map(([id, name]) => ({ id, name })),
       currentDepth: view.states.get(r.nodeId)?.depth ?? 0,
       targetDepth: targetDepthFor(r.nodeId, view.goals),
+      knownFrom: known.has(r.nodeId) ? (knownTitles.get(r.nodeId) ?? []) : undefined,
     };
   });
   const questions = await generateProbeQuestions(provider, goal.text, candidates, Math.min(maxQuestions, candidates.length), goal.examProfile?.summary ?? null, goal.context);
@@ -192,12 +198,13 @@ async function judgeProbe(db: Database, provider: LlmProvider, probeId: string, 
 }
 
 /**
- * What a probe certifies is what the learner already knew, not what a goal taught them in its time.
+ * What a probe certifies (or the check an idea opens with when the learner says they know its
+ * material) is what the learner already knew, not what a goal taught them in its time.
  * Each goal that holds a probed idea gets its baseline for that idea raised by the depth the probe
  * added, so the learner's speed (learned per minute studied) does not read a few minutes of
  * questions as hours of learning and make every plan hold too much.
  */
-function notePriorKnowledge(db: Database, before: Map<string, Depth>, touched: Set<string>): void {
+export function notePriorKnowledge(db: Database, before: Map<string, Depth>, touched: Set<string>): void {
   const gains = new Map<string, { gain: number; now: Depth }>();
   for (const nodeId of touched) {
     const now = getState(db, nodeId)?.depth ?? 0;

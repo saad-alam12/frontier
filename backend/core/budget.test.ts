@@ -191,6 +191,21 @@ describe('allocate', () => {
   });
 });
 
+describe('ideas the learner says they know the material of (R8 E1)', () => {
+  it('cost a check until an answer says otherwise, and climb to their depth for it', () => {
+    const goals: PlanGoal[] = [{ id: 'g', budgetMinutes: 40, spentMinutes: 0, priority: 1 }];
+    const targets: PlanTarget[] = ['a', 'b', 'c'].map((nodeId) => ({ goalId: 'g', capabilityId: 'cap', nodeId, idealDepth: 3 as Depth }));
+    const node = (id: string, checkOnly = false): [string, PlanNode] => [id, { id, kind: 'claim', depth: 0, centrality: 0, checkOnly }];
+    // taught as usual, 40 minutes buy one idea to its depth and no more
+    const usual = allocate(goals, targets, new Map([node('a'), node('b'), node('c')]));
+    expect([...usual.nodeDepth.values()].filter((d) => d === 3)).toHaveLength(1);
+    // two of them claimed known: a check each, so all three fit
+    const known = allocate(goals, targets, new Map([node('a', true), node('b', true), node('c')]));
+    expect([...known.nodeDepth.values()]).toEqual([3, 3, 3]);
+    expect(known.goals.get('g')?.plannedMinutes).toBe(Math.round(10 + ideaMinutes('claim', 0, 3)));
+  });
+});
+
 describe('pace', () => {
   const base = { budgetMinutes: 1200, spentMinutes: 0, learnedMinutes: 0, expectedByNow: null, daysIn: 3 };
   it('says nothing until there is enough to go on', () => {
