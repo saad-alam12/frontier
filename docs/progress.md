@@ -159,7 +159,7 @@ So the real sizes and the moment simplification kicks in are yours to judge. Sto
 **What is left.** Nothing of the handover. Two points wait for your answer (under "Open questions for the owner"): running your Python code with secrets removed from its environment (recommended), and whether to stop the session link in commit messages. Not checked in the cloud, because they need a real model or a Mac: how the tutor words the check that opens an idea you know, the gap's worked example and the harder question; the prober asking known ideas first; the clipboard on macOS; "Show in Finder" in Finder itself; the popover with your real map.
 
 **For the owner, on the Mac** (about 25 minutes, all on the simple sandbox content):
-1. `git fetch`, `git checkout claude/r8-feedback-round`, `npm install`.
+1. `cd frontier`, `git fetch`, `git checkout claude/r8-feedback-round`, `npm install`.
 2. `npm run check:licenses` should end "all permissive"; `npm run smoke` should end "Smoke: passed".
 3. Make a test folder: `npx tsx scripts/sandbox.ts ~/frontier-sandbox --exam --open-session --watch`, then `FRONTIER_USER_DATA=~/frontier-sandbox npm run dev`. In Settings switch the model provider to your Claude login, as last time, and press **Test connection**.
 4. **Today (E5):** the "In progress" session card, and right under it "Mock exam in progress · Arithmetic quiz · 1 of 2 problems left · about 2 hours to go". **Continue the mock exam** opens the exam (questions like "What is 2 + 3?"). Under "Your goals" there is no second "Take a mock exam" while this one runs.

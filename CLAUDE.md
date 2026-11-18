@@ -72,6 +72,8 @@ Fill these in during M0:
   under "Open questions for the owner" in docs/progress.md, and continue
   with work that doesn't depend on it. Test the model connection with the
   fake provider; the owner does the live test locally.
+- On the owner's Mac the repo is at `~/frontier`: steps for the owner start
+  with `cd frontier` (from their home folder), never a placeholder path.
 - Local sessions on the owner's Mac start by running git fetch, checking
   out the newest claude/* branch (or main if none is newer) and reading
   docs/progress.md. If a checkpoint is ready: run npm install and npm run
