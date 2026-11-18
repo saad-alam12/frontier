@@ -34,7 +34,7 @@ async function until<T>(what: string, fn: () => Promise<T | null | undefined | f
 
 const folder = mkdtempSync(join(tmpdir(), 'frontier-smoke-'));
 const run = (args: string[]) => execFileSync('npx', args, { stdio: 'inherit' });
-run(['tsx', 'scripts/sandbox.ts', folder]);
+run(['tsx', 'scripts/sandbox.ts', folder, '--no-model']);
 if (!process.argv.includes('--no-build')) run(['electron-vite', 'build']);
 
 // as root (a container) Chromium refuses to start without this; a person's Mac never needs it

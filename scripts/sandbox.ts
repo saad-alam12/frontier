@@ -14,8 +14,9 @@
  * notes marked "I already know this material", and a session on making ten that opens with a check).
  *
  * The folder gets a settings.json whose data folder is `<sandbox>/data`; start the app on it with
- * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`. Model calls
- * in the app fail at once (API provider, no key), so screens with a model call show their error state.
+ * `FRONTIER_USER_DATA=<sandbox folder> npx electron-vite dev --remoteDebuggingPort 9333`. It uses the
+ * Claude login like the app; `--no-model` makes every model call fail at once instead (API provider, no
+ * key), for screenshots where no model may be reached.
  * Never point it at the learner's data: the folder is wiped first.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -54,7 +55,7 @@ import { EXAM_PROBLEMS, EXAM_SOLUTION, LECTURE_PAGES, SAMPLE_CARDS, cardsFor, se
 
 const [folderArg, ...flags] = process.argv.slice(2);
 if (!folderArg) {
-  console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session] [--recall] [--exam] [--talk] [--drawings] [--watch] [--known]');
+  console.error('usage: tsx scripts/sandbox.ts <sandbox folder> [--open-session] [--recall] [--exam] [--talk] [--drawings] [--watch] [--known] [--no-model]');
   process.exit(2);
 }
 const folder = resolve(folderArg);
@@ -62,8 +63,10 @@ if (folder.includes(`${join('Frontier')}`) && !folder.includes('sandbox')) throw
 rmSync(folder, { recursive: true, force: true });
 const dataFolder = join(folder, 'data');
 mkdirSync(dataFolder, { recursive: true });
-// the API provider with no key: the app in the sandbox never reaches a real model (calls fail at once)
-writeFileSync(join(folder, 'settings.json'), JSON.stringify({ dataFolder, provider: 'anthropicApi', apiKey: '' }, null, 2));
+// the Claude login, as in the app; `--no-model` sets the API provider with no key instead, so the app
+// never reaches a real model (calls fail at once): for screenshots in the cloud and `npm run smoke`
+const settings = flags.includes('--no-model') ? { dataFolder, provider: 'anthropicApi', apiKey: '' } : { dataFolder, provider: 'agentSdk' };
+writeFileSync(join(folder, 'settings.json'), JSON.stringify(settings, null, 2));
 
 /** A diagram and a plot for the explanation (`--drawings`), as the tutor may draw them. */
 const DRAWINGS = [
